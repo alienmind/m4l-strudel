@@ -1,5 +1,5 @@
 /**
- * strudel.js - Max-side glue for the Strudel MIDI device (NOT the React app).
+ * wrapper.js - Max-side glue for the Strudel MIDI device (NOT the React app).
  *
  * 1. Load strudel-ui.html into [jweb] via a file:// URL from this patch path.
  * 2. write_clip: create a MIDI clip on THIS device's own track and fill it.
@@ -14,7 +14,7 @@ autowatch = 1;
 inlets = 1;
 outlets = 2;
 
-post("strudel.js loaded\n");
+post("wrapper.js loaded\n");
 
 function bang() {
 	loadWebview();

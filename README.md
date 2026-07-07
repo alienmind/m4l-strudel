@@ -33,7 +33,7 @@ strudel.cc if in doubt - it's a single constant in `src/lib/mini/notes.ts`.)
 ```
 pnpm install
 pnpm test # vitest - parser, scheduler, euclid, round-trip (19 tests)
-pnpm build # → dist/{strudel-ui.html, strudel.js, StrudelMidi.amxd}
+pnpm build # → dist/{strudel-ui.html, wrapper.js, ableton-template.amxd}
 pnpm dev # browser dev; use maxSimulate('notes', 4, 2, 60,0,1, 64,1,1)
 ```
 
@@ -53,17 +53,17 @@ pnpm dev # browser dev; use maxSimulate('notes', 4, 2, 60,0,1, 64,1,1)
  - `write_clip <lengthBeats> <n> <p s d v> ...` (To MIDI)
  - `read_notes` (From MIDI)
 
-## Creating `ableton-amxd/StrudelMidi.amxd` (once, in Max)
+## Creating `ableton-amxd/ableton-template.amxd` (once, in Max)
 
 1. Drag a **Max MIDI Effect** onto a MIDI track → **Edit**.
 2. Keep `midiin → midiout` wired.
-3. Add `live.thisdevice`, `js strudel.js`, `jweb @enablejavascript 1`.
+3. Add `live.thisdevice`, `js wrapper.js`, `jweb @enablejavascript 1`.
 4. Wire: `live.thisdevice` → `js` in0; `js` out0 → `jweb` in0;
  **`jweb` out0 → `js` in0**.
 5. `jweb` Inspector → Initial URL `about:blank`; add to Presentation ~320×180.
-6. Save as `ableton-amxd/StrudelMidi.amxd`; place `strudel.js` and
+6. Save as `ableton-amxd/ableton-template.amxd` (or copy the pre-built template `ableton-template.amxd` from `livecam-m4l/ableton-amxd/`); place `wrapper.js` and
  `strudel-ui.html` next to it. **Never Freeze.**
 
-Console should show `strudel.js loaded` and `strudel: sent url …`. To test:
+Console should show `wrapper.js loaded` and `strudel: sent url …`. To test:
 drop the device on a MIDI track, type a pattern, **To MIDI** creates a clip in
 the first empty slot; edit it in Live, then **From MIDI** reads it back.
