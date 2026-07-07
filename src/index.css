@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+:root {
+	--radius: 0.5rem;
+
+	--background: oklch(0.16 0.012 264);
+	--foreground: oklch(0.96 0.006 264);
+
+	--card: oklch(0.2 0.014 264);
+	--card-foreground: oklch(0.96 0.006 264);
+
+	--muted: oklch(0.27 0.012 264);
+	--muted-foreground: oklch(0.68 0.012 264);
+
+	--border: oklch(1 0 0 / 10%);
+	--input: oklch(1 0 0 / 14%);
+
+	--primary: oklch(0.62 0.19 255);
+	--primary-foreground: oklch(0.98 0.004 264);
+
+	--accent: oklch(0.72 0.17 160);
+	--accent-foreground: oklch(0.18 0.03 160);
+
+	--destructive: oklch(0.62 0.23 25);
+	--destructive-foreground: oklch(0.98 0.004 264);
+
+	--ring: oklch(0.62 0.19 255);
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-ring: var(--ring);
+
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+
+	--font-sans: ui-sans-serif, system-ui, sans-serif;
+	--font-mono: ui-monospace, "Cascadia Code", "Consolas", monospace;
+}
+
+* {
+	border-color: var(--color-border);
+}
+
+html,
+body,
+#root {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	background-color: var(--color-background);
+	color: var(--color-foreground);
+	font-family: var(--font-sans);
+	-webkit-font-smoothing: antialiased;
+	overflow: hidden;
+	user-select: none;
+}
