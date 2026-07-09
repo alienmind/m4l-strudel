@@ -33,9 +33,19 @@ strudel.cc if in doubt - it's a single constant in `src/lib/mini/notes.ts`.)
 ```
 pnpm install
 pnpm test # vitest - parser, scheduler, euclid, round-trip (19 tests)
-pnpm build # → dist/{strudel-ui.html, wrapper.js, ableton-template.amxd}
+pnpm build # → dist/m4l-strudel/{m4l-strudel.amxd, strudel-ui.html, wrapper.js}
+           #   + dist/m4l-strudel.zip (release archive of that folder)
 pnpm dev # browser dev; use maxSimulate('notes', 4, 2, 60,0,1, 64,1,1)
 ```
+
+## Installing in Ableton
+
+Copy `dist/m4l-strudel.zip` into your Ableton **User Library**, under
+`Max4Live Devices` (e.g. `…/User Library/Presets/MIDI Effects/Max MIDI Effect/Max4Live Devices/`),
+and **uncompress it there**. This yields a `m4l-strudel/` folder with the
+`.amxd` and its `strudel-ui.html` / `wrapper.js` side by side — the device
+loads them relative to its own location, so they must stay together. Then drag
+`m4l-strudel.amxd` onto a MIDI track from Live's browser.
 
 ## Engine layout (`src/lib/mini/`)
 

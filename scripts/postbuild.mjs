@@ -1,45 +1,50 @@
 /**
- * Runs after `vite build`. Assembles dist/:
- * 1. Rename dist/index.html → dist/strudel-ui.html
- * 2. Copy ableton-amxd/ableton-template.amxd → dist/ (if present)
- * 3. Copy wrapper.js → dist/
- * 4. Zip m4l-strudel-dist.zip
+ * Runs after `vite build`. Assembles the final distributable folder,
+ * named after the project (package.json "name"):
+ * 1. Move dist/index.html → dist/<name>/strudel-ui.html
+ * 2. Copy ableton-amxd/ableton-template.amxd → dist/<name>/<name>.amxd (if present)
+ * 3. Copy wrapper.js (root) → dist/<name>/
+ * 4. Create dist/<name>.zip (release archive of that folder)
  */
 import archiver from "archiver";
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
-import { rename, copyFile, stat } from "node:fs/promises";
+import { rename, copyFile, mkdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist");
 
-await rename(path.join(dist, "index.html"), path.join(dist, "strudel-ui.html"));
-console.log("postbuild: dist/index.html → dist/strudel-ui.html");
+const { name } = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+const outDir = path.join(dist, name);
+await mkdir(outDir, { recursive: true });
+
+await rename(path.join(dist, "index.html"), path.join(outDir, "strudel-ui.html"));
+console.log(`postbuild: dist/index.html → dist/${name}/strudel-ui.html`);
 
 const amxdSrc = path.join(root, "ableton-amxd", "ableton-template.amxd");
 if (existsSync(amxdSrc)) {
-	await copyFile(amxdSrc, path.join(dist, "ableton-template.amxd"));
-	console.log("postbuild: ableton-amxd/ableton-template.amxd → dist/");
+	await copyFile(amxdSrc, path.join(outDir, `${name}.amxd`));
+	console.log(`postbuild: ableton-amxd/ableton-template.amxd → dist/${name}/${name}.amxd`);
 } else {
 	console.log("postbuild: ableton-amxd/ableton-template.amxd not found (create it in Max) - skipping");
 }
 
-await copyFile(path.join(root, "wrapper.js"), path.join(dist, "wrapper.js"));
-console.log("postbuild: wrapper.js → dist/wrapper.js");
+await copyFile(path.join(root, "wrapper.js"), path.join(outDir, "wrapper.js"));
+console.log(`postbuild: wrapper.js → dist/${name}/wrapper.js`);
 
-const zipPath = path.join(root, "m4l-strudel-dist.zip");
+const zipPath = path.join(dist, `${name}.zip`);
 await new Promise((resolve, reject) => {
 	const output = createWriteStream(zipPath);
 	const archive = archiver("zip", { zlib: { level: 9 } });
 	output.on("close", resolve);
 	archive.on("error", reject);
 	archive.pipe(output);
-	for (const f of ["ableton-template.amxd", "wrapper.js", "strudel-ui.html"]) {
-		const p = path.join(dist, f);
-		if (existsSync(p)) archive.append(createReadStream(p), { name: `StrudelMidi/${f}` });
+	for (const f of [`${name}.amxd`, "wrapper.js", "strudel-ui.html"]) {
+		const p = path.join(outDir, f);
+		if (existsSync(p)) archive.append(createReadStream(p), { name: `${name}/${f}` });
 	}
 	archive.finalize();
 });
 const { size } = await stat(zipPath);
-console.log(`postbuild: m4l-strudel-dist.zip (${size} bytes)`);
+console.log(`postbuild: dist/${name}.zip (${size} bytes)`);
