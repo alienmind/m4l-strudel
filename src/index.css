@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+	color-scheme: dark;
 	--radius: 0.5rem;
 
 	--background: oklch(0.16 0.012 264);
@@ -61,6 +62,14 @@ body,
 #root {
 	height: 100%;
 	margin: 0;
+}
+
+/* Native popup lists (select options) don't inherit the page theme on
+   Windows/CEF - force dark surfaces so option text stays legible. */
+select,
+option {
+	background-color: oklch(0.2 0.014 264);
+	color: var(--color-foreground);
 }
 
 body {
