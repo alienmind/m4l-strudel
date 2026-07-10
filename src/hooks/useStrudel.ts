@@ -55,6 +55,9 @@ export function useStrudel(): StrudelState {
 			setText(mini);
 			setStatus(`Read ${n} notes → ${barsRead} bar(s)`);
 		});
+		bindInlet("read_error", () => {
+			setStatus("No clip found on this track - create or play a MIDI clip first");
+		});
 	}, [grid, conv, octaveOffset]);
 
 	const toMidi = useCallback(() => {
@@ -73,7 +76,7 @@ export function useStrudel(): StrudelState {
 
 	const fromMidi = useCallback(() => {
 		outlet("read_notes");
-		setStatus("Reading clip…");
+		setStatus("Reading the playing/first clip on this track…");
 	}, []);
 
 	return {

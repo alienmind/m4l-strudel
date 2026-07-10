@@ -85,16 +85,18 @@ export default function App() {
 				<button
 					className="flex flex-1 items-center justify-center gap-1 rounded-md bg-accent px-2 py-1.5 text-sm font-semibold text-accent-foreground hover:brightness-110"
 					onClick={s.toMidi}
+					title="Write the pattern as a MIDI clip on this track"
 				>
 					<ArrowDownToLine className="size-3.5" />
-					To MIDI
+					To Clip
 				</button>
 				<button
 					className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1.5 text-sm font-semibold text-primary-foreground hover:brightness-110"
 					onClick={s.fromMidi}
+					title="Read the playing (or first) clip on this track into mini-notation"
 				>
 					<ArrowUpFromLine className="size-3.5" />
-					From MIDI
+					From Clip
 				</button>
 			</div>
 

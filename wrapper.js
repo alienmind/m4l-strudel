@@ -130,6 +130,7 @@ function read_notes() {
 	var clip = pickClip();
 	if (!clip) {
 		post("strudel: no clip found on this track\n");
+		outlet(0, "read_error", "no_clip");
 		return;
 	}
 	var loopEnd = parseFloat(clip.get("loop_end"));
