@@ -7,12 +7,13 @@
 # Live's default (~/Music/Ableton/User Library) is the fallback.
 set -eu
 device="m4l-strudel"
+amxd_file="alienmind-strudel-m4l.amxd"
 here="$(cd "$(dirname "$0")" && pwd)"
 
 # Source: ./m4l-strudel next to this script (zip layout) or ../dist/m4l-strudel (repo layout).
 src="$here/$device"
-[ -f "$src/$device.amxd" ] || src="$here/../dist/$device"
-[ -f "$src/$device.amxd" ] || { echo "Device folder not found. Run 'pnpm build' first." >&2; exit 1; }
+[ -f "$src/$amxd_file" ] || src="$here/../dist/$device"
+[ -f "$src/$amxd_file" ] || { echo "Device folder not found. Run 'pnpm build' first." >&2; exit 1; }
 
 user_lib=""
 cfg=$(ls -t "$HOME/Library/Preferences/Ableton/Live "*/Library.cfg 2>/dev/null | head -1 || true)
@@ -32,7 +33,7 @@ dest="$user_lib/Max For Live/$device"
 rm -rf "$dest"
 mkdir -p "$dest"
 # The .amxd is self-contained (UI embedded as a payload in wrapper.js).
-cp "$src/$device.amxd" "$dest/"
+cp "$src/$amxd_file" "$dest/"
 
 echo "Installed to $dest"
-echo "In Live: User Library > Max For Live > $device > $device.amxd"
+echo "In Live: User Library > Max For Live > $device > $amxd_file"

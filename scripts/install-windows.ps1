@@ -7,13 +7,14 @@
 # involved - Live keeps all of this in plain config files.
 $ErrorActionPreference = "Stop"
 $deviceName = "m4l-strudel"
+$amxdFile = "alienmind-strudel-m4l.amxd"
 
 # Source: ./m4l-strudel next to this script (zip layout) or ../dist/m4l-strudel (repo layout).
 $src = Join-Path $PSScriptRoot $deviceName
-if (-not (Test-Path (Join-Path $src "$deviceName.amxd"))) {
+if (-not (Test-Path (Join-Path $src "$amxdFile"))) {
     $src = Join-Path (Split-Path $PSScriptRoot) "dist\$deviceName"
 }
-if (-not (Test-Path (Join-Path $src "$deviceName.amxd"))) {
+if (-not (Test-Path (Join-Path $src "$amxdFile"))) {
     Write-Error "Device folder not found next to this script or in dist\. Run 'pnpm build' first."
 }
 
@@ -41,7 +42,7 @@ $dest = Join-Path $userLib "Max For Live\$deviceName"
 if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
 New-Item -ItemType Directory -Force $dest | Out-Null
 # The .amxd is self-contained (UI embedded as a payload in wrapper.js).
-Copy-Item (Join-Path $src "$deviceName.amxd") $dest -Force
+Copy-Item (Join-Path $src "$amxdFile") $dest -Force
 
 Write-Host "Installed to $dest"
-Write-Host "In Live: User Library > Max For Live > $deviceName > $deviceName.amxd"
+Write-Host "In Live: User Library > Max For Live > $deviceName > $amxdFile"

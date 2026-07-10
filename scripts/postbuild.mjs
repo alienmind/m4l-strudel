@@ -25,7 +25,7 @@ console.log(`postbuild: dist/index.html → dist/${name}/strudel-ui.html`);
 
 execFileSync(process.execPath, [
 	path.join(root, "scripts", "build-amxd.mjs"),
-	path.join(outDir, `${name}.amxd`),
+	path.join(outDir, "alienmind-strudel-m4l.amxd"),
 ], { stdio: "inherit" });
 
 await copyFile(path.join(root, "strudel-wrapper.js"), path.join(outDir, "strudel-wrapper.js"));
@@ -38,7 +38,7 @@ await new Promise((resolve, reject) => {
 	output.on("close", resolve);
 	archive.on("error", reject);
 	archive.pipe(output);
-	for (const f of [`${name}.amxd`, "strudel-wrapper.js", "strudel-ui.html"]) {
+	for (const f of ["alienmind-strudel-m4l.amxd", "strudel-wrapper.js", "strudel-ui.html"]) {
 		const p = path.join(outDir, f);
 		if (existsSync(p)) archive.append(createReadStream(p), { name: `${name}/${f}` });
 	}
