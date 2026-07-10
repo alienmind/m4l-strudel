@@ -91,9 +91,14 @@ export default function App() {
 					To Clip
 				</button>
 				<button
-					className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1.5 text-sm font-semibold text-primary-foreground hover:brightness-110"
+					className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1.5 text-sm font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-40"
 					onClick={s.fromMidi}
-					title="Read the playing (or first) clip on this track into mini-notation"
+					disabled={!s.clipAvailable}
+					title={
+						s.clipAvailable
+							? "Read the playing (or first) clip on this track into mini-notation"
+							: "No clip on this track - create one first (e.g. with To Clip)"
+					}
 				>
 					<ArrowUpFromLine className="size-3.5" />
 					From Clip

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { bindInlet, outlet } from "@/lib/maxBridge";
+import { bindInlet, inJweb, outlet } from "@/lib/maxBridge";
 import { renderPattern, toFlatList } from "@/lib/mini/render";
 import { eventsToMini, type RawNote } from "@/lib/mini/unparse";
 import type { OctaveConvention } from "@/lib/mini/notes";
@@ -18,6 +18,8 @@ export interface StrudelState {
 	noteCount: number;
 	errors: { pos: number; msg: string }[];
 	status: string;
+	/** Whether the device's track has a clip that From Clip could read. */
+	clipAvailable: boolean;
 	toMidi: () => void;
 	fromMidi: () => void;
 }
@@ -29,6 +31,17 @@ export function useStrudel(): StrudelState {
 	const [conv, setConv] = useState<OctaveConvention>("strudel");
 	const [octaveOffset, setOctaveOffset] = useState(0);
 	const [status, setStatus] = useState("Ready");
+	// Outside Max (browser dev) there is no wrapper to report availability, so
+	// default to enabled there and let the wrapper drive it inside Live.
+	const [clipAvailable, setClipAvailable] = useState(!inJweb);
+
+	useEffect(() => {
+		// The [js] side pushes `clip_available 0/1` (polled once a second).
+		bindInlet("clip_available", (avail) => {
+			setClipAvailable(Number(avail) === 1);
+		});
+		outlet("ui_ready");
+	}, []);
 
 	const { noteCount, errors } = useMemo(() => {
 		const r = renderPattern(text, { bars, conv, octaveOffset });
@@ -93,6 +106,7 @@ export function useStrudel(): StrudelState {
 		noteCount,
 		errors,
 		status,
+		clipAvailable,
 		toMidi,
 		fromMidi,
 	};

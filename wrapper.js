@@ -16,14 +16,48 @@ outlets = 2;
 
 post("wrapper.js loaded\n");
 
+// Clip availability: polled (LiveAPI has no single observable for "any clip
+// on this track"), pushed to the UI as `clip_available 0/1` on change so the
+// From Clip button can disable itself when there is nothing to read.
+var lastClipAvail = -1;
+var clipPoll = new Task(checkClipAvailable, this);
+
 function bang() {
 	loadWebview();
+	startClipPoll();
 }
 function loadbang() {
 	loadWebview();
 }
 function reload() {
 	loadWebview();
+	startClipPoll();
+}
+
+function startClipPoll() {
+	lastClipAvail = -1;
+	clipPoll.cancel();
+	clipPoll.interval = 1000;
+	clipPoll.repeat();
+}
+
+function checkClipAvailable() {
+	var avail = 0;
+	try {
+		avail = pickClip() ? 1 : 0;
+	} catch (e) {
+		avail = 0;
+	}
+	if (avail !== lastClipAvail) {
+		lastClipAvail = avail;
+		outlet(0, "clip_available", avail);
+	}
+}
+
+/** UI announces it finished loading - resend current state. */
+function ui_ready() {
+	lastClipAvail = -1;
+	checkClipAvailable();
 }
 
 function loadWebview() {

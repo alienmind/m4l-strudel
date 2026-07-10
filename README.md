@@ -64,12 +64,35 @@ track from Live's browser.
 - `render.ts` - schedule + note conversion → MIDI note events in beats
 - `unparse.ts` - MIDI notes → mini-notation (quantize to grid, stacks, rests)
 
+## Clip I/O behaviour (To Clip / From Clip)
+
+Everything works on **Live clips on the device's own track** - there is no
+MIDI *file* import/export and no file picker (jweb hides real file paths from
+web pages anyway).
+
+- **To Clip** renders the pattern and creates a Session clip named "Strudel"
+  in the **first empty clip slot** of the track the device sits on.
+- **From Clip** reads notes back into mini-notation from, in order of
+  preference: the **currently playing** clip on this track, else the **first
+  clip** found on the track. It does not use Live's clip selection.
+- The **From Clip button is disabled when the track has no clips**. The
+  wrapper polls the track once a second and pushes `clip_available 0/1` to
+  the UI, so the button enables itself as soon as a clip appears (e.g. right
+  after To Clip).
+- If a read is attempted and no clip is found, the wrapper replies
+  `read_error` and the status line shows "No clip found on this track".
+
 ## jweb ⇄ [js] protocol
 
-- `[js]` → UI: `url <file://…>`; `notes <loopEndBeats> <n> <p s d> ...`
+- `[js]` → UI:
+ - `url <file://…>`
+ - `notes <loopEndBeats> <n> <p s d> ...` (reply to `read_notes`)
+ - `clip_available <0|1>` (polled once a second, sent on change)
+ - `read_error <reason>` (`read_notes` found no clip)
 - UI → `[js]`:
- - `write_clip <lengthBeats> <n> <p s d v> ...` (To MIDI)
- - `read_notes` (From MIDI)
+ - `write_clip <lengthBeats> <n> <p s d v> ...` (To Clip)
+ - `read_notes` (From Clip)
+ - `ui_ready` (page loaded - resend current `clip_available` state)
 
 ## How the `.amxd` is built (no manual Max step)
 
@@ -92,5 +115,6 @@ the device view.
 > and port the changes back into `patcher.json`.
 
 Console should show `wrapper.js loaded` and `strudel: sent url …`. To test:
-drop the device on a MIDI track, type a pattern, **To MIDI** creates a clip in
-the first empty slot; edit it in Live, then **From MIDI** reads it back.
+drop the device on a MIDI track, type a pattern, **To Clip** creates a clip in
+the first empty slot; edit it in Live, then **From Clip** reads it back
+(the button stays greyed out until the track has at least one clip).
