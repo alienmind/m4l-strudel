@@ -59,10 +59,10 @@
 					"outlettype": ["", ""],
 					"patching_rect": [16.0, 64.0, 78.0, 20.0],
 					"saved_object_attributes": {
-						"filename": "wrapper.js",
+						"filename": "strudel-wrapper.js",
 						"parameter_enable": 0
 					},
-					"text": "js wrapper.js"
+					"text": "js strudel-wrapper.js"
 				}
 			},
 			{

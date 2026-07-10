@@ -28,8 +28,8 @@ execFileSync(process.execPath, [
 	path.join(outDir, `${name}.amxd`),
 ], { stdio: "inherit" });
 
-await copyFile(path.join(root, "wrapper.js"), path.join(outDir, "wrapper.js"));
-console.log(`postbuild: wrapper.js → dist/${name}/wrapper.js`);
+await copyFile(path.join(root, "strudel-wrapper.js"), path.join(outDir, "strudel-wrapper.js"));
+console.log(`postbuild: strudel-wrapper.js → dist/${name}/strudel-wrapper.js`);
 
 const zipPath = path.join(dist, `${name}.zip`);
 await new Promise((resolve, reject) => {
@@ -38,7 +38,7 @@ await new Promise((resolve, reject) => {
 	output.on("close", resolve);
 	archive.on("error", reject);
 	archive.pipe(output);
-	for (const f of [`${name}.amxd`, "wrapper.js", "strudel-ui.html"]) {
+	for (const f of [`${name}.amxd`, "strudel-wrapper.js", "strudel-ui.html"]) {
 		const p = path.join(outDir, f);
 		if (existsSync(p)) archive.append(createReadStream(p), { name: `${name}/${f}` });
 	}

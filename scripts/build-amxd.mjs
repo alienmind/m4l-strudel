@@ -28,7 +28,7 @@ if (!outPath) {
 }
 
 const patcherJson = readFileSync(path.join(root, "ableton-amxd", "patcher.json"), "utf8");
-const wrapperJs = readFileSync(path.join(root, "wrapper.js"), "utf8");
+const wrapperJs = readFileSync(path.join(root, "strudel-wrapper.js"), "utf8");
 
 // The built single-file UI (vite-plugin-singlefile inlines all JS/CSS) is
 // appended to wrapper.js as a base64 payload. Frozen dependencies live in
@@ -71,7 +71,7 @@ const macDate = Math.floor(Date.now() / 1000) + 2082844800; // secs since 1904-0
 
 const files = [
 	{ type: "JSON", name: path.basename(outPath), data: Buffer.from(patcherJson, "utf8"), flag: 0x11 },
-	{ type: "TEXT", name: "wrapper.js", data: Buffer.from(wrapperData, "utf8"), flag: 0 },
+	{ type: "TEXT", name: "strudel-wrapper.js", data: Buffer.from(wrapperData, "utf8"), flag: 0 },
 ];
 
 function u32be(n) {
