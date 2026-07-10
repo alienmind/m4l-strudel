@@ -31,7 +31,8 @@ fi
 dest="$user_lib/Max For Live/$device"
 rm -rf "$dest"
 mkdir -p "$dest"
-cp -R "$src/." "$dest/"
+# The .amxd is self-contained (UI embedded as a payload in wrapper.js).
+cp "$src/$device.amxd" "$dest/"
 
 echo "Installed to $dest"
 echo "In Live: User Library > Max For Live > $device > $device.amxd"

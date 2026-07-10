@@ -49,11 +49,28 @@ scripts/install-linux.sh      # Linux (Live under Wine)
 Each script reads the User Library location from Live's `Library.cfg`
 (`%APPDATA%\Ableton\Live <ver>\Preferences` on Windows,
 `~/Library/Preferences/Ableton/Live <ver>` on macOS - no registry or env vars),
-falls back to Live's default location, and replaces
-`User Library/Max For Live/m4l-strudel/` with the built folder. The `.amxd`,
-`strudel-ui.html` and `wrapper.js` must stay side by side - the device loads
-them relative to its own location. Then drag `m4l-strudel.amxd` onto a MIDI
-track from Live's browser.
+falls back to Live's default location, and installs **only
+`m4l-strudel.amxd`** into `User Library/Max For Live/m4l-strudel/`. The device
+is fully self-contained (see *Self-contained .amxd* below) - drag it onto a
+MIDI track from Live's browser and it unpacks its own UI.
+
+## Self-contained .amxd (single-file distribution)
+
+The `.amxd` is the **only file you need to distribute**:
+
+1. `vite-plugin-singlefile` inlines all JS/CSS into one `strudel-ui.html`.
+2. `build-amxd.mjs` appends it to `wrapper.js` as base64 chunks
+   (`UI_PAYLOAD_B64` / `UI_PAYLOAD_BYTES`) before embedding the script in the
+   amxd container.
+3. On load, `wrapper.js` decodes the payload and writes `strudel-ui.html`
+   next to the `.amxd`, then points `jweb` at that real file. Extraction is
+   skipped when an identical-size copy exists; the written size is verified.
+
+Two Max quirks force this design (simpler approaches fail): frozen
+dependencies live in Max's **virtual filesystem** - `[js] File()` can open
+them but they never exist on disk, so jweb/Chromium gets
+`ERR_FILE_NOT_FOUND` for them - and **`File.writebytes` silently truncates
+at 16384 bytes per call**, so the extractor writes 4096-byte slices.
 
 ## Engine layout (`src/lib/mini/`)
 
