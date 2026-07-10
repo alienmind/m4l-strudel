@@ -2,13 +2,14 @@
  * Runs after `vite build`. Assembles the final distributable folder,
  * named after the project (package.json "name"):
  * 1. Move dist/index.html → dist/<name>/strudel-ui.html
- * 2. Copy ableton-amxd/ableton-template.amxd → dist/<name>/<name>.amxd (if present)
+ * 2. Generate dist/<name>/<name>.amxd from ableton-amxd/patcher.json
  * 3. Copy wrapper.js (root) → dist/<name>/
- * 4. Create dist/<name>.zip (release archive of that folder)
+ * 4. Create dist/<name>.zip (release archive of that folder + install scripts)
  */
 import archiver from "archiver";
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { rename, copyFile, mkdir, readFile, stat } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,13 +23,10 @@ await mkdir(outDir, { recursive: true });
 await rename(path.join(dist, "index.html"), path.join(outDir, "strudel-ui.html"));
 console.log(`postbuild: dist/index.html → dist/${name}/strudel-ui.html`);
 
-const amxdSrc = path.join(root, "ableton-amxd", "ableton-template.amxd");
-if (existsSync(amxdSrc)) {
-	await copyFile(amxdSrc, path.join(outDir, `${name}.amxd`));
-	console.log(`postbuild: ableton-amxd/ableton-template.amxd → dist/${name}/${name}.amxd`);
-} else {
-	console.log("postbuild: ableton-amxd/ableton-template.amxd not found (create it in Max) - skipping");
-}
+execFileSync(process.execPath, [
+	path.join(root, "scripts", "build-amxd.mjs"),
+	path.join(outDir, `${name}.amxd`),
+], { stdio: "inherit" });
 
 await copyFile(path.join(root, "wrapper.js"), path.join(outDir, "wrapper.js"));
 console.log(`postbuild: wrapper.js → dist/${name}/wrapper.js`);
@@ -43,6 +41,9 @@ await new Promise((resolve, reject) => {
 	for (const f of [`${name}.amxd`, "wrapper.js", "strudel-ui.html"]) {
 		const p = path.join(outDir, f);
 		if (existsSync(p)) archive.append(createReadStream(p), { name: `${name}/${f}` });
+	}
+	for (const installer of ["install-windows.ps1", "install-mac.sh", "install-linux.sh"]) {
+		archive.file(path.join(root, "scripts", installer), { name: installer, mode: 0o755 });
 	}
 	archive.finalize();
 });

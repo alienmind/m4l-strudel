@@ -1,0 +1,107 @@
+/**
+ * build-amxd.mjs - generate a Max for Live .amxd from ableton-amxd/patcher.json.
+ *
+ * Container layout (verified against devices saved by Max 8/9):
+ *   'ampf' <u32le 4> <'aaaa'|'mmmm'|'iiii'>   audio / midi / instrument
+ *   'meta' <u32le 4> <u32le 7>
+ *   'ptch' <u32le size-to-EOF>
+ *     'mx@c' <u32be 16> <u32be 0> <u32be 16 + payload sizes (excl. dlst)>
+ *     <patcher JSON> <dependency payloads...>
+ *     'dlst' <u32be chunk size incl. header>   directory: one 'dire' per file
+ *
+ * The device type is derived from the patcher's project.amxdtype. The device
+ * is written "frozen" with wrapper.js embedded (same shape as a Max-saved
+ * frozen device), so Max never resolves wrapper.js via search path. The
+ * internal main-patcher name is set to the output file's basename.
+ *
+ * Usage: node scripts/build-amxd.mjs <output.amxd>
+ */
+import { readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const outPath = process.argv[2];
+if (!outPath) {
+	console.error("usage: node scripts/build-amxd.mjs <output.amxd>");
+	process.exit(1);
+}
+
+const patcherJson = readFileSync(path.join(root, "ableton-amxd", "patcher.json"), "utf8");
+const wrapperJs = readFileSync(path.join(root, "wrapper.js"), "utf8");
+
+// 'aaaa' audio effect / 'mmmm' MIDI effect / 'iiii' instrument.
+const AMXD_TYPES = { 0x61616161: "aaaa", 0x6d6d6d6d: "mmmm", 0x69696969: "iiii" };
+const amxdtype = JSON.parse(patcherJson).patcher?.project?.amxdtype;
+const deviceType = AMXD_TYPES[amxdtype];
+if (!deviceType) {
+	console.error(`build-amxd: unknown project.amxdtype ${amxdtype} in patcher.json`);
+	process.exit(1);
+}
+
+const macDate = Math.floor(Date.now() / 1000) + 2082844800; // secs since 1904-01-01
+
+const files = [
+	{ type: "JSON", name: path.basename(outPath), data: Buffer.from(patcherJson, "utf8"), flag: 0x11 },
+	{ type: "TEXT", name: "wrapper.js", data: Buffer.from(wrapperJs, "utf8"), flag: 0 },
+];
+
+function u32be(n) {
+	const b = Buffer.alloc(4);
+	b.writeUInt32BE(n >>> 0);
+	return b;
+}
+function u32le(n) {
+	const b = Buffer.alloc(4);
+	b.writeUInt32LE(n >>> 0);
+	return b;
+}
+function field(tag, payload) {
+	return Buffer.concat([Buffer.from(tag, "latin1"), u32be(8 + payload.length), payload]);
+}
+function paddedName(name) {
+	const raw = Buffer.from(name + "\0", "latin1");
+	return Buffer.concat([raw, Buffer.alloc((4 - (raw.length % 4)) % 4)]);
+}
+
+// Payload region: JSON first at offset 16 (right after the mx@c chunk).
+let offset = 16;
+const entries = [];
+for (const f of files) {
+	f.offset = offset;
+	offset += f.data.length;
+	entries.push(
+		field(
+			"dire",
+			Buffer.concat([
+				field("type", Buffer.from(f.type, "latin1")),
+				field("fnam", paddedName(f.name)),
+				field("sz32", u32be(f.data.length)),
+				field("of32", u32be(f.offset)),
+				field("vers", u32be(0)),
+				field("flag", u32be(f.flag)),
+				field("mdat", u32be(macDate)),
+			]),
+		),
+	);
+}
+
+const payload = Buffer.concat(files.map((f) => f.data));
+const mxc = Buffer.concat([Buffer.from("mx@c", "latin1"), u32be(16), u32be(0), u32be(16 + payload.length)]);
+const dlst = field("dlst", Buffer.concat(entries));
+const ptchBody = Buffer.concat([mxc, payload, dlst]);
+
+const amxd = Buffer.concat([
+	Buffer.from("ampf", "latin1"),
+	u32le(4),
+	Buffer.from(deviceType, "latin1"),
+	Buffer.from("meta", "latin1"),
+	u32le(4),
+	u32le(7),
+	Buffer.from("ptch", "latin1"),
+	u32le(ptchBody.length),
+	ptchBody,
+]);
+
+writeFileSync(outPath, amxd);
+console.log(`build-amxd: ${path.relative(root, outPath)} (${amxd.length} bytes)`);

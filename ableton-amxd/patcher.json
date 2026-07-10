@@ -1,0 +1,120 @@
+{
+	"patcher": {
+		"fileversion": 1,
+		"appversion": {
+			"major": 9,
+			"minor": 1,
+			"revision": 4,
+			"architecture": "x64",
+			"modernui": 1
+		},
+		"classnamespace": "box",
+		"rect": [100.0, 100.0, 700.0, 360.0],
+		"openinpresentation": 1,
+		"openrect": [0.0, 0.0, 0.0, 169.0],
+		"openrectmode": 0,
+		"default_fontsize": 10.0,
+		"default_fontname": "Arial Bold",
+		"gridsize": [8.0, 8.0],
+		"boxanimatetime": 500,
+		"boxes": [
+			{
+				"box": {
+					"id": "obj-midiin",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": ["int"],
+					"patching_rect": [480.0, 24.0, 40.0, 20.0],
+					"text": "midiin"
+				}
+			},
+			{
+				"box": {
+					"id": "obj-midiout",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 0,
+					"patching_rect": [480.0, 64.0, 47.0, 20.0],
+					"text": "midiout"
+				}
+			},
+			{
+				"box": {
+					"id": "obj-1",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 3,
+					"outlettype": ["bang", "int", "int"],
+					"patching_rect": [16.0, 24.0, 71.0, 20.0],
+					"text": "live.thisdevice"
+				}
+			},
+			{
+				"box": {
+					"id": "obj-2",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 2,
+					"outlettype": ["", ""],
+					"patching_rect": [16.0, 64.0, 78.0, 20.0],
+					"saved_object_attributes": {
+						"filename": "wrapper.js",
+						"parameter_enable": 0
+					},
+					"text": "js wrapper.js"
+				}
+			},
+			{
+				"box": {
+					"disablefind": 0,
+					"id": "obj-jweb",
+					"maxclass": "jweb",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"outlettype": [""],
+					"patching_rect": [16.0, 104.0, 400.0, 169.0],
+					"presentation": 1,
+					"presentation_rect": [0.0, 0.0, 420.0, 169.0],
+					"rendermode": 0
+				}
+			}
+		],
+		"lines": [
+			{ "patchline": { "destination": ["obj-midiout", 0], "source": ["obj-midiin", 0] } },
+			{ "patchline": { "destination": ["obj-2", 0], "source": ["obj-1", 0] } },
+			{ "patchline": { "destination": ["obj-jweb", 0], "source": ["obj-2", 0] } },
+			{ "patchline": { "destination": ["obj-2", 0], "source": ["obj-jweb", 0] } }
+		],
+		"latency": 0,
+		"is_mpe": 0,
+		"external_mpe_tuning_enabled": 0,
+		"minimum_live_version": "",
+		"minimum_max_version": "",
+		"platform_compatibility": 0,
+		"project": {
+			"version": 1,
+			"creationdate": 3864900000,
+			"modificationdate": 3864900000,
+			"viewrect": [0.0, 0.0, 300.0, 500.0],
+			"autoorganize": 1,
+			"hideprojectwindow": 1,
+			"showdependencies": 1,
+			"autolocalize": 0,
+			"contents": {
+				"patchers": {}
+			},
+			"layout": {},
+			"searchpath": {},
+			"detailsvisible": 0,
+			"amxdtype": 1835887981,
+			"readonly": 0,
+			"devpathtype": 0,
+			"devpath": ".",
+			"sortmode": 0,
+			"viewmode": 0,
+			"includepackages": 0
+		},
+		"autosave": 0
+	}
+}

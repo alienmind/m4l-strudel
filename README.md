@@ -40,12 +40,20 @@ pnpm dev # browser dev; use maxSimulate('notes', 4, 2, 60,0,1, 64,1,1)
 
 ## Installing in Ableton
 
-Copy `dist/m4l-strudel.zip` into your Ableton **User Library**, under
-`Max4Live Devices` (e.g. `…/User Library/Presets/MIDI Effects/Max MIDI Effect/Max4Live Devices/`),
-and **uncompress it there**. This yields a `m4l-strudel/` folder with the
-`.amxd` and its `strudel-ui.html` / `wrapper.js` side by side — the device
-loads them relative to its own location, so they must stay together. Then drag
-`m4l-strudel.amxd` onto a MIDI track from Live's browser.
+```
+scripts\install-windows.ps1   # Windows
+scripts/install-mac.sh        # macOS
+scripts/install-linux.sh      # Linux (Live under Wine)
+```
+
+Each script reads the User Library location from Live's `Library.cfg`
+(`%APPDATA%\Ableton\Live <ver>\Preferences` on Windows,
+`~/Library/Preferences/Ableton/Live <ver>` on macOS - no registry or env vars),
+falls back to Live's default location, and replaces
+`User Library/Max For Live/m4l-strudel/` with the built folder. The `.amxd`,
+`strudel-ui.html` and `wrapper.js` must stay side by side - the device loads
+them relative to its own location. Then drag `m4l-strudel.amxd` onto a MIDI
+track from Live's browser.
 
 ## Engine layout (`src/lib/mini/`)
 
@@ -63,16 +71,25 @@ loads them relative to its own location, so they must stay together. Then drag
  - `write_clip <lengthBeats> <n> <p s d v> ...` (To MIDI)
  - `read_notes` (From MIDI)
 
-## Creating `ableton-amxd/ableton-template.amxd` (once, in Max)
+## How the `.amxd` is built (no manual Max step)
 
-1. Drag a **Max MIDI Effect** onto a MIDI track → **Edit**.
-2. Keep `midiin → midiout` wired.
-3. Add `live.thisdevice`, `js wrapper.js`, `jweb @enablejavascript 1`.
-4. Wire: `live.thisdevice` → `js` in0; `js` out0 → `jweb` in0;
- **`jweb` out0 → `js` in0**.
-5. `jweb` Inspector → Initial URL `about:blank`; add to Presentation ~320×180.
-6. Save as `ableton-amxd/ableton-template.amxd` (or copy the pre-built template `ableton-template.amxd` from `livecam-m4l/ableton-amxd/`); place `wrapper.js` and
- `strudel-ui.html` next to it. **Never Freeze.**
+`scripts/build-amxd.mjs` wraps `ableton-amxd/patcher.json` (plus an embedded
+copy of `wrapper.js`) in the amxd binary container at build time, so the device
+patcher is versioned as plain JSON and the build is fully automated. The
+patcher is a **Max MIDI Effect** wired as: `midiin → midiout`,
+`live.thisdevice → js wrapper.js → jweb`, and `jweb → js` (the return path for
+`write_clip` / `read_notes`), opening in Presentation with the jweb filling
+the device view.
+
+> **History / warning:** earlier revisions shipped
+> `ableton-amxd/ableton-template.amxd`, a byte-patched copy of the LiveCam
+> device (string-replacing `livecam.js` → `wrapper.js` in the binary). That is
+> not a valid approach: the file was a *frozen* device still embedding
+> LiveCam's old glue script and patcher, so jweb tried to load the
+> nonexistent `livecam-ui.html` ("Your file couldn't be accessed"). Never
+> binary-patch an .amxd; regenerate it from `patcher.json` instead. To tweak
+> the patch interactively, open the built device in Live's Max editor, edit,
+> and port the changes back into `patcher.json`.
 
 Console should show `wrapper.js loaded` and `strudel: sent url …`. To test:
 drop the device on a MIDI track, type a pattern, **To MIDI** creates a clip in
