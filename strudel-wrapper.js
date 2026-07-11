@@ -30,17 +30,24 @@ var MODE = jsarguments.length > 0 ? String(jsarguments[0]) : "midi";
 var lastClipAvail = -1;
 var clipPoll = new Task(checkClipAvailable, this);
 
+// live.thisdevice fires bang() when the device is fully loaded in Live;
+// loadbang() is unreliable inside M4L (observed not firing in Live 12), so
+// the node bootstrap runs from BOTH and guards against double execution.
 function bang() {
+	post("strudel: bang (device ready)\n");
+	extractNodeBundle();
 	loadWebview();
 	startClipPoll();
 	setupScaleObservers();
 }
 function loadbang() {
+	post("strudel: loadbang\n");
 	extractNodeBundle();
 	loadWebview();
 	setupScaleObservers();
 }
 function reload() {
+	extractNodeBundle();
 	loadWebview();
 	startClipPoll();
 	setupScaleObservers();
@@ -122,21 +129,46 @@ function resolveUiUrl() {
 }
 
 /**
- * Node bundle extraction — DECISION GATE:
- * Node for Max documents support for frozen devices (it unpacks scripts to a
- * cache dir). FIRST try shipping the .cjs only as a frozen extra file and see
- * if [node.script strudel-node-<mode>.cjs @autostart 1] boots (watch the Max
- * console for the node banner). If it does NOT resolve, this extraction path
- * (payload appended by build-amxd.mjs) writes it to disk next to the device
- * so node.script can load it via an explicit path instead.
+ * Node engine bootstrap. The patcher has [node.script ... @autostart 0]:
+ * autostart raced against extraction (the object resolved its script before
+ * the file existed on disk, and frozen-VFS resolution was never observed to
+ * work), so [js] owns the sequence instead:
+ *   1. extract the embedded .cjs payload next to the .amxd (skipped if an
+ *      identical-size copy exists),
+ *   2. point node.script at the extracted absolute path ("script <path>"),
+ *   3. "script start" - deferred a moment so node.script settles.
+ * In the dev layout (no payload appended) the .cjs sits next to the patcher
+ * and only the start message is needed.
  */
+var nodeScriptPath = null;
+var nodeStarted = false;
+var nodeStartTask = new Task(startNodeScript, this);
+
 function extractNodeBundle() {
-	if (typeof NODE_PAYLOAD_B64 === "undefined") return; // dev layout: file on disk
+	if (nodeStarted) return;
+	if (typeof NODE_PAYLOAD_B64 === "undefined") {
+		post("strudel: no embedded node payload (dev build) - starting node.script as-is\n");
+		nodeStartTask.schedule(300);
+		return;
+	}
 	var fp = this.patcher.filepath;
 	var devFolder = fp && fp.length ? fp.replace(/\/[^\/]*$/, "") : null;
-	if (!devFolder) return;
+	if (!devFolder) {
+		post("strudel: node extract - patcher path unknown, cannot extract\n");
+		return;
+	}
 	var target = devFolder + "/" + NODE_PAYLOAD_NAME;
 	extractPayload(target, NODE_PAYLOAD_B64, NODE_PAYLOAD_BYTES);
+	nodeScriptPath = target;
+	nodeStartTask.schedule(300);
+}
+
+function startNodeScript() {
+	if (nodeStarted) return;
+	nodeStarted = true;
+	if (nodeScriptPath) outlet(1, "script", nodeScriptPath);
+	outlet(1, "script", "start");
+	post("strudel: node.script start requested" + (nodeScriptPath ? " (" + nodeScriptPath + ")" : "") + "\n");
 }
 
 /** Write an embedded base64 payload to targetPath unless an identical-size copy exists. */

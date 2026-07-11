@@ -99,15 +99,21 @@ function makeDevice(kind) {
 	const js = boxes.find((b) => b.box.id === "obj-2").box;
 	js.text = `js strudel-wrapper.js ${kind}`;
 
-	// 2. every device: a node.script (autostart; watch off in production)
+	// 2. every device: a node.script. @autostart 0 - the wrapper [js] extracts
+	// the embedded .cjs next to the .amxd first, then sends "script <path>" +
+	// "script start" (autostart raced against extraction on first load).
 	const nodeId = "obj-node";
 	boxes.push(
-		box(nodeId, `node.script strudel-node-${kind}.cjs @autostart 1 @watch 0`, {
+		box(nodeId, `node.script strudel-node-${kind}.cjs @autostart 0 @watch 0`, {
 			numinlets: 1,
 			numoutlets: 2,
 			outlettype: ["", ""],
 		}),
 	);
+	// node.script's right outlet reports lifecycle/status - keep it visible in
+	// the Max console for field debugging.
+	boxes.push(box("obj-nodeprint", "print n4m"));
+	lines.push(line(nodeId, 1, "obj-nodeprint", 0));
 	tickChain(boxes, lines, nodeId);
 
 	// 3. jweb → node (code/hush/etc. — node ignores messages meant for js)
