@@ -1,7 +1,7 @@
 {
 	"name": "m4l-strudel",
 	"private": true,
-	"version": "0.2.1",
+	"version": "0.2.2",
 	"type": "module",
 	"packageManager": "pnpm@10.0.0",
 	"description": "Max for Live MIDI device - Strudel mini-notation ↔ MIDI clip, rendered as a React app inside jweb",
@@ -33,6 +33,7 @@
 		"@types/react": "^19.0.0",
 		"@types/react-dom": "^19.0.0",
 		"@vitejs/plugin-react": "^4.3.4",
+		"acorn": "^8.17.0",
 		"archiver": "^7.0.1",
 		"esbuild": "^0.24.0",
 		"prettier": "^3.4.0",
