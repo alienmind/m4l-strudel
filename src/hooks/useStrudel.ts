@@ -1,8 +1,29 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bindInlet, inJweb, outlet } from "@/lib/maxBridge";
 import { renderPattern, toFlatList } from "@/lib/mini/render";
 import { eventsToMini, type RawNote } from "@/lib/mini/unparse";
 import type { OctaveConvention } from "@/lib/mini/notes";
+import type { DeviceMode } from "@/hooks/useDeviceMode";
+import EngineWorker from "@/workers/engine.worker.js?worker&inline";
+
+interface EngineNote {
+	pitch: number;
+	velocity: number;
+	durMs: number;
+	chan: number;
+	delayMs: number;
+	vel01: number;
+	wave: string;
+	cutoff: number;
+	gain: number;
+}
+
+type EngineMessage =
+	| { t: "ready" }
+	| { t: "evalok" }
+	| { t: "evalerr"; message: string }
+	| { t: "notes"; notes: EngineNote[] }
+	| { t: "flush" };
 
 export interface StrudelState {
 	text: string;
@@ -22,14 +43,14 @@ export interface StrudelState {
 	clipAvailable: boolean;
 	toMidi: () => void;
 	fromMidi: () => void;
-	/** Live evaluation (midi/audio devices): real Strudel engine in [node.script]. */
+	/** Live evaluation (midi/audio devices): real Strudel engine in a Web Worker. */
 	live: boolean;
 	evalError: string | null;
 	run: () => void;
 	hush: () => void;
 }
 
-export function useStrudel(): StrudelState {
+export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 	const [text, setText] = useState("c5 [e5 g5]*2 ~ <a5 b5>");
 	const [bars, setBars] = useState(1);
 	const [grid, setGrid] = useState(16);
@@ -99,28 +120,58 @@ export function useStrudel(): StrudelState {
 
 	const [live, setLive] = useState(false);
 	const [evalError, setEvalError] = useState<string | null>(null);
+	const workerRef = useRef<Worker | null>(null);
 
+	// The Strudel engine runs in a Web Worker inside jweb (the sampler device
+	// has no live-eval engine). Max feeds transport ticks in as messages; the
+	// worker replies with scheduled note events that we forward to the patcher
+	// in the shape the device's output chain expects.
 	useEffect(() => {
-		bindInlet("evalok", () => {
-			setEvalError(null);
-			setStatus("Pattern running");
+		if (mode === "sampler") return;
+		const worker: Worker = new EngineWorker();
+		workerRef.current = worker;
+		worker.onmessage = (e: MessageEvent<EngineMessage>) => {
+			const m = e.data;
+			if (m.t === "ready") {
+				setStatus("Strudel engine ready");
+			} else if (m.t === "evalok") {
+				setEvalError(null);
+				setStatus("Pattern running");
+			} else if (m.t === "evalerr") {
+				setEvalError(m.message);
+				setStatus("Eval error");
+			} else if (m.t === "notes") {
+				for (const n of m.notes) {
+					if (mode === "audio") outlet("voice", n.pitch, n.vel01, n.durMs, n.wave, n.cutoff, n.gain, n.delayMs);
+					else outlet("midinote", n.pitch, n.velocity, n.durMs, n.chan, n.delayMs);
+				}
+			} else if (m.t === "flush") {
+				outlet(mode === "audio" ? "allnotesoff" : "flush");
+			}
+		};
+		bindInlet("tick", (bar, beat, unit, tempo, playing) => {
+			worker.postMessage({
+				t: "tick",
+				bar: Number(bar),
+				beat: Number(beat),
+				unit: Number(unit),
+				tempo: Number(tempo),
+				playing: Number(playing),
+			});
 		});
-		bindInlet("evalerr", (b64) => {
-			setEvalError(atob(String(b64)));
-			setStatus("Eval error");
-		});
-		bindInlet("engine_ready", () => setStatus("Strudel engine ready"));
-	}, []);
+		return () => {
+			worker.terminate();
+			workerRef.current = null;
+		};
+	}, [mode]);
 
 	const run = useCallback(() => {
-		// btoa handles ASCII; strudel code can contain unicode in strings:
-		const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(text)));
-		outlet("code", b64);
+		workerRef.current?.postMessage({ t: "code", code: text });
 		setLive(true);
 	}, [text]);
 
 	const hush = useCallback(() => {
-		outlet("hush");
+		workerRef.current?.postMessage({ t: "hush" });
 		setLive(false);
 	}, []);
 

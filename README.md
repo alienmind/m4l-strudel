@@ -10,9 +10,9 @@ transport.
 
 | Device | Type | What it does for you |
 |---|---|---|
-| **Strudel MIDI** (`m4l-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
-| **Strudel Samples** (`m4l-strudel-sampler.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. |
-| **Strudel Audio** (`m4l-strudel-audio.amxd`) | Instrument | Strudel patterns drive a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) - no external instrument needed. v1, exploratory. |
+| **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
+| **Strudel Samples** (`alienmind-strudel-sampler.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. |
+| **Strudel Audio** (`alienmind-strudel-audio.amxd`) | Instrument | Strudel patterns drive a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) - no external instrument needed. v1, exploratory. |
 
 **New here? Start with the [user guide](doc/ABOUT.md)** - every control of
 every device explained (Bars, Grid, Octave conventions, Shift, Run/Hush,
@@ -58,7 +58,7 @@ audio track (sampler) and go.
 pnpm install
 git submodule update --init   # strudel/ - the engine is bundled from here
 pnpm test    # vitest: mini-notation parser + headless engine tests
-pnpm build   # → dist/m4l-strudel/m4l-strudel-{midi,sampler,audio}.amxd
+pnpm build   # → dist/m4l-strudel/alienmind-strudel-{midi,sampler,audio}.amxd
              #   + dist/m4l-strudel.zip (release archive incl. installers)
 pnpm dev     # browser dev for the UI; use maxSimulate('mode','sampler') etc.
 ```
@@ -66,14 +66,16 @@ pnpm dev     # browser dev for the UI; use maxSimulate('mode','sampler') etc.
 ## How it works (short version)
 
 One codebase produces all three devices. The real Strudel engine
-(`@strudel/core` + mini + tonal, bundled by esbuild from the `strudel/` git
-submodule) runs in `[node.script]` (Node for Max); Live's transport is fed in
-via `[plugsync~]`, and the engine queries pattern events ahead of time and
-schedules them sample-accurately through Max's `[pipe]`/`[makenote]`. The UI
-is a single React app in `[jweb]` that mode-switches per device; LiveAPI work
-(clips, Live 12 scale awareness) lives in an ES5 `[js]` glue script. The
-`.amxd` containers themselves are generated **entirely from Node scripts**  - 
-no manual Max editing in the build loop.
+(`@strudel/core` + mini + transpiler + tonal, bundled from the `strudel/`
+git submodule) runs in a **Web Worker inside `[jweb]`** - the same Chromium
+platform strudel.cc itself runs on. Live's transport is fed in as messages
+via `[plugsync~]`, the engine queries pattern events ahead of time, and Max's
+`[pipe]`/`[makenote]` apply the precise timing. The UI is a single React app
+that mode-switches per device; LiveAPI work (clips, Live 12 scale awareness)
+lives in an ES5 `[js]` glue script; the sampler additionally hosts a
+`[node.script]` for downloads. The `.amxd` containers themselves are
+generated **entirely from Node scripts** - no manual Max editing in the
+build loop.
 
 **Full details:** [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) - the build
 pipeline, the amxd container writer, the exact jweb/js/node message protocol,

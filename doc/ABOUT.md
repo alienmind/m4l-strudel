@@ -18,9 +18,9 @@ transport.
 
 | Device | Type, drop it on | What it does for you |
 |---|---|---|
-| **Strudel MIDI** (`m4l-strudel-midi.amxd`) | MIDI effect, a **MIDI track**, before an instrument | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
-| **Strudel Samples** (`m4l-strudel-sampler.amxd`) | Audio effect, any **audio track** (audio passes through) | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. |
-| **Strudel Audio** (`m4l-strudel-audio.amxd`) | Instrument, a **MIDI track**, as the instrument | Strudel patterns drive a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) - no external instrument needed. v1, exploratory. |
+| **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect, a **MIDI track**, before an instrument | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
+| **Strudel Samples** (`alienmind-strudel-sampler.amxd`) | Audio effect, any **audio track** (audio passes through) | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. |
+| **Strudel Audio** (`alienmind-strudel-audio.amxd`) | Instrument, a **MIDI track**, as the instrument | Strudel patterns drive a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) - no external instrument needed. v1, exploratory. |
 
 Nothing plays until **Live's transport is running** - patterns are scheduled
 against the playhead, start on the bar, and follow tempo changes.
@@ -44,7 +44,7 @@ against the playhead, start on the bar, and follow tempo changes.
 
 ---
 
-## Strudel MIDI (`m4l-strudel-midi.amxd`)
+## Strudel MIDI (`alienmind-strudel-midi.amxd`)
 
 ![Strudel MIDI device](screenshot-midi.png)
 
@@ -112,7 +112,7 @@ Live **Run** mode is not limited to this table - it evaluates full Strudel.
 
 ---
 
-## Strudel Samples (`m4l-strudel-sampler.amxd`)
+## Strudel Samples (`alienmind-strudel-sampler.amxd`)
 
 ![Strudel Samples device](screenshot-sampler.png)
 
@@ -138,7 +138,7 @@ samples into Simpler/Drum Racks natively.
 
 ---
 
-## Strudel Audio (`m4l-strudel-audio.amxd`)
+## Strudel Audio (`alienmind-strudel-audio.amxd`)
 
 ![Strudel Audio device](screenshot-audio.png)
 

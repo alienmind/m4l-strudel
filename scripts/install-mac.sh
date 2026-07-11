@@ -7,10 +7,11 @@
 # Live's default (~/Music/Ableton/User Library) is the fallback.
 set -eu
 device="m4l-strudel"
-# Devices plus loose node engine bundles (node.script resolves its script at
-# device load, before the wrapper's embedded-payload fallback can run).
-dist_files="m4l-strudel-midi.amxd m4l-strudel-sampler.amxd m4l-strudel-audio.amxd strudel-node-midi.cjs strudel-node-sampler.cjs strudel-node-audio.cjs"
-probe="m4l-strudel-midi.amxd"
+# Devices plus the sampler's loose node bundle (node.script resolves its
+# script at device load, before the wrapper's embedded-payload fallback can
+# run). midi/audio need no bundle - their engine runs in a jweb Web Worker.
+dist_files="alienmind-strudel-midi.amxd alienmind-strudel-sampler.amxd alienmind-strudel-audio.amxd strudel-node-sampler.cjs"
+probe="alienmind-strudel-midi.amxd"
 here="$(cd "$(dirname "$0")" && pwd)"
 
 # Source: ./m4l-strudel next to this script (zip layout) or ../dist/m4l-strudel (repo layout).
@@ -35,8 +36,8 @@ fi
 dest="$user_lib/Max For Live/$device"
 rm -rf "$dest"
 mkdir -p "$dest"
-# Each .amxd is self-contained (UI + node engine embedded as payloads in wrapper.js).
-for f in $dist_files; do cp "$src/$f" "$dest/"; done
+# Each .amxd is self-contained (UI + engine embedded as payloads in wrapper.js).
+for f in $dist_files; do cp "$src/$f" "$dest/"; echo "  installed $f"; done
 
 echo "Installed to $dest"
-echo "In Live: User Library > Max For Live > $device > {midi, sampler, audio}"
+echo "In Live: User Library > Max For Live > $device"

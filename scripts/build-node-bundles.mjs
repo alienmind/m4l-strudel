@@ -2,6 +2,10 @@
  * Bundle each [node.script] entry into a single self-contained CJS file.
  * @strudel/* resolve into the git submodule; 'max-api' stays external
  * (Node for Max injects it at runtime).
+ *
+ * Only the sampler still uses node.script (fetch + filesystem); the
+ * midi/audio engines moved into a jweb Web Worker after Node for Max proved
+ * unstable inside Live (silent non-starts, then a full Live crash).
  */
 import { build } from "esbuild";
 import path from "node:path";
@@ -21,7 +25,7 @@ const alias = {
 
 mkdirSync(path.join(root, "dist", "node"), { recursive: true });
 
-for (const device of ["midi", "sampler", "audio"]) {
+for (const device of ["sampler"]) {
 	await build({
 		entryPoints: [path.join(root, "src", "max", device, "main.mjs")],
 		bundle: true,
