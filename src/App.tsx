@@ -27,7 +27,17 @@ export default function App() {
 			<div className="flex items-center justify-between leading-none">
 				<span className="text-xs font-semibold tracking-tight">
 					{MODE_TITLE[mode]}
-					<span className="ml-1 font-normal text-muted-foreground/60">v{__APP_VERSION__}</span>
+					<span
+						className={cn(
+							"ml-1 font-normal",
+							s.amxdBuild !== "?" && s.amxdBuild !== __APP_VERSION__
+								? "text-destructive"
+								: "text-muted-foreground/60",
+						)}
+						title="ui version / amxd wrapper version - a mismatch means a mixed or stale install"
+					>
+						ui {__APP_VERSION__} / amxd {s.amxdBuild}
+					</span>
 				</span>
 				<span className="text-[10px] text-muted-foreground">{codeMode ? "code" : `${s.noteCount} notes`}</span>
 			</div>

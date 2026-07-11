@@ -50,6 +50,9 @@ export interface StrudelState {
 	hush: () => void;
 	/** One-line health readout: engine state, ticks received, notes sent. */
 	debug: string;
+	/** BUILD_STAMP of the .amxd wrapper driving this page ("?" until reported).
+	 *  Differing from __APP_VERSION__ means a mixed/stale install. */
+	amxdBuild: string;
 }
 
 export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
@@ -63,11 +66,14 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 	// default to enabled there and let the wrapper drive it inside Live.
 	const [clipAvailable, setClipAvailable] = useState(!inJweb);
 
+	const [amxdBuild, setAmxdBuild] = useState("?");
+
 	useEffect(() => {
 		// The [js] side pushes `clip_available 0/1` (polled once a second).
 		bindInlet("clip_available", (avail) => {
 			setClipAvailable(Number(avail) === 1);
 		});
+		bindInlet("build", (stamp) => setAmxdBuild(String(stamp).split(" ")[0]));
 		outlet("ui_ready");
 	}, []);
 
@@ -221,5 +227,6 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 		run,
 		hush,
 		debug,
+		amxdBuild,
 	};
 }
