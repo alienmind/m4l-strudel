@@ -7,6 +7,12 @@ import SampleCatalog from "@/components/SampleCatalog";
 
 const MODE_TITLE = { midi: "Strudel MIDI", audio: "Strudel Audio", sampler: "Strudel Samples" } as const;
 
+/**
+ * Live's device view is a FIXED ~169px tall - every row here is budgeted.
+ * Layout: header (14) + editor (flex, min 48) + controls (22) + one button
+ * row (30) + footer (14) + gaps/padding ~= 160px. Never add a row without
+ * removing one.
+ */
 export default function App() {
 	const mode = useDeviceMode();
 	const s = useStrudel(mode);
@@ -17,8 +23,8 @@ export default function App() {
 	if (mode === "sampler") return <SampleCatalog />;
 
 	return (
-		<div className="flex h-full w-full flex-col gap-2 bg-background p-2 text-foreground">
-			<div className="flex items-center justify-between">
+		<div className="flex h-full w-full flex-col gap-1 overflow-hidden bg-background p-1.5 text-foreground">
+			<div className="flex items-center justify-between leading-none">
 				<span className="text-xs font-semibold tracking-tight">
 					{MODE_TITLE[mode]}
 					<span className="ml-1 font-normal text-muted-foreground/60">v{__APP_VERSION__}</span>
@@ -31,25 +37,20 @@ export default function App() {
 				onChange={(e) => s.setText(e.target.value)}
 				spellCheck={false}
 				className={cn(
-					"min-h-16 flex-1 resize-none rounded-md bg-input/40 p-2 font-mono text-sm outline-none",
+					"min-h-12 flex-1 resize-none rounded-md bg-input/40 p-1.5 font-mono text-sm outline-none",
 					(s.evalError || (!codeMode && s.errors.length > 0)) && "ring-1 ring-destructive",
 				)}
 				placeholder='note("c3 e3 g3 b3").midichan(1)'
 			/>
 
-			{s.evalError ? (
-				<span className="text-[10px] text-destructive">{s.evalError}</span>
-			) : (
-				!codeMode &&
-				s.errors.length > 0 && (
-					<span className="text-[10px] text-destructive">
-						{s.errors[0].msg} (at {s.errors[0].pos})
-					</span>
-				)
+			{(s.evalError || (!codeMode && s.errors.length > 0)) && (
+				<span className="truncate text-[10px] leading-none text-destructive">
+					{s.evalError ?? `${s.errors[0].msg} (at ${s.errors[0].pos})`}
+				</span>
 			)}
 
-			{/* Controls */}
-			<div className="flex flex-wrap items-center gap-2 text-[11px]">
+			{/* Clip-converter controls */}
+			<div className="flex flex-wrap items-center gap-1.5 text-[10px] leading-none">
 				<label className="flex items-center gap-1">
 					Bars
 					<input
@@ -58,7 +59,7 @@ export default function App() {
 						max={8}
 						value={s.bars}
 						onChange={(e) => s.setBars(Math.max(1, Math.min(8, Number(e.target.value))))}
-						className="w-10 rounded bg-input/50 px-1 py-0.5"
+						className="w-9 rounded bg-input/50 px-1 py-0.5"
 					/>
 				</label>
 				<label className="flex items-center gap-1">
@@ -92,16 +93,16 @@ export default function App() {
 						max={4}
 						value={s.octaveOffset}
 						onChange={(e) => s.setOctaveOffset(Number(e.target.value))}
-						className="w-10 rounded bg-input/50 px-1 py-0.5"
+						className="w-9 rounded bg-input/50 px-1 py-0.5"
 					/>
 				</label>
 			</div>
 
-			{/* Live evaluation (real Strudel engine, transport-locked) */}
-			<div className="flex items-center gap-2">
+			{/* Single action row: live eval + clip I/O */}
+			<div className="flex items-center gap-1.5">
 				{s.live ? (
 					<button
-						className="flex flex-1 items-center justify-center gap-1 rounded-md bg-destructive px-2 py-1.5 text-sm font-semibold text-destructive-foreground hover:brightness-110"
+						className="flex flex-1 items-center justify-center gap-1 rounded-md bg-destructive px-2 py-1 text-sm font-semibold text-destructive-foreground hover:brightness-110"
 						onClick={s.hush}
 						title="Stop the running pattern"
 					>
@@ -110,7 +111,7 @@ export default function App() {
 					</button>
 				) : (
 					<button
-						className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1.5 text-sm font-semibold text-primary-foreground hover:brightness-110"
+						className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1 text-sm font-semibold text-primary-foreground hover:brightness-110"
 						onClick={s.run}
 						title="Evaluate and run this pattern, locked to Live's transport"
 					>
@@ -118,12 +119,8 @@ export default function App() {
 						Run
 					</button>
 				)}
-			</div>
-
-			{/* Actions */}
-			<div className="flex items-center gap-2">
 				<button
-					className="flex flex-1 items-center justify-center gap-1 rounded-md bg-accent px-2 py-1.5 text-sm font-semibold text-accent-foreground hover:brightness-110 disabled:opacity-40"
+					className="flex items-center justify-center gap-1 rounded-md bg-accent px-2 py-1 text-sm font-semibold text-accent-foreground hover:brightness-110 disabled:opacity-40"
 					onClick={s.toMidi}
 					disabled={codeMode}
 					title={
@@ -136,7 +133,7 @@ export default function App() {
 					To Clip
 				</button>
 				<button
-					className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1.5 text-sm font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-40"
+					className="flex items-center justify-center gap-1 rounded-md bg-accent px-2 py-1 text-sm font-semibold text-accent-foreground hover:brightness-110 disabled:opacity-40"
 					onClick={s.fromMidi}
 					disabled={!s.clipAvailable}
 					title={
@@ -150,7 +147,7 @@ export default function App() {
 				</button>
 			</div>
 
-			<div className="flex items-center justify-between gap-2">
+			<div className="flex items-center justify-between gap-2 leading-none">
 				<span className="truncate text-[10px] text-muted-foreground">{s.status}</span>
 				<span className="shrink-0 font-mono text-[9px] text-muted-foreground/70">{s.debug}</span>
 			</div>
