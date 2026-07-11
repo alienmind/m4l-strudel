@@ -59,8 +59,10 @@ Two workflows in one device:
 
 Type your pattern in the big text box. For **Run** you can use full Strudel
 code - `note("c3 e3 g3 b3").midichan(2)`, multiple `$:` lines, `stack(...)`,
-`.fast()`, `.euclid()`, anything the Strudel engine evaluates. For **To
-Clip** the converter understands mini-notation (see the table below).
+`.fast()`, `.euclid()`, anything the Strudel engine evaluates. Bare
+mini-notation like `c5 [e5 g5]*2` also works: Run wraps it in `note("...")`
+for you. For **To Clip** the converter understands mini-notation (see the
+table below).
 
 The **`N notes` counter** (top right) shows how many notes the *clip
 converter* currently parses out of your pattern - a quick validity check. A

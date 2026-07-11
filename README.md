@@ -80,6 +80,10 @@ build loop.
 **Full details:** [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) - the build
 pipeline, the amxd container writer, the exact jweb/js/node message protocol,
 and what we do (and deliberately don't) depend on from upstream strudel.cc.
+The underlying device-building approach (web UI in jweb, generated patchers,
+headless binary .amxd writer) is written up as a standalone article in
+[doc/M4L-JWEB.md](doc/M4L-JWEB.md) - read that if you want to build your own
+web-stack Live devices from this scaffold.
 
 ## Supported mini-notation (clip converter)
 

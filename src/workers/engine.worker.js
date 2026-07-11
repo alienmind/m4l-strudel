@@ -23,6 +23,7 @@
  */
 import { bootScope, compile, queryWindow, hapToNote } from "../max/shared/engine.mjs";
 import { LiveTransport } from "../max/shared/transport.mjs";
+import { asStrudelCode } from "../lib/strudelCode";
 
 const WAVES = new Set(["sine", "sawtooth", "square", "triangle"]);
 
@@ -70,7 +71,7 @@ onmessage = async (e) => {
 		transport.tick(m.bar, m.beat, m.unit, m.tempo, m.playing);
 	} else if (m.t === "code") {
 		try {
-			pattern = await compile(m.code);
+			pattern = await compile(asStrudelCode(m.code));
 			running = true;
 			postMessage({ t: "evalok" });
 		} catch (err) {
