@@ -70,9 +70,16 @@ function midiOutChain(boxes, lines, nodeId) {
 	boxes.push(box("obj-makenote", "makenote 100 250", { numinlets: 3, numoutlets: 2, outlettype: ["int", "int"] }));
 	boxes.push(box("obj-packnote", "pack 0 0", { numinlets: 2, numoutlets: 1, outlettype: [""] }));
 	boxes.push(box("obj-fmt", "midiformat", { numinlets: 7, numoutlets: 1, outlettype: ["int"] }));
+	// route strips the selector: a bare "flush" message comes out of outlet 1
+	// as a bang, which makenote ignores - re-materialize the word via a
+	// message box so makenote actually releases hanging notes.
+	boxes.push(box("obj-flushmsg", "flush", { maxclass: "message", numinlets: 2, numoutlets: 1 }));
 	lines.push(line(nodeId, 0, "obj-route", 0));
 	lines.push(line("obj-route", 0, "obj-pipe", 0)); // midinote payload
-	lines.push(line("obj-route", 1, "obj-makenote", 0)); // "flush" → makenote (note-offs)
+	lines.push(line("obj-route", 1, "obj-flushmsg", 0)); // "flush" → note-offs
+	lines.push(line("obj-flushmsg", 0, "obj-makenote", 0));
+	// unmatched messages (evalok/evalerr/engine_ready) continue to the UI
+	lines.push(line("obj-route", 2, "obj-jweb", 0));
 	lines.push(line("obj-pipe", 0, "obj-makenote", 0)); // pitch
 	lines.push(line("obj-pipe", 1, "obj-makenote", 1)); // velocity
 	lines.push(line("obj-pipe", 2, "obj-makenote", 2)); // duration ms
@@ -148,6 +155,8 @@ function makeDevice(kind) {
 		lines.push(line("obj-gomsg", 0, "obj-sf", 0)); // 1 = start playback
 		lines.push(line("obj-routes", 2, "obj-stopmsg", 0));
 		lines.push(line("obj-stopmsg", 0, "obj-sf", 0)); // 0 = stop
+		// unmatched messages (catalog/downloaded/progress/fetcherr/engine_ready) → UI
+		lines.push(line("obj-routes", 3, "obj-jweb", 0));
 		// passthrough + preview mix (multiple signal cords into one inlet sum in MSP)
 		lines.push(line("obj-plugin", 0, "obj-plugout", 0));
 		lines.push(line("obj-plugin", 1, "obj-plugout", 1));
@@ -176,6 +185,8 @@ function makeDevice(kind) {
 			if (lines[i].patchline.destination[0] === "obj-midiout") lines.splice(i, 1);
 		lines.push(line(nodeId, 0, "obj-routev", 0));
 		lines.push(line("obj-routev", 0, "obj-pipev", 0));
+		// unmatched messages (evalok/evalerr/engine_ready/allnotesoff) → UI
+		lines.push(line("obj-routev", 1, "obj-jweb", 0));
 		// pipev outlets (right-to-left) re-packed into a single "note ..." list:
 		boxes.push(box("obj-pakv", "pak 0 0. 0 s 0. 0.", { numinlets: 6, numoutlets: 1 }));
 		for (let i = 0; i < 6; i++) lines.push(line("obj-pipev", i, "obj-pakv", i));
