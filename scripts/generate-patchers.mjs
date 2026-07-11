@@ -36,21 +36,22 @@ const line = (srcId, srcOut, dstId, dstIn) => ({
 });
 
 // --- transport tick chain (shared by all 3 devices) ---------------------
-// plugsync~ outlets are SIGNALS. We snapshot bar/beat/unit/tempo/playing at 10ms
-// and pak them into: "tick <bar> <beat> <unit> <tempo> <playing>"
-// !! VERIFY OUTLET INDICES against the plugsync~ reference in Max 9 and fix
-// the OUT map below; this is the single most likely constant to be wrong.
+// Per the plugsync~ reference (verified 2026-07-12): outlet 0 = transport
+// running (0/1), outlet 6 = song position in beats (1 PPQ float). Both are
+// signals; snapshot at 10ms and pak into: "tick <playing> <beats>".
+// Tempo is NOT taken from plugsync~ (outlet 5 is samples-per-beat) - the
+// wrapper observes live_set tempo via LiveAPI and sends "tempo <bpm>".
 // Target: jweb for midi/audio (the engine Web Worker consumes ticks),
 // node.script for the sampler (beat-synced preview timing).
-const PLUGSYNC_OUT = { playing: 1, bar: 2, beat: 3, unit: 4, tempo: 6 };
+const PLUGSYNC_OUT = { playing: 0, beats: 6 };
 function tickChain(boxes, lines, targetId) {
 	boxes.push(box("obj-sync", "plugsync~", { numoutlets: 9, outlettype: Array(9).fill("signal"), numinlets: 1 }));
-	const order = ["bar", "beat", "unit", "tempo", "playing"];
+	const order = ["playing", "beats"];
 	order.forEach((k) => {
 		boxes.push(box(`obj-snap-${k}`, "snapshot~ 10", { numinlets: 2, numoutlets: 1, outlettype: ["float"] }));
 		lines.push(line("obj-sync", PLUGSYNC_OUT[k], `obj-snap-${k}`, 0));
 	});
-	boxes.push(box("obj-pak", "pak 0. 0. 0. 0. 0.", { numinlets: 5, numoutlets: 1, outlettype: [""] }));
+	boxes.push(box("obj-pak", "pak 0. 0.", { numinlets: 2, numoutlets: 1, outlettype: [""] }));
 	order.forEach((k, i) => lines.push(line(`obj-snap-${k}`, 0, "obj-pak", i)));
 	boxes.push(box("obj-ticktag", "prepend tick"));
 	lines.push(line("obj-pak", 0, "obj-ticktag", 0));

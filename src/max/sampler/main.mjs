@@ -102,13 +102,17 @@ Max.addHandler("download_all", async (name) => {
 });
 
 // ---- BPM-synced preview -------------------------------------------------
-// Track transport via the same tick chain; on "preview", open in sfplay~ and
-// start at the next beat boundary using a node-side timer (jitter acceptable
-// for previewing).
+// Track transport via the same tick chain ("tick <playing> <beats>", from
+// plugsync~ outlets 0 and 6); bpm arrives separately from the wrapper's
+// LiveAPI tempo observer. On "preview", open in sfplay~ and start at the
+// next beat boundary using a node-side timer (jitter acceptable for
+// previewing).
 let beatState = { beats: 0, bpm: 120, playing: false, at: Date.now() };
-Max.addHandler("tick", (bar, beat, unit, tempo, playing) => {
-	const beats = (bar - 1) * 4 + (beat - 1) + unit / 480;
-	beatState = { beats, bpm: tempo, playing: playing >= 0.5, at: Date.now() };
+Max.addHandler("tick", (playing, beats) => {
+	beatState = { ...beatState, beats: Number(beats), playing: Number(playing) >= 0.5, at: Date.now() };
+});
+Max.addHandler("tempo", (bpm) => {
+	if (Number(bpm) > 0) beatState.bpm = Number(bpm);
 });
 
 Max.addHandler("preview", async (name, n = 0) => {

@@ -36,7 +36,7 @@ issue, see the Cycling '74 forums), then a full Live crash on device load.
                        [jweb] ──────┘  ui_ready, write_clip, read_notes)
                        │    ▲
    React UI + engine   │    │
-   Web Worker          │    └── [plugsync~]→[snapshot~ 10]x5→[pak]→[prepend tick]
+   Web Worker          │    └── [plugsync~]→[snapshot~ 10]x2→[pak]→[prepend tick]
                        ▼
         [route midinote flush] / [route voice allnotesoff]
                        │
@@ -61,9 +61,9 @@ issue, see the Cycling '74 forums), then a full Live crash on device load.
   `root_note`/`scale_name` observers, and (sampler only) the node.script
   start sequence. It is **ES5 only** - Max's `[js]` has no modern JS. The
   device mode arrives as `jsarguments[0]`.
-- **The tick chain** (`[plugsync~]` → five `[snapshot~ 10]` → `[pak]` →
+- **The tick chain** (`[plugsync~]` playing + song-position outlets → `[snapshot~ 10]` → `[pak]` →
   `prepend tick`) samples Live's transport (~every 10 ms) into
-  `tick <bar> <beat> <unit> <tempo> <playing>`, fed into jweb (midi/audio)
+  `tick <playing> <beats>` (plugsync~ outlets 0 and 6), fed into jweb (midi/audio)
   or node (sampler).
 
 ### Transport → pattern scheduling (the interesting part)
@@ -177,7 +177,7 @@ the engine worker via `postMessage` and never crosses Max.
 |---|---|---|
 | UI → js | `ui_ready`, `write_clip ...`, `read_notes` | handshake, clip I/O |
 | js → UI | `url`, `mode`, `notes ...`, `clip_available`, `read_error`, `scale` | boot + clip replies + Live scale |
-| Max → UI | `tick <bar> <beat> <unit> <tempo> <playing>` | transport, forwarded to the worker |
+| Max → UI | `tick <playing> <beats>`, `tempo <bpm>` (LiveAPI observer via js) | transport, forwarded to the worker |
 | UI → Max | `midinote ...`, `flush` (midi) / `voice ...`, `allnotesoff` (audio) | scheduled engine output |
 | UI ⇄ worker | `code`/`hush`/`tick` in, `ready`/`evalok`/`evalerr`/`notes`/`flush` out | postMessage, not Max messages |
 | UI → node (sampler) | `load_map`, `preview`, `preview_stop`, `download`, `download_all`, `open_folder` | catalog workflow |

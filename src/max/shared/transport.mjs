@@ -1,7 +1,12 @@
 /**
  * Maps Live transport ticks to strudel cycle windows with lookahead.
  * Convention: 1 strudel cycle = 1 bar of 4 beats (cps = bpm/60/4).
- * tick() is fed ~every 10ms from [plugsync~]→[snapshot~ 10]→[pak].
+ *
+ * tick() is fed ~every 10ms from [plugsync~] via [snapshot~ 10]:
+ *   playing  - plugsync~ outlet 0 (1 while the host transport runs)
+ *   beats    - plugsync~ outlet 6 (song position in beats, float)
+ * bpm arrives separately (LiveAPI live_set tempo observer in the wrapper);
+ * plugsync~ itself only reports tempo as samples-per-beat.
  */
 export class LiveTransport {
 	constructor({ lookaheadMs = 120, onWindow, onStop }) {
@@ -12,12 +17,7 @@ export class LiveTransport {
 		this.playing = false;
 	}
 
-	/** bar/beat 1-based, unit 0-479 ticks, per plugsync~. Assumes 4/4 (v1). */
-	static beatsFrom(bar, beat, unit) {
-		return (bar - 1) * 4 + (beat - 1) + unit / 480;
-	}
-
-	tick(bar, beat, unit, tempo, playing) {
+	tick(playing, beats, bpm) {
 		const isPlaying = playing >= 0.5;
 		if (!isPlaying) {
 			if (this.playing) {
@@ -28,9 +28,8 @@ export class LiveTransport {
 			return;
 		}
 		this.playing = true;
-		const bpm = tempo;
 		const cps = bpm / 60 / 4;
-		const nowBeats = LiveTransport.beatsFrom(bar, beat, unit);
+		const nowBeats = beats;
 		const nowCycle = nowBeats / 4;
 		const lookaheadCycles = (this.lookaheadMs / 1000) * cps;
 		const to = nowCycle + lookaheadCycles;

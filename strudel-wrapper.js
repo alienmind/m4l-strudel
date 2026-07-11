@@ -39,18 +39,42 @@ function bang() {
 	loadWebview();
 	startClipPoll();
 	setupScaleObservers();
+	setupTempoObserver();
 }
 function loadbang() {
 	post("strudel: loadbang\n");
 	extractNodeBundle();
 	loadWebview();
 	setupScaleObservers();
+	setupTempoObserver();
 }
 function reload() {
 	extractNodeBundle();
 	loadWebview();
 	startClipPoll();
 	setupScaleObservers();
+	setupTempoObserver();
+}
+
+// Live's tempo in BPM, observed via LiveAPI and pushed to the UI (and to
+// node in sampler mode). plugsync~ cannot provide this - its tempo outlet
+// reports samples-per-beat. The observer callback also fires once with the
+// current value when the property is attached.
+var tempoObs = null;
+function setupTempoObserver() {
+	if (tempoObs) return;
+	try {
+		tempoObs = new LiveAPI(onTempo, "live_set");
+		tempoObs.property = "tempo";
+	} catch (e) {
+		post("strudel: tempo observer unavailable - " + e.message + "\n");
+	}
+}
+function onTempo(a) {
+	if (a && a[0] == "tempo") {
+		outlet(0, "tempo", a[1]); // → jweb (engine worker)
+		if (MODE === "sampler") outlet(1, "tempo", a[1]); // → node (preview timing)
+	}
 }
 
 function startClipPoll() {

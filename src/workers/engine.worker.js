@@ -12,7 +12,8 @@
  * messaging jitter, and note-on precision comes from [pipe] delays Max-side.
  *
  * Protocol (postMessage, structured clone - no base64 needed):
- *   in:  {t:'tick', bar, beat, unit, tempo, playing}
+ *   in:  {t:'tick', playing, beats}   (plugsync~ outlets 0 and 6)
+ *        {t:'tempo', bpm}             (LiveAPI live_set tempo observer)
  *        {t:'code', code}   -> {t:'evalok'} | {t:'evalerr', message}
  *        {t:'hush'}         -> {t:'flush'}
  *   out: {t:'ready'} once the strudel scope is booted
@@ -29,6 +30,7 @@ const WAVES = new Set(["sine", "sawtooth", "square", "triangle"]);
 
 let pattern = null;
 let running = false;
+let bpm = 120;
 
 const transport = new LiveTransport({
 	lookaheadMs: 150,
@@ -68,7 +70,9 @@ const transport = new LiveTransport({
 onmessage = async (e) => {
 	const m = e.data;
 	if (m.t === "tick") {
-		transport.tick(m.bar, m.beat, m.unit, m.tempo, m.playing);
+		transport.tick(m.playing, m.beats, bpm);
+	} else if (m.t === "tempo") {
+		if (m.bpm > 0) bpm = m.bpm;
 	} else if (m.t === "code") {
 		try {
 			pattern = await compile(asStrudelCode(m.code));
