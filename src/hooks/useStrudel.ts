@@ -22,6 +22,11 @@ export interface StrudelState {
 	clipAvailable: boolean;
 	toMidi: () => void;
 	fromMidi: () => void;
+	/** Live evaluation (midi/audio devices): real Strudel engine in [node.script]. */
+	live: boolean;
+	evalError: string | null;
+	run: () => void;
+	hush: () => void;
 }
 
 export function useStrudel(): StrudelState {
@@ -92,6 +97,33 @@ export function useStrudel(): StrudelState {
 		setStatus("Reading the playing/first clip on this track…");
 	}, []);
 
+	const [live, setLive] = useState(false);
+	const [evalError, setEvalError] = useState<string | null>(null);
+
+	useEffect(() => {
+		bindInlet("evalok", () => {
+			setEvalError(null);
+			setStatus("Pattern running");
+		});
+		bindInlet("evalerr", (b64) => {
+			setEvalError(atob(String(b64)));
+			setStatus("Eval error");
+		});
+		bindInlet("engine_ready", () => setStatus("Strudel engine ready"));
+	}, []);
+
+	const run = useCallback(() => {
+		// btoa handles ASCII; strudel code can contain unicode in strings:
+		const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+		outlet("code", b64);
+		setLive(true);
+	}, [text]);
+
+	const hush = useCallback(() => {
+		outlet("hush");
+		setLive(false);
+	}, []);
+
 	return {
 		text,
 		setText,
@@ -109,5 +141,9 @@ export function useStrudel(): StrudelState {
 		clipAvailable,
 		toMidi,
 		fromMidi,
+		live,
+		evalError,
+		run,
+		hush,
 	};
 }
