@@ -7,14 +7,19 @@
 # involved - Live keeps all of this in plain config files.
 $ErrorActionPreference = "Stop"
 $deviceName = "m4l-strudel"
-$amxdFile = "alienmind-strudel-m4l.amxd"
+# The three device variants produced by the build (see scripts/postbuild.mjs).
+$amxdFiles = @(
+    "alienmind-strudel-midi.amxd",
+    "alienmind-strudel-sampler.amxd",
+    "alienmind-strudel-audio.amxd"
+)
 
 # Source: ./m4l-strudel next to this script (zip layout) or ../dist/m4l-strudel (repo layout).
 $src = Join-Path $PSScriptRoot $deviceName
-if (-not (Test-Path (Join-Path $src "$amxdFile"))) {
+if (-not (Test-Path (Join-Path $src $amxdFiles[0]))) {
     $src = Join-Path (Split-Path $PSScriptRoot) "dist\$deviceName"
 }
-if (-not (Test-Path (Join-Path $src "$amxdFile"))) {
+if (-not (Test-Path (Join-Path $src $amxdFiles[0]))) {
     Write-Error "Device folder not found next to this script or in dist\. Run 'pnpm build' first."
 }
 
@@ -41,8 +46,10 @@ if (-not (Test-Path $userLib)) {
 $dest = Join-Path $userLib "Max For Live\$deviceName"
 if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
 New-Item -ItemType Directory -Force $dest | Out-Null
-# The .amxd is self-contained (UI embedded as a payload in wrapper.js).
-Copy-Item (Join-Path $src "$amxdFile") $dest -Force
+# Each .amxd is self-contained (UI + node engine embedded as payloads in wrapper.js).
+foreach ($f in $amxdFiles) {
+    Copy-Item (Join-Path $src $f) $dest -Force
+}
 
 Write-Host "Installed to $dest"
-Write-Host "In Live: User Library > Max For Live > $deviceName > $amxdFile"
+Write-Host "In Live: User Library > Max For Live > $deviceName > {midi, sampler, audio}"

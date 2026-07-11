@@ -66,6 +66,13 @@ function checkClipAvailable() {
 	}
 }
 
+/**
+ * jweb's outlet fans out to BOTH this [js] and [node.script]; messages meant
+ * for node (code/hush/preview/load_map/download/...) land here too. Swallow
+ * them silently instead of logging "js: no function <name>" on every one.
+ */
+function anything() {}
+
 /** UI announces it finished loading - resend current state. */
 function ui_ready() {
 	outlet(0, "mode", MODE);

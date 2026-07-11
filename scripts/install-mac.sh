@@ -7,13 +7,15 @@
 # Live's default (~/Music/Ableton/User Library) is the fallback.
 set -eu
 device="m4l-strudel"
-amxd_file="alienmind-strudel-m4l.amxd"
+# The three device variants produced by the build (see scripts/postbuild.mjs).
+amxd_files="alienmind-strudel-midi.amxd alienmind-strudel-sampler.amxd alienmind-strudel-audio.amxd"
+probe="alienmind-strudel-midi.amxd"
 here="$(cd "$(dirname "$0")" && pwd)"
 
 # Source: ./m4l-strudel next to this script (zip layout) or ../dist/m4l-strudel (repo layout).
 src="$here/$device"
-[ -f "$src/$amxd_file" ] || src="$here/../dist/$device"
-[ -f "$src/$amxd_file" ] || { echo "Device folder not found. Run 'pnpm build' first." >&2; exit 1; }
+[ -f "$src/$probe" ] || src="$here/../dist/$device"
+[ -f "$src/$probe" ] || { echo "Device folder not found. Run 'pnpm build' first." >&2; exit 1; }
 
 user_lib=""
 cfg=$(ls -t "$HOME/Library/Preferences/Ableton/Live "*/Library.cfg 2>/dev/null | head -1 || true)
@@ -32,8 +34,8 @@ fi
 dest="$user_lib/Max For Live/$device"
 rm -rf "$dest"
 mkdir -p "$dest"
-# The .amxd is self-contained (UI embedded as a payload in wrapper.js).
-cp "$src/$amxd_file" "$dest/"
+# Each .amxd is self-contained (UI + node engine embedded as payloads in wrapper.js).
+for f in $amxd_files; do cp "$src/$f" "$dest/"; done
 
 echo "Installed to $dest"
-echo "In Live: User Library > Max For Live > $device > $amxd_file"
+echo "In Live: User Library > Max For Live > $device > {midi, sampler, audio}"
