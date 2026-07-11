@@ -216,6 +216,10 @@ Say you want a "chord memory" MIDI device with a web UI.
 
 Gotchas that will bite you exactly once:
 
+- **Live embeds a copy of the device in the set.** Reinstalling the `.amxd`
+  does not update instances already placed on tracks - delete and re-drag.
+  Stamp a build id into the wrapper (this scaffold does) so the console
+  always tells you which build an instance really is.
 - `[js]` is ES5. No `const`, no arrow functions, no template literals.
 - `route` strips the selector; a bare selector comes out as a `bang`. If the
   consumer needs the word itself, re-materialize it with a message box.

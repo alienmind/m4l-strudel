@@ -61,7 +61,12 @@ function payloadJs(varPrefix, name, buf) {
 }
 
 const nodeBundlePath = extraPaths.find((p) => p.endsWith(".cjs"));
-let wrapperData = wrapperJs;
+// Build stamp: the wrapper posts it at load, so the Max console always tells
+// you WHICH build a device instance actually is (Live embeds a copy of the
+// device in the set - stale instances are a real debugging trap).
+const { version } = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+const stamp = `${version} ${new Date().toISOString()}`;
+let wrapperData = `var BUILD_STAMP = ${JSON.stringify(stamp)};\n` + wrapperJs;
 if (uiHtml !== null) wrapperData += payloadJs("UI_PAYLOAD", "strudel-ui.html", uiHtml);
 if (nodeBundlePath) {
 	const nodeBundle = readFileSync(nodeBundlePath);
