@@ -32,6 +32,21 @@ if (!patcherPath || !wrapperPath || !outPath) {
 const patcherJson = readFileSync(patcherPath, "utf8");
 const wrapperJs = readFileSync(wrapperPath, "utf8");
 
+// Max's [js] is ES5; one modern token (trailing comma in a call, arrow fn,
+// const...) kills the whole wrapper at load with a bare "syntax error".
+// Gate the build on an ES5 parse so that never ships.
+try {
+	const { parse } = await import("acorn");
+	parse(wrapperJs, { ecmaVersion: 5 });
+} catch (e) {
+	if (e.code === "ERR_MODULE_NOT_FOUND") {
+		console.warn("build-amxd: acorn not resolvable - skipping ES5 wrapper check");
+	} else {
+		console.error(`build-amxd: ${path.basename(wrapperPath)} is not valid ES5: ${e.message}`);
+		process.exit(1);
+	}
+}
+
 // The built single-file UI (vite-plugin-singlefile inlines all JS/CSS) and the
 // esbuild node bundle (if any) are appended to wrapper.js as base64 payloads.
 // Frozen dependencies live in Max's virtual filesystem and never exist on

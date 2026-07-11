@@ -20,11 +20,7 @@ autowatch = 1;
 inlets = 1;
 outlets = 2;
 
-post(
-	"wrapper.js loaded (build " +
-		(typeof BUILD_STAMP !== "undefined" ? BUILD_STAMP : "dev - no stamp") +
-		")\n",
-);
+post("wrapper.js loaded (build " + (typeof BUILD_STAMP !== "undefined" ? BUILD_STAMP : "dev - no stamp") + ")\n");
 
 var MODE = jsarguments.length > 0 ? String(jsarguments[0]) : "midi";
 
