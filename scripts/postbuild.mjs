@@ -1,8 +1,9 @@
 /**
- * Runs after `vite build`. Assembles the final distributable folder,
- * named after the project (package.json "name"):
+ * Runs after `vite build` + `build-node-bundles` + `generate-patchers`.
+ * Assembles the final distributable folder, named after the project
+ * (package.json "name"):
  * 1. Move dist/index.html → dist/<name>/strudel-ui.html
- * 2. Generate dist/<name>/<name>.amxd from ableton-amxd/patcher.json
+ * 2. Generate dist/<name>/<kind>.amxd for each of the 3 device variants
  * 3. Copy wrapper.js (root) → dist/<name>/
  * 4. Create dist/<name>.zip (release archive of that folder + install scripts)
  */
@@ -23,10 +24,25 @@ await mkdir(outDir, { recursive: true });
 await rename(path.join(dist, "index.html"), path.join(outDir, "strudel-ui.html"));
 console.log(`postbuild: dist/index.html → dist/${name}/strudel-ui.html`);
 
-execFileSync(process.execPath, [
-	path.join(root, "scripts", "build-amxd.mjs"),
-	path.join(outDir, "alienmind-strudel-m4l.amxd"),
-], { stdio: "inherit" });
+const DEVICES = [
+	{ kind: "midi", out: "alienmind-strudel-midi.amxd" },
+	{ kind: "sampler", out: "alienmind-strudel-sampler.amxd" },
+	{ kind: "audio", out: "alienmind-strudel-audio.amxd", extra: [path.join(root, "ableton-amxd", "voice.maxpat")] },
+];
+for (const d of DEVICES) {
+	execFileSync(
+		process.execPath,
+		[
+			path.join(root, "scripts", "build-amxd.mjs"),
+			path.join(root, "dist", "patchers", `${d.kind}.json`),
+			path.join(root, "strudel-wrapper.js"),
+			path.join(outDir, d.out),
+			path.join(root, "dist", "node", `strudel-node-${d.kind}.cjs`),
+			...(d.extra ?? []),
+		],
+		{ stdio: "inherit" },
+	);
+}
 
 await copyFile(path.join(root, "strudel-wrapper.js"), path.join(outDir, "strudel-wrapper.js"));
 console.log(`postbuild: strudel-wrapper.js → dist/${name}/strudel-wrapper.js`);
@@ -38,7 +54,8 @@ await new Promise((resolve, reject) => {
 	output.on("close", resolve);
 	archive.on("error", reject);
 	archive.pipe(output);
-	for (const f of ["alienmind-strudel-m4l.amxd", "strudel-wrapper.js", "strudel-ui.html"]) {
+	const files = [...DEVICES.map((d) => d.out), "strudel-wrapper.js", "strudel-ui.html"];
+	for (const f of files) {
 		const p = path.join(outDir, f);
 		if (existsSync(p)) archive.append(createReadStream(p), { name: `${name}/${f}` });
 	}

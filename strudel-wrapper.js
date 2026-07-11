@@ -1,13 +1,19 @@
 /**
- * wrapper.js - Max-side glue for the Strudel MIDI device (NOT the React app).
+ * wrapper.js - Max-side glue for the Strudel devices (NOT the React app).
+ * Shared by all three device variants (midi/sampler/audio), mode-switched by
+ * jsarguments[0].
  *
  * 1. Load strudel-ui.html into [jweb] via a file:// URL from this patch path.
  * 2. write_clip: create a MIDI clip on THIS device's own track and fill it.
  * 3. read_notes: read the notes of the track's clip and send them to the UI.
+ * 4. Extract the embedded node.script bundle to disk if frozen resolution fails.
+ * 5. sampler mode: observe Live 12's global root_note/scale_name and forward
+ *    them to the UI and to [node.script].
  *
  * Outlets:
- * 0 - to jweb ("url ...", "notes <loopEnd> <n> <p s d> ...")
- * 1 - to print (optional)
+ * 0 - to jweb ("url ...", "mode ...", "notes <loopEnd> <n> <p s d> ...")
+ * 1 - to [node.script] (code/hush forwarded from jweb pass through directly;
+ *     this outlet carries js-originated messages like "scale ...")
  */
 
 autowatch = 1;
@@ -15,6 +21,8 @@ inlets = 1;
 outlets = 2;
 
 post("wrapper.js loaded\n");
+
+var MODE = jsarguments.length > 0 ? String(jsarguments[0]) : "midi";
 
 // Clip availability: polled (LiveAPI has no single observable for "any clip
 // on this track"), pushed to the UI as `clip_available 0/1` on change so the
@@ -25,13 +33,17 @@ var clipPoll = new Task(checkClipAvailable, this);
 function bang() {
 	loadWebview();
 	startClipPoll();
+	setupScaleObservers();
 }
 function loadbang() {
+	extractNodeBundle();
 	loadWebview();
+	setupScaleObservers();
 }
 function reload() {
 	loadWebview();
 	startClipPoll();
+	setupScaleObservers();
 }
 
 function startClipPoll() {
@@ -56,8 +68,11 @@ function checkClipAvailable() {
 
 /** UI announces it finished loading - resend current state. */
 function ui_ready() {
+	outlet(0, "mode", MODE);
 	lastClipAvail = -1;
-	checkClipAvailable();
+	// midi + audio devices keep the To Clip/From Clip feature; sampler (an
+	// audio-effect device with no MIDI notes of its own) does not.
+	if (MODE !== "sampler") checkClipAvailable();
 }
 
 function loadWebview() {
@@ -92,19 +107,37 @@ function resolveUiUrl() {
 	}
 	var target = devFolder + "/" + UI_NAME;
 	if (typeof UI_PAYLOAD_B64 !== "undefined") {
-		extractPayloadIfNeeded(target);
+		extractPayload(target, UI_PAYLOAD_B64, UI_PAYLOAD_BYTES);
 	} else {
 		post("strudel: no embedded payload (dev build) - using " + target + "\n");
 	}
 	return encodeURI("file:///" + target);
 }
 
-/** Write the embedded payload to targetPath unless an identical-size copy exists. */
-function extractPayloadIfNeeded(targetPath) {
+/**
+ * Node bundle extraction — DECISION GATE:
+ * Node for Max documents support for frozen devices (it unpacks scripts to a
+ * cache dir). FIRST try shipping the .cjs only as a frozen extra file and see
+ * if [node.script strudel-node-<mode>.cjs @autostart 1] boots (watch the Max
+ * console for the node banner). If it does NOT resolve, this extraction path
+ * (payload appended by build-amxd.mjs) writes it to disk next to the device
+ * so node.script can load it via an explicit path instead.
+ */
+function extractNodeBundle() {
+	if (typeof NODE_PAYLOAD_B64 === "undefined") return; // dev layout: file on disk
+	var fp = this.patcher.filepath;
+	var devFolder = fp && fp.length ? fp.replace(/\/[^\/]*$/, "") : null;
+	if (!devFolder) return;
+	var target = devFolder + "/" + NODE_PAYLOAD_NAME;
+	extractPayload(target, NODE_PAYLOAD_B64, NODE_PAYLOAD_BYTES);
+}
+
+/** Write an embedded base64 payload to targetPath unless an identical-size copy exists. */
+function extractPayload(targetPath, b64chunks, byteCount) {
 	try {
 		var existing = new File(targetPath);
 		if (existing.isopen) {
-			var sameSize = existing.eof === UI_PAYLOAD_BYTES;
+			var sameSize = existing.eof === byteCount;
 			existing.close();
 			if (sameSize) return; // already extracted, same build
 		}
@@ -122,8 +155,8 @@ function extractPayloadIfNeeded(targetPath) {
 		// File.writebytes silently truncates large calls (observed 16384-byte
 		// cap), so write in small slices.
 		var SLICE = 4096;
-		for (var i = 0; i < UI_PAYLOAD_B64.length; i++) {
-			var bytes = b64decode(UI_PAYLOAD_B64[i]);
+		for (var i = 0; i < b64chunks.length; i++) {
+			var bytes = b64decode(b64chunks[i]);
 			for (var off = 0; off < bytes.length; off += SLICE) {
 				out.writebytes(bytes.slice(off, off + SLICE));
 			}
@@ -132,10 +165,10 @@ function extractPayloadIfNeeded(targetPath) {
 		var check = new File(targetPath);
 		var written = check.isopen ? check.eof : -1;
 		if (check.isopen) check.close();
-		if (written === UI_PAYLOAD_BYTES) {
-			post("strudel: extracted UI (" + written + " bytes) to " + targetPath + "\n");
+		if (written === byteCount) {
+			post("strudel: extracted " + written + " bytes to " + targetPath + "\n");
 		} else {
-			post("strudel: extract SIZE MISMATCH - wrote " + written + ", expected " + UI_PAYLOAD_BYTES + "\n");
+			post("strudel: extract SIZE MISMATCH - wrote " + written + ", expected " + byteCount + "\n");
 		}
 	} catch (e2) {
 		post("strudel: extract failed - " + e2.message + "\n");
@@ -165,6 +198,42 @@ function b64decode(s) {
 		}
 	}
 	return out;
+}
+
+// Live 12 global scale observers (sampler device only): forward to the UI
+// (key-aware filtering) and to [node.script] via outlet 1.
+var rootObs = null,
+	scaleObs = null,
+	liveRoot = 0,
+	liveScale = "Major";
+function setupScaleObservers() {
+	if (MODE !== "sampler") return;
+	if (rootObs && scaleObs) return; // already set up
+	try {
+		rootObs = new LiveAPI(onRoot, "live_set");
+		rootObs.property = "root_note";
+		scaleObs = new LiveAPI(onScale, "live_set");
+		scaleObs.property = "scale_name";
+		post("strudel: scale observers ready\n");
+	} catch (e) {
+		post("strudel: scale observers unavailable (pre-Live-12?) " + e.message + "\n");
+	}
+}
+function onRoot(a) {
+	if (a && a[0] == "root_note") {
+		liveRoot = a[1];
+		sendScale();
+	}
+}
+function onScale(a) {
+	if (a && a[0] == "scale_name") {
+		liveScale = a.slice(1).join(" ");
+		sendScale();
+	}
+}
+function sendScale() {
+	outlet(0, "scale", liveRoot, liveScale); // → jweb (UI filter)
+	outlet(1, "scale", liveRoot, liveScale); // → node
 }
 
 /** Return the LiveAPI for this device's own track. */
