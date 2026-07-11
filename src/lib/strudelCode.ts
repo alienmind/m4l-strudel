@@ -4,10 +4,14 @@
  * engine evaluates as JavaScript. Bare mini-notation is not valid JS, so Run
  * wraps it in note("...") - exactly what a strudel.cc user would type.
  */
+/** True when the text is bare mini-notation (the clip converter's dialect)
+ *  rather than JavaScript. Any quote, call, arrow function or $: line means
+ *  it is already code. */
+export function isBareMini(text: string): boolean {
+	return !/["'`()]|\$:|=>/.test(text.trim());
+}
+
 export function asStrudelCode(text: string): string {
-	const t = text.trim();
-	// Any quote, call, arrow function or $: line means it is already code.
-	const looksLikeCode = /["'`()]|\$:|=>/.test(t);
-	if (looksLikeCode) return text;
-	return `note("${t.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
+	if (!isBareMini(text)) return text;
+	return `note("${text.trim().replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
 }

@@ -76,12 +76,26 @@ function midiOutChain(boxes, lines, srcId) {
 	// as a bang, which makenote ignores - re-materialize the word via a
 	// message box so makenote actually releases hanging notes.
 	boxes.push(box("obj-flushmsg", "flush", { maxclass: "message", numinlets: 2, numoutlets: 1 }));
+	// Explicit unpack instead of relying on pipe's list-spread reaching the
+	// delay inlet: unpack fires right-to-left, so the delay (outlet 4) lands
+	// in pipe's delay inlet before the pitch (outlet 0) hits the hot inlet.
+	boxes.push(
+		box("obj-unpack", "unpack 0 0 0 0 0", {
+			numinlets: 1,
+			numoutlets: 5,
+			outlettype: ["int", "int", "int", "int", "int"],
+		}),
+	);
+	// Console tap: every scheduled note prints "strudel-midi: <p> <v> <d> <c> <delay>"
+	boxes.push(box("obj-midiprint", "print strudel-midi"));
 	lines.push(line(srcId, 0, "obj-route", 0));
-	lines.push(line("obj-route", 0, "obj-pipe", 0)); // midinote payload
+	lines.push(line("obj-route", 0, "obj-unpack", 0)); // midinote payload
+	lines.push(line("obj-route", 0, "obj-midiprint", 0));
 	lines.push(line("obj-route", 1, "obj-flushmsg", 0)); // "flush" → note-offs
 	lines.push(line("obj-flushmsg", 0, "obj-makenote", 0));
 	// unmatched messages (ui_ready/write_clip/read_notes) continue to [js]
 	lines.push(line("obj-route", 2, "obj-2", 0));
+	for (let i = 0; i < 5; i++) lines.push(line("obj-unpack", i, "obj-pipe", i));
 	lines.push(line("obj-pipe", 0, "obj-makenote", 0)); // pitch
 	lines.push(line("obj-pipe", 1, "obj-makenote", 1)); // velocity
 	lines.push(line("obj-pipe", 2, "obj-makenote", 2)); // duration ms
@@ -215,8 +229,19 @@ function makeDevice(kind) {
 		boxes.splice(moIdx, 1);
 		for (let i = lines.length - 1; i >= 0; i--)
 			if (lines[i].patchline.destination[0] === "obj-midiout") lines.splice(i, 1);
+		// Same explicit right-to-left unpack as the MIDI chain (delay last inlet).
+		boxes.push(
+			box("obj-unpackv", "unpack 0 0. 0 s 0. 0. 0", {
+				numinlets: 1,
+				numoutlets: 7,
+				outlettype: ["int", "float", "int", "", "float", "float", "int"],
+			}),
+		);
+		boxes.push(box("obj-voiceprint", "print strudel-voice"));
 		lines.push(line("obj-jweb", 0, "obj-routev", 0));
-		lines.push(line("obj-routev", 0, "obj-pipev", 0));
+		lines.push(line("obj-routev", 0, "obj-unpackv", 0));
+		lines.push(line("obj-routev", 0, "obj-voiceprint", 0));
+		for (let i = 0; i < 7; i++) lines.push(line("obj-unpackv", i, "obj-pipev", i));
 		// unmatched messages (ui_ready/write_clip/read_notes) → [js]
 		lines.push(line("obj-routev", 2, "obj-2", 0));
 		// pipev outlets (right-to-left) re-packed into a single "note ..." list:

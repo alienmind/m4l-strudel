@@ -48,6 +48,8 @@ export interface StrudelState {
 	evalError: string | null;
 	run: () => void;
 	hush: () => void;
+	/** One-line health readout: engine state, ticks received, notes sent. */
+	debug: string;
 }
 
 export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
@@ -120,6 +122,7 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 
 	const [live, setLive] = useState(false);
 	const [evalError, setEvalError] = useState<string | null>(null);
+	const [debug, setDebug] = useState("");
 	const workerRef = useRef<Worker | null>(null);
 
 	// The Strudel engine runs in a Web Worker inside jweb (the sampler device
@@ -128,19 +131,23 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 	// in the shape the device's output chain expects.
 	useEffect(() => {
 		if (mode === "sampler") return;
+		const counters = { engine: "booting", ticks: 0, sent: 0 };
 		const worker: Worker = new EngineWorker();
 		workerRef.current = worker;
 		worker.onmessage = (e: MessageEvent<EngineMessage>) => {
 			const m = e.data;
 			if (m.t === "ready") {
+				counters.engine = "ready";
 				setStatus("Strudel engine ready");
 			} else if (m.t === "evalok") {
 				setEvalError(null);
 				setStatus("Pattern running");
 			} else if (m.t === "evalerr") {
+				counters.engine = "error";
 				setEvalError(m.message);
 				setStatus("Eval error");
 			} else if (m.t === "notes") {
+				counters.sent += m.notes.length;
 				for (const n of m.notes) {
 					if (mode === "audio") outlet("voice", n.pitch, n.vel01, n.durMs, n.wave, n.cutoff, n.gain, n.delayMs);
 					else outlet("midinote", n.pitch, n.velocity, n.durMs, n.chan, n.delayMs);
@@ -150,6 +157,7 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 			}
 		};
 		bindInlet("tick", (bar, beat, unit, tempo, playing) => {
+			counters.ticks++;
 			worker.postMessage({
 				t: "tick",
 				bar: Number(bar),
@@ -159,7 +167,17 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 				playing: Number(playing),
 			});
 		});
+		// Health readout, refreshed 1x/s: instantly shows which hop is dead.
+		// ticks stay 0 -> the plugsync~ chain or jweb inbound messages are
+		// broken (ticks flow even with the transport stopped); sent stays 0
+		// while playing -> engine/pattern side; sent counts up but silence ->
+		// the Max-side pipe/makenote chain.
+		const iv = setInterval(
+			() => setDebug(`engine ${counters.engine} / ticks ${counters.ticks} / sent ${counters.sent}`),
+			1000,
+		);
 		return () => {
+			clearInterval(iv);
 			worker.terminate();
 			workerRef.current = null;
 		};
@@ -196,5 +214,6 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 		evalError,
 		run,
 		hush,
+		debug,
 	};
 }
