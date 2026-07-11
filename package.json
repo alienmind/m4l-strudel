@@ -7,7 +7,9 @@
 	"description": "Max for Live MIDI device - Strudel mini-notation ↔ MIDI clip, rendered as a React app inside jweb",
 	"scripts": {
 		"dev": "vite --host 127.0.0.1 --port 5175",
-		"build": "tsc -b && vite build && node scripts/postbuild.mjs",
+		"build": "tsc -b && vite build && node scripts/build-node-bundles.mjs && node scripts/generate-patchers.mjs && node scripts/postbuild.mjs",
+		"build:node": "node scripts/build-node-bundles.mjs",
+		"build:patchers": "node scripts/generate-patchers.mjs",
 		"preview": "vite preview --host 127.0.0.1 --port 4175",
 		"test": "vitest run",
 		"format": "prettier --write \"src/**/*.{ts,tsx,css}\""
@@ -32,6 +34,7 @@
 		"@types/react-dom": "^19.0.0",
 		"@vitejs/plugin-react": "^4.3.4",
 		"archiver": "^7.0.1",
+		"esbuild": "^0.24.0",
 		"prettier": "^3.4.0",
 		"tailwindcss": "^4.0.0",
 		"typescript": "^5.7.0",
