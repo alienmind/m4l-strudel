@@ -72,6 +72,7 @@ function setupTempoObserver() {
 }
 function onTempo(a) {
 	if (a && a[0] == "tempo") {
+		post("strudel: tempo " + a[1] + "\n");
 		outlet(0, "tempo", a[1]); // → jweb (engine worker)
 		if (MODE === "sampler") outlet(1, "tempo", a[1]); // → node (preview timing)
 	}
@@ -107,10 +108,29 @@ function anything() {}
 /** UI announces it finished loading - resend current state. */
 function ui_ready() {
 	outlet(0, "mode", MODE);
+	// The UI shows this next to its own baked-in version: a mismatch means a
+	// mixed install (stale .amxd instance vs newer extracted UI, or vice versa).
+	outlet(0, "build", buildStamp());
+	sendCurrentTempo();
 	lastClipAvail = -1;
 	// midi + audio devices keep the To Clip/From Clip feature; sampler (an
 	// audio-effect device with no MIDI notes of its own) does not.
 	if (MODE !== "sampler") checkClipAvailable();
+}
+
+/** The observer's initial callback can fire before the page is bound - the
+ *  ui_ready handshake re-reads the current tempo so the UI never misses it. */
+function sendCurrentTempo() {
+	try {
+		var api = new LiveAPI(null, "live_set");
+		var t = parseFloat(api.get("tempo"));
+		if (t > 0) {
+			outlet(0, "tempo", t);
+			if (MODE === "sampler") outlet(1, "tempo", t);
+		}
+	} catch (e) {
+		post("strudel: tempo read failed - " + e.message + "\n");
+	}
 }
 
 function loadWebview() {
@@ -149,7 +169,13 @@ function resolveUiUrl() {
 	} else {
 		post("strudel: no embedded payload (dev build) - using " + target + "\n");
 	}
-	return encodeURI("file:///" + target);
+	// Cache-buster: the URL changes per build, so Chromium can never serve a
+	// page cached from a previous build of the same file path.
+	return encodeURI("file:///" + target) + "?v=" + encodeURIComponent(buildStamp());
+}
+
+function buildStamp() {
+	return typeof BUILD_STAMP !== "undefined" ? BUILD_STAMP : "dev";
 }
 
 /**
@@ -201,14 +227,19 @@ function probeNodeScript() {
 	post("strudel: node.script status probe sent (expect an 'n4m:' console line)\n");
 }
 
-/** Write an embedded base64 payload to targetPath unless an identical-size copy exists. */
+/**
+ * Write an embedded base64 payload to targetPath. Skipped only when BOTH the
+ * size matches AND a sidecar stamp file records the same build - size alone
+ * proved too weak (different builds can collide, leaving a stale file that
+ * no longer matches the wrapper driving it).
+ */
 function extractPayload(targetPath, b64chunks, byteCount) {
 	try {
 		var existing = new File(targetPath);
 		if (existing.isopen) {
 			var sameSize = existing.eof === byteCount;
 			existing.close();
-			if (sameSize) return; // already extracted, same build
+			if (sameSize && readTextFile(targetPath + ".stamp") === buildStamp()) return;
 		}
 	} catch (e) {
 		/* fall through to (re)write */
@@ -236,11 +267,37 @@ function extractPayload(targetPath, b64chunks, byteCount) {
 		if (check.isopen) check.close();
 		if (written === byteCount) {
 			post("strudel: extracted " + written + " bytes to " + targetPath + "\n");
+			writeTextFile(targetPath + ".stamp", buildStamp());
 		} else {
 			post("strudel: extract SIZE MISMATCH - wrote " + written + ", expected " + byteCount + "\n");
 		}
 	} catch (e2) {
 		post("strudel: extract failed - " + e2.message + "\n");
+	}
+}
+
+function readTextFile(p) {
+	try {
+		var f = new File(p);
+		if (!f.isopen) return null;
+		var s = f.readstring(Math.min(f.eof, 256));
+		f.close();
+		return s;
+	} catch (e) {
+		return null;
+	}
+}
+
+function writeTextFile(p, s) {
+	try {
+		var f = new File(p, "write");
+		if (!f.isopen) f.open();
+		if (!f.isopen) return;
+		f.eof = 0;
+		f.writestring(s);
+		f.close();
+	} catch (e) {
+		/* non-fatal */
 	}
 }
 
