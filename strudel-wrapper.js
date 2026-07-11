@@ -140,6 +140,7 @@ function resolveUiUrl() {
  */
 var nodeStarted = false;
 var nodeStartTask = new Task(startNodeScript, this);
+var nodeProbeTask = new Task(probeNodeScript, this);
 
 function extractNodeBundle() {
 	if (nodeStarted) return;
@@ -160,6 +161,19 @@ function startNodeScript() {
 	nodeStarted = true;
 	outlet(1, "script", "start");
 	post("strudel: node.script start requested\n");
+	nodeProbeTask.schedule(2000);
+}
+
+/**
+ * Status probe, 2s after start. node.script answers "script running" on its
+ * right (dump) outlet, which the patcher wires to [print n4m]. If the console
+ * shows NO n4m line after this post, the js -> node.script message path is
+ * dead (object missing or patchline dropped); if it shows "running 0", node
+ * received the message but the script did not start.
+ */
+function probeNodeScript() {
+	outlet(1, "script", "running");
+	post("strudel: node.script status probe sent (expect an 'n4m:' console line)\n");
 }
 
 /** Write an embedded base64 payload to targetPath unless an identical-size copy exists. */

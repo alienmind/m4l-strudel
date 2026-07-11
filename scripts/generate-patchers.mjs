@@ -115,6 +115,12 @@ function makeDevice(kind) {
 	// the Max console for field debugging.
 	boxes.push(box("obj-nodeprint", "print n4m"));
 	lines.push(line(nodeId, 1, "obj-nodeprint", 0));
+	// Boot probe: proves the GENERATED boxes instantiate in the loaded device.
+	// If the console never shows "strudel-gen: bang", Max dropped this part of
+	// the patcher and no other generated object (node.script included) exists.
+	boxes.push(box("obj-genlb", "loadbang"));
+	boxes.push(box("obj-genprint", "print strudel-gen"));
+	lines.push(line("obj-genlb", 0, "obj-genprint", 0));
 	tickChain(boxes, lines, nodeId);
 
 	// 3. jweb → node (code/hush/etc. - node ignores messages meant for js)
