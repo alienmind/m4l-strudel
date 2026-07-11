@@ -159,6 +159,12 @@ start the transport, and it plays by itself.
 
 ## Troubleshooting
 
+- **Updated the device but nothing changed** → Live embeds a copy of the
+  device in your set when you drag it in; reinstalling the `.amxd` does NOT
+  update instances already on tracks. Delete the device from the track and
+  re-drag it from the browser. The header shows the UI version (e.g.
+  `v0.2.0`) and the Max console prints the build stamp - compare them after
+  updating.
 - **Run does nothing** → check the status line says *Strudel engine ready*
   and remember: no sound until **Live's transport is playing**. The Max
   console (device Edit button) logs every boot step (`strudel: ...`).

@@ -19,7 +19,10 @@ export default function App() {
 	return (
 		<div className="flex h-full w-full flex-col gap-2 bg-background p-2 text-foreground">
 			<div className="flex items-center justify-between">
-				<span className="text-xs font-semibold tracking-tight">{MODE_TITLE[mode]}</span>
+				<span className="text-xs font-semibold tracking-tight">
+					{MODE_TITLE[mode]}
+					<span className="ml-1 font-normal text-muted-foreground/60">v{__APP_VERSION__}</span>
+				</span>
 				<span className="text-[10px] text-muted-foreground">{codeMode ? "code" : `${s.noteCount} notes`}</span>
 			</div>
 
