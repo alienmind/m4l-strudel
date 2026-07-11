@@ -131,7 +131,7 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 	// in the shape the device's output chain expects.
 	useEffect(() => {
 		if (mode === "sampler") return;
-		const counters = { engine: "booting", ticks: 0, sent: 0 };
+		const counters = { engine: "booting", ticks: 0, sent: 0, playing: 0, beats: 0, bpm: 120 };
 		const worker: Worker = new EngineWorker();
 		workerRef.current = worker;
 		worker.onmessage = (e: MessageEvent<EngineMessage>) => {
@@ -156,24 +156,30 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 				outlet(mode === "audio" ? "allnotesoff" : "flush");
 			}
 		};
-		bindInlet("tick", (bar, beat, unit, tempo, playing) => {
+		bindInlet("tick", (playing, beats) => {
 			counters.ticks++;
-			worker.postMessage({
-				t: "tick",
-				bar: Number(bar),
-				beat: Number(beat),
-				unit: Number(unit),
-				tempo: Number(tempo),
-				playing: Number(playing),
-			});
+			counters.playing = Number(playing);
+			counters.beats = Number(beats);
+			worker.postMessage({ t: "tick", playing: Number(playing), beats: Number(beats) });
+		});
+		// BPM comes from the wrapper's LiveAPI tempo observer, not plugsync~
+		// (which only reports samples-per-beat).
+		bindInlet("tempo", (bpm) => {
+			counters.bpm = Number(bpm);
+			worker.postMessage({ t: "tempo", bpm: Number(bpm) });
 		});
 		// Health readout, refreshed 1x/s: instantly shows which hop is dead.
 		// ticks stay 0 -> the plugsync~ chain or jweb inbound messages are
-		// broken (ticks flow even with the transport stopped); sent stays 0
-		// while playing -> engine/pattern side; sent counts up but silence ->
-		// the Max-side pipe/makenote chain.
+		// broken (ticks flow even with the transport stopped); beats frozen /
+		// playing 0 while Live plays -> plugsync~ outlet mapping; sent stays
+		// 0 while playing -> engine/pattern side; sent counts up but silence
+		// -> the Max-side pipe/makenote chain.
 		const iv = setInterval(
-			() => setDebug(`engine ${counters.engine} / ticks ${counters.ticks} / sent ${counters.sent}`),
+			() =>
+				setDebug(
+					`${counters.engine} / t ${counters.ticks} / play ${counters.playing} ` +
+						`/ beat ${counters.beats.toFixed(1)} / bpm ${Math.round(counters.bpm)} / sent ${counters.sent}`,
+				),
 			1000,
 		);
 		return () => {

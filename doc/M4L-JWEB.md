@@ -153,7 +153,7 @@ followed by arguments (`midinote 60 96 480 1 35`). Three rules of thumb:
 
 | You want | The M4L-JWEB way |
 |---|---|
-| Transport time (play position, tempo, playing) | `[plugsync~]` outputs signals; `[snapshot~ 10]` samples them every 10 ms; `[pak]` + `[prepend tick]` turn them into `tick <bar> <beat> <unit> <tempo> <playing>` messages into jweb. Your app now has a 100 Hz clock owned by Live. |
+| Transport time (play position, tempo, playing) | `[plugsync~]` outputs signals; `[snapshot~ 10]` samples them every 10 ms; `[pak]` + `[prepend tick]` turn them into `tick <playing> <songBeats>` messages into jweb (tempo in BPM comes from a LiveAPI observer - plugsync~ only reports samples-per-beat). Your app now has a 100 Hz clock owned by Live. |
 | A Live property (global scale, track name, ...) | In `[js]`: `var o = new LiveAPI(callback, "live_set"); o.property = "root_note";` - the callback fires on every change; forward it to jweb as a message. |
 | Things with no observer (e.g. "does this track have a clip?") | Poll from `[js]` with a `Task` (this project polls 1x/s) and push a message only on change. |
 | Device lifecycle | `live.thisdevice` bang -> `[js] bang()`. Do all bootstrapping from there; `loadbang()` is unreliable inside Live. |
