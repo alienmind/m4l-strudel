@@ -4,25 +4,43 @@ title: "m4l-strudel"
 
 # m4l-strudel
 
-Bridge between the [Strudel](https://strudel.cc) live coding environment and
-Ableton Live via Max for Live — three devices: a **MIDI sequencer**, a
-**sample fetcher**, and a **synth instrument**.
+Three **Max for Live devices** that bring [Strudel](https://strudel.cc) — the
+JavaScript port of TidalCycles' pattern language — natively into Ableton
+Live. No browser tab, no virtual MIDI cables, no sync hacks: the real
+`@strudel/core` engine runs headlessly inside each device, locked to Live's
+transport.
 
 [Get it on Gumroad](https://alienmindzzz.gumroad.com/l/m4l-strudel)
 
 ---
 
-## Overview
+## What's in the box
 
-| Device | Ableton device type | Drop it on |
+| Device | Type · drop it on | What it does for you |
 |---|---|---|
-| `m4l-strudel-midi.amxd` | MIDI effect | a **MIDI track**, before an instrument |
-| `m4l-strudel-sampler.amxd` | Audio effect | any **audio track** (audio passes through) |
-| `m4l-strudel-audio.amxd` | Instrument | a **MIDI track**, as the instrument |
+| **Strudel MIDI** (`m4l-strudel-midi.amxd`) | MIDI effect · a **MIDI track**, before an instrument | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it — tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
+| **Strudel Samples** (`m4l-strudel-sampler.amxd`) | Audio effect · any **audio track** (audio passes through) | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. |
+| **Strudel Audio** (`m4l-strudel-audio.amxd`) | Instrument · a **MIDI track**, as the instrument | Strudel patterns drive a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) — no external instrument needed. v1, exploratory. |
 
-All three run the real Strudel engine inside the device, locked to Live's
-transport. Nothing plays until **Live's transport is running** — patterns are
-scheduled against the playhead, start on the bar, and follow tempo changes.
+Nothing plays until **Live's transport is running** — patterns are scheduled
+against the playhead, start on the bar, and follow tempo changes.
+
+## Why a producer would care
+
+- **Generative sequencing in one line.** `note("c3 e3 g3 b3").sometimesBy(.3, x=>x.fast(2))`
+  is a whole evolving part. Euclidean rhythms, polymeter, per-cycle
+  alternation — things that are tedious to click into a piano roll are one
+  expression in Strudel.
+- **It's really Live-native.** Patterns start on the bar, follow tempo
+  automation, stop when you stop the transport, and notes land on the track
+  the device sits on. Everything renders inside the device UI.
+- **From sketch to clip.** The MIDI device can freeze any pattern into a
+  regular MIDI clip (and read clips back into mini-notation), so generative
+  sketches become ordinary arrangeable material.
+- **A sample library browser with taste.** The community sample maps behind
+  strudel.cc (hundreds of drum machines, folk instruments, found sound)
+  become browsable, beat-synced-previewable, and downloadable straight into
+  your User Library workflow.
 
 ---
 
