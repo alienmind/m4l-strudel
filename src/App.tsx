@@ -1,17 +1,22 @@
-import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Play, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStrudel } from "@/hooks/useStrudel";
+import { useDeviceMode } from "@/hooks/useDeviceMode";
+import SampleCatalog from "@/components/SampleCatalog";
+
+const MODE_TITLE = { midi: "Strudel MIDI", audio: "Strudel Audio", sampler: "Strudel Samples" } as const;
 
 export default function App() {
+	const mode = useDeviceMode();
 	const s = useStrudel();
+
+	if (mode === "sampler") return <SampleCatalog />;
 
 	return (
 		<div className="flex h-full w-full flex-col gap-2 bg-background p-2 text-foreground">
 			<div className="flex items-center justify-between">
-				<span className="text-xs font-semibold tracking-tight">Strudel MIDI</span>
-				<span className="text-[10px] text-muted-foreground">
-					{s.noteCount} notes
-				</span>
+				<span className="text-xs font-semibold tracking-tight">{MODE_TITLE[mode]}</span>
+				<span className="text-[10px] text-muted-foreground">{s.noteCount} notes</span>
 			</div>
 
 			<textarea
@@ -20,15 +25,19 @@ export default function App() {
 				spellCheck={false}
 				className={cn(
 					"min-h-16 flex-1 resize-none rounded-md bg-input/40 p-2 font-mono text-sm outline-none",
-					s.errors.length > 0 && "ring-1 ring-destructive",
+					(s.errors.length > 0 || s.evalError) && "ring-1 ring-destructive",
 				)}
-				placeholder='c5 [e5 g5]*2 ~ <a5 b5>'
+				placeholder='note("c3 e3 g3 b3").midichan(1)'
 			/>
 
-			{s.errors.length > 0 && (
-				<span className="text-[10px] text-destructive">
-					{s.errors[0].msg} (at {s.errors[0].pos})
-				</span>
+			{s.evalError ? (
+				<span className="text-[10px] text-destructive">{s.evalError}</span>
+			) : (
+				s.errors.length > 0 && (
+					<span className="text-[10px] text-destructive">
+						{s.errors[0].msg} (at {s.errors[0].pos})
+					</span>
+				)
 			)}
 
 			{/* Controls */}
@@ -78,6 +87,29 @@ export default function App() {
 						className="w-10 rounded bg-input/50 px-1 py-0.5"
 					/>
 				</label>
+			</div>
+
+			{/* Live evaluation (real Strudel engine, transport-locked) */}
+			<div className="flex items-center gap-2">
+				{s.live ? (
+					<button
+						className="flex flex-1 items-center justify-center gap-1 rounded-md bg-destructive px-2 py-1.5 text-sm font-semibold text-destructive-foreground hover:brightness-110"
+						onClick={s.hush}
+						title="Stop the running pattern"
+					>
+						<Square className="size-3.5" />
+						Hush
+					</button>
+				) : (
+					<button
+						className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1.5 text-sm font-semibold text-primary-foreground hover:brightness-110"
+						onClick={s.run}
+						title="Evaluate and run this pattern, locked to Live's transport"
+					>
+						<Play className="size-3.5" />
+						Run
+					</button>
+				)}
 			</div>
 
 			{/* Actions */}
