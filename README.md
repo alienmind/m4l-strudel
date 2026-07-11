@@ -14,6 +14,10 @@ transport.
 | **Strudel Samples** (`m4l-strudel-sampler.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. |
 | **Strudel Audio** (`m4l-strudel-audio.amxd`) | Instrument | Strudel patterns drive a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) — no external instrument needed. v1, exploratory. |
 
+**New here? Start with the [user guide](doc/ABOUT.md)** — every control of
+every device explained (Bars, Grid, Octave conventions, Shift, Run/Hush,
+the sample catalog…), with screenshots and typical workflows.
+
 ## Why a producer would care
 
 - **Generative sequencing in one line.** `note("c3 e3 g3 b3").sometimesBy(.3, x=>x.fast(2))`
