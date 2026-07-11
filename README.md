@@ -1,15 +1,84 @@
-# Strudel MIDI - Max for Live device
+# m4l-strudel — Strudel live coding inside Ableton Live
 
-Converts [Strudel](https://strudel.cc) mini-notation ↔ MIDI clips on the track
-the device is dropped on. React UI inside `jweb`, a hand-written recursive-descent
-mini-notation parser in pure TypeScript, LiveAPI clip I/O in a `[js]` object.
+Three **Max for Live devices** that bring [Strudel](https://strudel.cc) — the
+JavaScript port of TidalCycles' pattern language — natively into Ableton Live.
+No browser tab, no virtual MIDI cables, no sync hacks: the real
+`@strudel/core` engine runs headlessly inside each device, locked to Live's
+transport.
 
-This is the self-contained **Max for Live device**. Its sibling `tmp/mcp-strudel`
-is an **MCP server** exposing the same conversion engine to Claude (so
-`m4l-claude` can translate Strudel written in natural language and write it to
-Ableton). Both share the mini-notation engine under `src/lib/mini`.
+## What's in the box
 
-## Supported mini-notation
+| Device | Type | What it does for you |
+|---|---|---|
+| **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it — tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
+| **Strudel Samples** (`alienmind-strudel-sampler.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. |
+| **Strudel Audio** (`alienmind-strudel-audio.amxd`) | Instrument | Strudel patterns drive a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) — no external instrument needed. v1, exploratory. |
+
+## Why a producer would care
+
+- **Generative sequencing in one line.** `note("c3 e3 g3 b3").sometimesBy(.3, x=>x.fast(2))`
+  is a whole evolving part. Euclidean rhythms, polymeter, per-cycle
+  alternation — things that are tedious to click into a piano roll are one
+  expression in Strudel.
+- **It's really Live-native.** Patterns start on the bar, follow tempo
+  automation, stop when you stop the transport, and notes land on the track
+  the device sits on. Everything renders inside the device UI.
+- **From sketch to clip.** The MIDI device can freeze any pattern into a
+  regular MIDI clip (and read clips back into mini-notation), so generative
+  sketches become ordinary arrangeable material.
+- **A sample library browser with taste.** The community sample maps behind
+  strudel.cc (hundreds of drum machines, folk instruments, found sound)
+  become browsable, beat-synced-previewable, and downloadable straight into
+  your User Library workflow.
+
+## Install
+
+Build (or unzip a release), then run the installer for your OS — it locates
+your Ableton User Library from Live's own config and copies all three
+devices into `User Library/Max For Live/m4l-strudel/`:
+
+```
+scripts\install-windows.ps1   # Windows
+scripts/install-mac.sh        # macOS
+scripts/install-linux.sh      # Linux (Live under Wine)
+```
+
+Each `.amxd` is fully **self-contained** — the React UI and the bundled
+Strudel engine travel inside the device file and unpack themselves on first
+load. Drag from Live's browser onto a MIDI track (midi / audio devices) or an
+audio track (sampler) and go.
+
+## Build & test
+
+```
+pnpm install
+git submodule update --init   # strudel/ - the engine is bundled from here
+pnpm test    # vitest: mini-notation parser + headless engine tests
+pnpm build   # → dist/m4l-strudel/alienmind-strudel-{midi,sampler,audio}.amxd
+             #   + dist/m4l-strudel.zip (release archive incl. installers)
+pnpm dev     # browser dev for the UI; use maxSimulate('mode','sampler') etc.
+```
+
+## How it works (short version)
+
+One codebase produces all three devices. The real Strudel engine
+(`@strudel/core` + mini + tonal, bundled by esbuild from the `strudel/` git
+submodule) runs in `[node.script]` (Node for Max); Live's transport is fed in
+via `[plugsync~]`, and the engine queries pattern events ahead of time and
+schedules them sample-accurately through Max's `[pipe]`/`[makenote]`. The UI
+is a single React app in `[jweb]` that mode-switches per device; LiveAPI work
+(clips, Live 12 scale awareness) lives in an ES5 `[js]` glue script. The
+`.amxd` containers themselves are generated **entirely from Node scripts** —
+no manual Max editing in the build loop.
+
+**Full details:** [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) — the build
+pipeline, the amxd container writer, the exact jweb/js/node message protocol,
+and what we do (and deliberately don't) depend on from upstream strudel.cc.
+
+## Supported mini-notation (clip converter)
+
+The **To Clip / From Clip** feature uses a small built-in parser
+(`src/lib/mini/`), independent of the live engine:
 
 | Feature | Example | Meaning |
 |---|---|---|
@@ -24,114 +93,22 @@ Ableton). Both share the mini-notation engine under `src/lib/mini`.
 | Euclid | `c5(3,8)` | 3 pulses over 8 steps (Bjorklund) |
 | Raw MIDI | `60 64 67` | note numbers |
 
-Octave convention defaults to **Strudel** (`c5` = MIDI 60); switch to Scientific
-(`c4` = 60) or apply an octave shift in the UI. (Verify the Strudel default at
-strudel.cc if in doubt - it's a single constant in `src/lib/mini/notes.ts`.)
-
-## Build & test
-
-```
-pnpm install
-pnpm test # vitest - parser, scheduler, euclid, round-trip (19 tests)
-pnpm build # → dist/m4l-strudel/{m4l-strudel.amxd, strudel-ui.html, wrapper.js}
-           #   + dist/m4l-strudel.zip (release archive of that folder)
-pnpm dev # browser dev; use maxSimulate('notes', 4, 2, 60,0,1, 64,1,1)
-```
-
-## Installing in Ableton
-
-```
-scripts\install-windows.ps1   # Windows
-scripts/install-mac.sh        # macOS
-scripts/install-linux.sh      # Linux (Live under Wine)
-```
-
-Each script reads the User Library location from Live's `Library.cfg`
-(`%APPDATA%\Ableton\Live <ver>\Preferences` on Windows,
-`~/Library/Preferences/Ableton/Live <ver>` on macOS - no registry or env vars),
-falls back to Live's default location, and installs **only
-`m4l-strudel.amxd`** into `User Library/Max For Live/m4l-strudel/`. The device
-is fully self-contained (see *Self-contained .amxd* below) - drag it onto a
-MIDI track from Live's browser and it unpacks its own UI.
-
-## Self-contained .amxd (single-file distribution)
-
-The `.amxd` is the **only file you need to distribute**:
-
-1. `vite-plugin-singlefile` inlines all JS/CSS into one `strudel-ui.html`.
-2. `build-amxd.mjs` appends it to `wrapper.js` as base64 chunks
-   (`UI_PAYLOAD_B64` / `UI_PAYLOAD_BYTES`) before embedding the script in the
-   amxd container.
-3. On load, `wrapper.js` decodes the payload and writes `strudel-ui.html`
-   next to the `.amxd`, then points `jweb` at that real file. Extraction is
-   skipped when an identical-size copy exists; the written size is verified.
-
-Two Max quirks force this design (simpler approaches fail): frozen
-dependencies live in Max's **virtual filesystem** - `[js] File()` can open
-them but they never exist on disk, so jweb/Chromium gets
-`ERR_FILE_NOT_FOUND` for them - and **`File.writebytes` silently truncates
-at 16384 bytes per call**, so the extractor writes 4096-byte slices.
-
-## Engine layout (`src/lib/mini/`)
-
-- `parser.ts` - tokenizer + recursive-descent parser → `ast.ts` node tree
-- `euclid.ts` - Bjorklund algorithm
-- `schedule.ts` - AST + cycle index → timed events (cycle-relative)
-- `notes.ts` - note-name ↔ MIDI with octave convention
-- `render.ts` - schedule + note conversion → MIDI note events in beats
-- `unparse.ts` - MIDI notes → mini-notation (quantize to grid, stacks, rests)
+Octave convention defaults to **Strudel** (`c5` = MIDI 60); switch to
+Scientific (`c4` = 60) or apply an octave shift in the UI. The **live Run
+mode is not limited to this table** — it evaluates full Strudel code in the
+real engine.
 
 ## Clip I/O behaviour (To Clip / From Clip)
-
-Everything works on **Live clips on the device's own track** - there is no
-MIDI *file* import/export and no file picker (jweb hides real file paths from
-web pages anyway).
 
 - **To Clip** renders the pattern and creates a Session clip named "Strudel"
   in the **first empty clip slot** of the track the device sits on.
 - **From Clip** reads notes back into mini-notation from, in order of
   preference: the **currently playing** clip on this track, else the **first
-  clip** found on the track. It does not use Live's clip selection.
-- The **From Clip button is disabled when the track has no clips**. The
-  wrapper polls the track once a second and pushes `clip_available 0/1` to
-  the UI, so the button enables itself as soon as a clip appears (e.g. right
-  after To Clip).
-- If a read is attempted and no clip is found, the wrapper replies
-  `read_error` and the status line shows "No clip found on this track".
+  clip** found. The button disables itself when the track has no clips
+  (polled once a second).
 
-## jweb ⇄ [js] protocol
+## Related
 
-- `[js]` → UI:
- - `url <file://…>`
- - `notes <loopEndBeats> <n> <p s d> ...` (reply to `read_notes`)
- - `clip_available <0|1>` (polled once a second, sent on change)
- - `read_error <reason>` (`read_notes` found no clip)
-- UI → `[js]`:
- - `write_clip <lengthBeats> <n> <p s d v> ...` (To Clip)
- - `read_notes` (From Clip)
- - `ui_ready` (page loaded - resend current `clip_available` state)
-
-## How the `.amxd` is built (no manual Max step)
-
-`scripts/build-amxd.mjs` wraps `ableton-amxd/patcher.json` (plus an embedded
-copy of `wrapper.js`) in the amxd binary container at build time, so the device
-patcher is versioned as plain JSON and the build is fully automated. The
-patcher is a **Max MIDI Effect** wired as: `midiin → midiout`,
-`live.thisdevice → js wrapper.js → jweb`, and `jweb → js` (the return path for
-`write_clip` / `read_notes`), opening in Presentation with the jweb filling
-the device view.
-
-> **History / warning:** earlier revisions shipped
-> `ableton-amxd/ableton-template.amxd`, a byte-patched copy of the LiveCam
-> device (string-replacing `livecam.js` → `wrapper.js` in the binary). That is
-> not a valid approach: the file was a *frozen* device still embedding
-> LiveCam's old glue script and patcher, so jweb tried to load the
-> nonexistent `livecam-ui.html` ("Your file couldn't be accessed"). Never
-> binary-patch an .amxd; regenerate it from `patcher.json` instead. To tweak
-> the patch interactively, open the built device in Live's Max editor, edit,
-> and port the changes back into `patcher.json`.
-
-Console should show `wrapper.js loaded` and `strudel: sent url …`. To test:
-drop the device on a MIDI track, type a pattern, **To Clip** creates a clip in
-the first empty slot; edit it in Live, then **From Clip** reads it back
-(the button stays greyed out until the track has at least one clip).
+The sibling project `tmp/mcp-strudel` is an **MCP server** exposing the same
+mini-notation converter to Claude, so patterns can be written in natural
+language and pushed into Ableton. Both share `src/lib/mini`.
