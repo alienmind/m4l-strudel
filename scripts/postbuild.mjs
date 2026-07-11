@@ -47,6 +47,15 @@ for (const d of DEVICES) {
 await copyFile(path.join(root, "strudel-wrapper.js"), path.join(outDir, "strudel-wrapper.js"));
 console.log(`postbuild: strudel-wrapper.js → dist/${name}/strudel-wrapper.js`);
 
+// Loose node bundles next to the devices: node.script resolves its script
+// when the object instantiates, before the wrapper's payload extraction can
+// run, so the installed layout must already contain the .cjs files.
+const NODE_BUNDLES = DEVICES.map((d) => `strudel-node-${d.kind}.cjs`);
+for (const f of NODE_BUNDLES) {
+	await copyFile(path.join(root, "dist", "node", f), path.join(outDir, f));
+	console.log(`postbuild: ${f} → dist/${name}/${f}`);
+}
+
 const zipPath = path.join(dist, `${name}.zip`);
 await new Promise((resolve, reject) => {
 	const output = createWriteStream(zipPath);
@@ -54,7 +63,7 @@ await new Promise((resolve, reject) => {
 	output.on("close", resolve);
 	archive.on("error", reject);
 	archive.pipe(output);
-	const files = [...DEVICES.map((d) => d.out), "strudel-wrapper.js", "strudel-ui.html"];
+	const files = [...DEVICES.map((d) => d.out), ...NODE_BUNDLES, "strudel-wrapper.js", "strudel-ui.html"];
 	for (const f of files) {
 		const p = path.join(outDir, f);
 		if (existsSync(p)) archive.append(createReadStream(p), { name: `${name}/${f}` });

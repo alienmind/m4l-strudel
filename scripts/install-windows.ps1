@@ -8,18 +8,23 @@
 $ErrorActionPreference = "Stop"
 $deviceName = "m4l-strudel"
 # The three device variants produced by the build (see scripts/postbuild.mjs).
-$amxdFiles = @(
+$distFiles = @(
     "m4l-strudel-midi.amxd",
     "m4l-strudel-sampler.amxd",
-    "m4l-strudel-audio.amxd"
+    "m4l-strudel-audio.amxd",
+    # Loose node engine bundles: node.script resolves its script when the
+    # device loads, before the wrapper's embedded-payload fallback can run.
+    "strudel-node-midi.cjs",
+    "strudel-node-sampler.cjs",
+    "strudel-node-audio.cjs"
 )
 
 # Source: ./m4l-strudel next to this script (zip layout) or ../dist/m4l-strudel (repo layout).
 $src = Join-Path $PSScriptRoot $deviceName
-if (-not (Test-Path (Join-Path $src $amxdFiles[0]))) {
+if (-not (Test-Path (Join-Path $src $distFiles[0]))) {
     $src = Join-Path (Split-Path $PSScriptRoot) "dist\$deviceName"
 }
-if (-not (Test-Path (Join-Path $src $amxdFiles[0]))) {
+if (-not (Test-Path (Join-Path $src $distFiles[0]))) {
     Write-Error "Device folder not found next to this script or in dist\. Run 'pnpm build' first."
 }
 
@@ -47,7 +52,7 @@ $dest = Join-Path $userLib "Max For Live\$deviceName"
 if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
 New-Item -ItemType Directory -Force $dest | Out-Null
 # Each .amxd is self-contained (UI + node engine embedded as payloads in wrapper.js).
-foreach ($f in $amxdFiles) {
+foreach ($f in $distFiles) {
     Copy-Item (Join-Path $src $f) $dest -Force
 }
 

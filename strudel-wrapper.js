@@ -129,46 +129,37 @@ function resolveUiUrl() {
 }
 
 /**
- * Node engine bootstrap. The patcher has [node.script ... @autostart 0]:
- * autostart raced against extraction (the object resolved its script before
- * the file existed on disk, and frozen-VFS resolution was never observed to
- * work), so [js] owns the sequence instead:
- *   1. extract the embedded .cjs payload next to the .amxd (skipped if an
- *      identical-size copy exists),
- *   2. point node.script at the extracted absolute path ("script <path>"),
- *   3. "script start" - deferred a moment so node.script settles.
- * In the dev layout (no payload appended) the .cjs sits next to the patcher
- * and only the start message is needed.
+ * Node engine bootstrap. The patcher has [node.script ... @autostart 0] and
+ * [js] owns the start sequence. The installed layout ships the .cjs loose
+ * next to the .amxd (guaranteed present when node.script instantiates and
+ * resolves its script argument); the embedded payload below is a fallback
+ * for a bare .amxd copied on its own. node.script only accepts the
+ * subcommands documented on its reference page (start/stop/npm/status/...),
+ * so the script file itself cannot be repointed at runtime: extraction must
+ * land the file under the exact name the object was created with.
  */
-var nodeScriptPath = null;
 var nodeStarted = false;
 var nodeStartTask = new Task(startNodeScript, this);
 
 function extractNodeBundle() {
 	if (nodeStarted) return;
-	if (typeof NODE_PAYLOAD_B64 === "undefined") {
-		post("strudel: no embedded node payload (dev build) - starting node.script as-is\n");
-		nodeStartTask.schedule(300);
-		return;
+	if (typeof NODE_PAYLOAD_B64 !== "undefined") {
+		var fp = this.patcher.filepath;
+		var devFolder = fp && fp.length ? fp.replace(/\/[^\/]*$/, "") : null;
+		if (devFolder) {
+			extractPayload(devFolder + "/" + NODE_PAYLOAD_NAME, NODE_PAYLOAD_B64, NODE_PAYLOAD_BYTES);
+		} else {
+			post("strudel: node extract - patcher path unknown, cannot extract\n");
+		}
 	}
-	var fp = this.patcher.filepath;
-	var devFolder = fp && fp.length ? fp.replace(/\/[^\/]*$/, "") : null;
-	if (!devFolder) {
-		post("strudel: node extract - patcher path unknown, cannot extract\n");
-		return;
-	}
-	var target = devFolder + "/" + NODE_PAYLOAD_NAME;
-	extractPayload(target, NODE_PAYLOAD_B64, NODE_PAYLOAD_BYTES);
-	nodeScriptPath = target;
 	nodeStartTask.schedule(300);
 }
 
 function startNodeScript() {
 	if (nodeStarted) return;
 	nodeStarted = true;
-	if (nodeScriptPath) outlet(1, "script", nodeScriptPath);
 	outlet(1, "script", "start");
-	post("strudel: node.script start requested" + (nodeScriptPath ? " (" + nodeScriptPath + ")" : "") + "\n");
+	post("strudel: node.script start requested\n");
 }
 
 /** Write an embedded base64 payload to targetPath unless an identical-size copy exists. */

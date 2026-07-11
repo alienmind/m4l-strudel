@@ -99,9 +99,10 @@ function makeDevice(kind) {
 	const js = boxes.find((b) => b.box.id === "obj-2").box;
 	js.text = `js strudel-wrapper.js ${kind}`;
 
-	// 2. every device: a node.script. @autostart 0 - the wrapper [js] extracts
-	// the embedded .cjs next to the .amxd first, then sends "script <path>" +
-	// "script start" (autostart raced against extraction on first load).
+	// 2. every device: a node.script. @autostart 0 - the wrapper [js] makes
+	// sure the .cjs exists next to the .amxd (loose install file, or embedded
+	// payload extraction as fallback), then sends "script start". Autostart
+	// raced script resolution against extraction on first load.
 	const nodeId = "obj-node";
 	boxes.push(
 		box(nodeId, `node.script strudel-node-${kind}.cjs @autostart 0 @watch 0`, {
@@ -116,7 +117,7 @@ function makeDevice(kind) {
 	lines.push(line(nodeId, 1, "obj-nodeprint", 0));
 	tickChain(boxes, lines, nodeId);
 
-	// 3. jweb → node (code/hush/etc. — node ignores messages meant for js)
+	// 3. jweb → node (code/hush/etc. - node ignores messages meant for js)
 	lines.push(line("obj-jweb", 0, nodeId, 0));
 	// 4. js → node (scale updates, node_path handshake)
 	//    js outlet 1 currently goes to print; repurpose outlet 1 → node
@@ -125,7 +126,7 @@ function makeDevice(kind) {
 	if (kind === "midi") {
 		midiOutChain(boxes, lines, nodeId);
 		// sever the direct midiin→midiout thru (node now owns the output);
-		// keep midiin for future input-merge, or leave the thru — DECISION: keep thru,
+		// keep midiin for future input-merge, or leave the thru - DECISION: keep thru,
 		// Live merges streams; remove only if double-noting is observed.
 	}
 	if (kind === "sampler") {
@@ -141,7 +142,7 @@ function makeDevice(kind) {
 		boxes.push(box("obj-plugin", "plugin~", { numinlets: 1, numoutlets: 2, outlettype: ["signal", "signal"] }));
 		// Preview player. Timing model: NODE does the quantization (setTimeout to the
 		// next beat, see sampler/main.mjs "preview" handler) and emits a bare
-		// "preview_go" at the right moment — 5-10ms jitter is fine for previewing.
+		// "preview_go" at the right moment - 5-10ms jitter is fine for previewing.
 		// Max side is therefore trivially simple:
 		//   "preview_open <path>" → sfplay~ open   |  "preview_go" → 1  |  "preview_stop" → 0
 		boxes.push(box("obj-sf", "sfplay~ 2", { numinlets: 1, numoutlets: 3, outlettype: ["signal", "signal", "bang"] }));
