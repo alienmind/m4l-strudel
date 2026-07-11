@@ -13,7 +13,7 @@ and exactly how (and how much) we depend on upstream Strudel.
                           pnpm build
         ┌─────────────────────┼─────────────────────┐
         ▼                     ▼                     ▼
- alienmind-strudel-    alienmind-strudel-    alienmind-strudel-
+  m4l-strudel-          m4l-strudel-          m4l-strudel-
     midi.amxd            sampler.amxd           audio.amxd
   (MIDI effect,        (audio effect,        (instrument,
    'mmmm')              'aaaa')               'iiii')

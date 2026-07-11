@@ -8,8 +8,8 @@
 set -eu
 device="m4l-strudel"
 # The three device variants produced by the build (see scripts/postbuild.mjs).
-amxd_files="alienmind-strudel-midi.amxd alienmind-strudel-sampler.amxd alienmind-strudel-audio.amxd"
-probe="alienmind-strudel-midi.amxd"
+amxd_files="m4l-strudel-midi.amxd m4l-strudel-sampler.amxd m4l-strudel-audio.amxd"
+probe="m4l-strudel-midi.amxd"
 here="$(cd "$(dirname "$0")" && pwd)"
 
 # Source: ./m4l-strudel next to this script (zip layout) or ../dist/m4l-strudel (repo layout).

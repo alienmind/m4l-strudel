@@ -9,9 +9,9 @@ $ErrorActionPreference = "Stop"
 $deviceName = "m4l-strudel"
 # The three device variants produced by the build (see scripts/postbuild.mjs).
 $amxdFiles = @(
-    "alienmind-strudel-midi.amxd",
-    "alienmind-strudel-sampler.amxd",
-    "alienmind-strudel-audio.amxd"
+    "m4l-strudel-midi.amxd",
+    "m4l-strudel-sampler.amxd",
+    "m4l-strudel-audio.amxd"
 )
 
 # Source: ./m4l-strudel next to this script (zip layout) or ../dist/m4l-strudel (repo layout).

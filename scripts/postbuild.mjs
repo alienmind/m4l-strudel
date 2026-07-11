@@ -25,9 +25,9 @@ await rename(path.join(dist, "index.html"), path.join(outDir, "strudel-ui.html")
 console.log(`postbuild: dist/index.html → dist/${name}/strudel-ui.html`);
 
 const DEVICES = [
-	{ kind: "midi", out: "alienmind-strudel-midi.amxd" },
-	{ kind: "sampler", out: "alienmind-strudel-sampler.amxd" },
-	{ kind: "audio", out: "alienmind-strudel-audio.amxd", extra: [path.join(root, "ableton-amxd", "voice.maxpat")] },
+	{ kind: "midi", out: "m4l-strudel-midi.amxd" },
+	{ kind: "sampler", out: "m4l-strudel-sampler.amxd" },
+	{ kind: "audio", out: "m4l-strudel-audio.amxd", extra: [path.join(root, "ableton-amxd", "voice.maxpat")] },
 ];
 for (const d of DEVICES) {
 	execFileSync(
