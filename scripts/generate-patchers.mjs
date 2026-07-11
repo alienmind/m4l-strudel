@@ -40,8 +40,10 @@ const line = (srcId, srcOut, dstId, dstIn) => ({
 // and pak them into: "tick <bar> <beat> <unit> <tempo> <playing>"
 // !! VERIFY OUTLET INDICES against the plugsync~ reference in Max 9 and fix
 // the OUT map below; this is the single most likely constant to be wrong.
+// Target: jweb for midi/audio (the engine Web Worker consumes ticks),
+// node.script for the sampler (beat-synced preview timing).
 const PLUGSYNC_OUT = { playing: 1, bar: 2, beat: 3, unit: 4, tempo: 6 };
-function tickChain(boxes, lines, nodeId) {
+function tickChain(boxes, lines, targetId) {
 	boxes.push(box("obj-sync", "plugsync~", { numoutlets: 9, outlettype: Array(9).fill("signal"), numinlets: 1 }));
 	const order = ["bar", "beat", "unit", "tempo", "playing"];
 	order.forEach((k) => {
@@ -52,12 +54,12 @@ function tickChain(boxes, lines, nodeId) {
 	order.forEach((k, i) => lines.push(line(`obj-snap-${k}`, 0, "obj-pak", i)));
 	boxes.push(box("obj-ticktag", "prepend tick"));
 	lines.push(line("obj-pak", 0, "obj-ticktag", 0));
-	lines.push(line("obj-ticktag", 0, nodeId, 0));
+	lines.push(line("obj-ticktag", 0, targetId, 0));
 }
 
-// --- MIDI output chain: node → pipe → makenote → midiformat → midiout ---
-// node emits: "midinote <pitch> <vel> <durMs> <chan> <delayMs>"
-function midiOutChain(boxes, lines, nodeId) {
+// --- MIDI output chain: jweb → pipe → makenote → midiformat → midiout ---
+// the engine worker (via the UI) emits: "midinote <pitch> <vel> <durMs> <chan> <delayMs>"
+function midiOutChain(boxes, lines, srcId) {
 	boxes.push(box("obj-route", "route midinote flush", { numoutlets: 3, outlettype: ["", "", ""] }));
 	boxes.push(
 		box("obj-pipe", "pipe 0 0 0 0 0", {
@@ -74,12 +76,12 @@ function midiOutChain(boxes, lines, nodeId) {
 	// as a bang, which makenote ignores - re-materialize the word via a
 	// message box so makenote actually releases hanging notes.
 	boxes.push(box("obj-flushmsg", "flush", { maxclass: "message", numinlets: 2, numoutlets: 1 }));
-	lines.push(line(nodeId, 0, "obj-route", 0));
+	lines.push(line(srcId, 0, "obj-route", 0));
 	lines.push(line("obj-route", 0, "obj-pipe", 0)); // midinote payload
 	lines.push(line("obj-route", 1, "obj-flushmsg", 0)); // "flush" → note-offs
 	lines.push(line("obj-flushmsg", 0, "obj-makenote", 0));
-	// unmatched messages (evalok/evalerr/engine_ready) continue to the UI
-	lines.push(line("obj-route", 2, "obj-jweb", 0));
+	// unmatched messages (ui_ready/write_clip/read_notes) continue to [js]
+	lines.push(line("obj-route", 2, "obj-2", 0));
 	lines.push(line("obj-pipe", 0, "obj-makenote", 0)); // pitch
 	lines.push(line("obj-pipe", 1, "obj-makenote", 1)); // velocity
 	lines.push(line("obj-pipe", 2, "obj-makenote", 2)); // duration ms
@@ -99,41 +101,51 @@ function makeDevice(kind) {
 	const js = boxes.find((b) => b.box.id === "obj-2").box;
 	js.text = `js strudel-wrapper.js ${kind}`;
 
-	// 2. every device: a node.script. @autostart 0 - the wrapper [js] makes
-	// sure the .cjs exists next to the .amxd (loose install file, or embedded
-	// payload extraction as fallback), then sends "script start". Autostart
-	// raced script resolution against extraction on first load.
-	const nodeId = "obj-node";
-	boxes.push(
-		box(nodeId, `node.script strudel-node-${kind}.cjs @autostart 0 @watch 0`, {
-			numinlets: 1,
-			numoutlets: 2,
-			outlettype: ["", ""],
-		}),
-	);
-	// node.script's right outlet reports lifecycle/status - keep it visible in
-	// the Max console for field debugging.
-	boxes.push(box("obj-nodeprint", "print n4m"));
-	lines.push(line(nodeId, 1, "obj-nodeprint", 0));
-	// Boot probe: proves the GENERATED boxes instantiate in the loaded device.
-	// If the console never shows "strudel-gen: bang", Max dropped this part of
-	// the patcher and no other generated object (node.script included) exists.
+	// 2. Boot probe: proves the GENERATED boxes instantiate in the loaded
+	// device. If the console never shows "strudel-gen: bang", Max dropped this
+	// part of the patcher and no other generated object exists either.
 	boxes.push(box("obj-genlb", "loadbang"));
 	boxes.push(box("obj-genprint", "print strudel-gen"));
 	lines.push(line("obj-genlb", 0, "obj-genprint", 0));
-	tickChain(boxes, lines, nodeId);
 
-	// 3. jweb → node (code/hush/etc. - node ignores messages meant for js)
-	lines.push(line("obj-jweb", 0, nodeId, 0));
-	// 4. js → node (scale updates, node_path handshake)
-	//    js outlet 1 currently goes to print; repurpose outlet 1 → node
-	lines.push(line("obj-2", 1, nodeId, 0));
+	// 3. Engine host. midi/audio: the Strudel engine runs in a Web Worker
+	// inside jweb - ticks go INTO jweb, note events come OUT of jweb, no
+	// node.script at all (Node for Max was unstable in Live: silent
+	// non-starts, then a full Live crash). sampler: node.script remains for
+	// fetch + filesystem work that jweb cannot do.
+	const nodeId = "obj-node";
+	if (kind === "sampler") {
+		boxes.push(
+			box(nodeId, `node.script strudel-node-${kind}.cjs @autostart 0 @watch 0`, {
+				numinlets: 1,
+				numoutlets: 2,
+				outlettype: ["", ""],
+			}),
+		);
+		// node.script's right outlet reports lifecycle/status - keep it
+		// visible in the Max console for field debugging.
+		boxes.push(box("obj-nodeprint", "print n4m"));
+		lines.push(line(nodeId, 1, "obj-nodeprint", 0));
+		tickChain(boxes, lines, nodeId);
+		// jweb → node (load_map/preview/download - node ignores js messages)
+		lines.push(line("obj-jweb", 0, nodeId, 0));
+		// js → node (scale updates, "script start" bootstrap)
+		lines.push(line("obj-2", 1, nodeId, 0));
+	} else {
+		tickChain(boxes, lines, "obj-jweb");
+	}
 
 	if (kind === "midi") {
-		midiOutChain(boxes, lines, nodeId);
-		// sever the direct midiin→midiout thru (node now owns the output);
-		// keep midiin for future input-merge, or leave the thru - DECISION: keep thru,
-		// Live merges streams; remove only if double-noting is observed.
+		// jweb output fans into the MIDI chain; unmatched selectors
+		// (ui_ready/write_clip/read_notes) continue to [js] via the route's
+		// rightmost outlet, replacing the direct jweb → js patchline.
+		for (let i = lines.length - 1; i >= 0; i--) {
+			const pl = lines[i].patchline;
+			if (pl.source[0] === "obj-jweb" && pl.destination[0] === "obj-2") lines.splice(i, 1);
+		}
+		midiOutChain(boxes, lines, "obj-jweb");
+		// keep the direct midiin→midiout thru: Live merges streams; remove
+		// only if double-noting is observed.
 	}
 	if (kind === "sampler") {
 		// Audio effect ('aaaa'): remove midiin/midiout, add plugin~ → plugout~ passthrough.
@@ -177,8 +189,15 @@ function makeDevice(kind) {
 		lines.push(line("obj-sf", 1, "obj-plugout", 1));
 	}
 	if (kind === "audio") {
-		// node emits: "voice <note> <vel01> <durMs> <wave> <cutoff> <gain> <delayMs>"
-		boxes.push(box("obj-routev", "route voice", { numoutlets: 2, outlettype: ["", ""] }));
+		// jweb emits: "voice <note> <vel01> <durMs> <wave> <cutoff> <gain> <delayMs>"
+		// and "allnotesoff" on stop (no consumer yet - poly~ voices release on
+		// their own envelopes; wire "target 0, mute 1" here if voices hang).
+		// Unmatched selectors continue to [js], replacing the jweb → js line.
+		for (let i = lines.length - 1; i >= 0; i--) {
+			const pl = lines[i].patchline;
+			if (pl.source[0] === "obj-jweb" && pl.destination[0] === "obj-2") lines.splice(i, 1);
+		}
+		boxes.push(box("obj-routev", "route voice allnotesoff", { numoutlets: 3, outlettype: ["", "", ""] }));
 		boxes.push(box("obj-pipev", "pipe 0 0. 0 s 0. 0. 0", { numinlets: 7, numoutlets: 6 }));
 		boxes.push(box("obj-notemsg", "prepend note"));
 		boxes.push(
@@ -196,10 +215,10 @@ function makeDevice(kind) {
 		boxes.splice(moIdx, 1);
 		for (let i = lines.length - 1; i >= 0; i--)
 			if (lines[i].patchline.destination[0] === "obj-midiout") lines.splice(i, 1);
-		lines.push(line(nodeId, 0, "obj-routev", 0));
+		lines.push(line("obj-jweb", 0, "obj-routev", 0));
 		lines.push(line("obj-routev", 0, "obj-pipev", 0));
-		// unmatched messages (evalok/evalerr/engine_ready/allnotesoff) → UI
-		lines.push(line("obj-routev", 1, "obj-jweb", 0));
+		// unmatched messages (ui_ready/write_clip/read_notes) → [js]
+		lines.push(line("obj-routev", 2, "obj-2", 0));
 		// pipev outlets (right-to-left) re-packed into a single "note ..." list:
 		boxes.push(box("obj-pakv", "pak 0 0. 0 s 0. 0.", { numinlets: 6, numoutlets: 1 }));
 		for (let i = 0; i < 6; i++) lines.push(line("obj-pipev", i, "obj-pakv", i));

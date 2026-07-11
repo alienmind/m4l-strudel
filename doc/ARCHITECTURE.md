@@ -7,13 +7,13 @@ and exactly how (and how much) we depend on upstream Strudel.
 
 ```
 ┌────────────────────────── one repo ──────────────────────────┐
-│  src/ (React UI)   src/max/ (node engine)   strudel/ (submodule)
+│  src/ (React UI + engine worker)          strudel/ (submodule)
 │  strudel-wrapper.js ([js] glue, ES5)   ableton-amxd/ (patcher templates)
 └──────────────────────────────┬───────────────────────────────┘
                           pnpm build
         ┌─────────────────────┼─────────────────────┐
         ▼                     ▼                     ▼
-  m4l-strudel-          m4l-strudel-          m4l-strudel-
+ alienmind-strudel-   alienmind-strudel-   alienmind-strudel-
     midi.amxd            sampler.amxd           audio.amxd
   (MIDI effect,        (audio effect,        (instrument,
    'mmmm')              'aaaa')               'iiii')
@@ -21,35 +21,50 @@ and exactly how (and how much) we depend on upstream Strudel.
 
 ## 1. Runtime anatomy of a device
 
-Every device contains the same four actors, generated into the patcher by
-`scripts/generate-patchers.mjs`:
+Every device contains the same actors, generated into the patcher by
+`scripts/generate-patchers.mjs`. **The Strudel engine runs in a Web Worker
+inside `[jweb]`** for the midi/audio devices; only the sampler still hosts a
+`[node.script]` (it needs fetch + filesystem access, which Chromium pages do
+not get). This is a deliberate pivot: Node for Max proved unstable inside
+Live in field testing - first silent non-starts of `script start` (a known
+issue, see the Cycling '74 forums), then a full Live crash on device load.
 
 ```
  [live.thisdevice] ─▶ [js strudel-wrapper.js <mode>]  (ES5, LiveAPI work)
-                          │ outlet0 ▲                │ outlet1
-                          ▼         │ ui_ready etc.  ▼
-                       [jweb]  ─────┘            [node.script strudel-node-<mode>.cjs]
-                          ▲   (code/hush/preview...)   ▲            │
-                          │                          │            ▼
-                          └── unmatched [route] ─────┘   device-specific output
-                              output (evalok, catalog...)  (makenote→midiout, sfplay~,
- [plugsync~]→[snapshot~ 10]x5→[pak]→[prepend tick] ──▶    poly~→plugout~)
+                          │ outlet0 ▲
+                          ▼         │ (unmatched [route] output:
+                       [jweb] ──────┘  ui_ready, write_clip, read_notes)
+                       │    ▲
+   React UI + engine   │    │
+   Web Worker          │    └── [plugsync~]→[snapshot~ 10]x5→[pak]→[prepend tick]
+                       ▼
+        [route midinote flush] / [route voice allnotesoff]
+                       │
+        device-specific output (pipe→makenote→midiformat→midiout,
+        or pipe→pak→poly~→plugout~)
+
+ sampler only: [node.script strudel-node-sampler.cjs] between jweb and
+ sfplay~/plugout~, fed by the same tick chain (beat-synced preview).
 ```
 
 - **`[jweb]`** hosts the React UI (one app for all devices; the wrapper sends
   `mode midi|sampler|audio` after `ui_ready` and the app switches screens via
-  `useDeviceMode`).
+  `useDeviceMode`) **and the engine**: `src/workers/engine.worker.js` is a
+  dedicated Web Worker bundled into `strudel-ui.html`. A worker rather than
+  the page thread for two reasons: `queryArc()` never competes with React
+  rendering, and dedicated workers are exempt from the background-page timer
+  clamping Chromium applies to hidden views. Neither actually relies on
+  timers: ticks arrive as messages, and message/event delivery is not
+  throttled the way `setTimeout` is.
 - **`[js] strudel-wrapper.js`** is the only place LiveAPI exists. It owns:
-  UI/payload extraction, clip read/write (MIDI device), clip-availability
-  polling, and Live 12 `root_note`/`scale_name` observers (sampler). It is
-  **ES5 only** - Max's `[js]` has no modern JS. The device mode arrives as
-  `jsarguments[0]`.
-- **`[node.script]`** runs a real Node process (Node for Max) hosting the
-  bundled Strudel engine. It has **no LiveAPI and no signal I/O** by design;
-  everything crosses as Max messages.
+  UI/payload extraction, clip read/write, clip-availability polling, Live 12
+  `root_note`/`scale_name` observers, and (sampler only) the node.script
+  start sequence. It is **ES5 only** - Max's `[js]` has no modern JS. The
+  device mode arrives as `jsarguments[0]`.
 - **The tick chain** (`[plugsync~]` → five `[snapshot~ 10]` → `[pak]` →
   `prepend tick`) samples Live's transport (~every 10 ms) into
-  `tick <bar> <beat> <unit> <tempo> <playing>` for node.
+  `tick <bar> <beat> <unit> <tempo> <playing>`, fed into jweb (midi/audio)
+  or node (sampler).
 
 ### Transport → pattern scheduling (the interesting part)
 
@@ -60,11 +75,14 @@ new events only in the not-yet-covered slice - the same query-ahead model as
 Strudel's own `cyclist.mjs`, but clocked by Live instead of `setInterval`.
 Loop wraps and scrubs are detected as discontinuities and reset the window.
 
-Each event ("hap") is normalized by `hapToNote()` and emitted as
-`midinote <pitch> <vel> <durMs> <chan> <delayMs>`; the Max-side `[pipe]`
-applies `delayMs` so the note-on lands on its exact transport position
-regardless of tick jitter. Transport stop → `flush` → `[makenote]` releases
-hanging notes.
+Each event ("hap") is normalized by `hapToNote()`; the worker posts the
+batch to the UI thread, which forwards each note out of jweb as
+`midinote <pitch> <vel> <durMs> <chan> <delayMs>` (or `voice ...` for the
+audio device). The Max-side `[pipe]` applies `delayMs` so the note-on lands
+on its exact transport position regardless of tick/messaging jitter.
+Transport stop → `flush` → `[makenote]` releases hanging notes. The clock
+never lives in Chromium: Max pushes time in, jweb pushes scheduled events
+out, and precision is applied Max-side.
 
 ### The `$:` collector
 
@@ -81,33 +99,43 @@ maintain by hand - check it against `repl.mjs` when bumping the submodule.**
 `pnpm build` = five stages, all plain Node scripts, zero manual Max steps:
 
 ```
-tsc -b && vite build            # React UI → dist/index.html (single file,
-                                #   vite-plugin-singlefile inlines everything)
-scripts/build-node-bundles.mjs  # esbuild: src/max/<dev>/main.mjs →
-                                #   dist/node/strudel-node-<dev>.cjs (one file each)
+tsc -b && vite build            # React UI + engine worker → dist/index.html
+                                #   (vite-plugin-singlefile inlines everything;
+                                #    the worker is inlined as a blob)
+scripts/build-node-bundles.mjs  # esbuild: src/max/sampler/main.mjs →
+                                #   dist/node/strudel-node-sampler.cjs
 scripts/generate-patchers.mjs   # ableton-amxd/patcher.json → dist/patchers/<dev>.json
 scripts/postbuild.mjs           # orchestrates build-amxd per device + zips a release
   └─ scripts/build-amxd.mjs     # writes the binary .amxd container
 ```
 
-### Engine bundling (`build-node-bundles.mjs`)
+### Engine bundling
 
-esbuild bundles each `[node.script]` entry into **one self-contained CJS
-file**, with `@strudel/{core,mini,transpiler,tonal}` aliased **directly into
-the `strudel/` git submodule** and `nodePaths` pointed at the submodule's own
-`node_modules` (for acorn/escodegen etc.). `max-api` stays external - Node
-for Max injects it at runtime. Why one file: the Node process cannot see
-Max's frozen virtual filesystem and there is no `node_modules` at runtime.
+The engine (`@strudel/{core,mini,transpiler,tonal}`) is aliased **directly
+into the `strudel/` git submodule** in both bundlers:
+
+- **vite** (midi/audio): `src/workers/engine.worker.js` is imported with
+  `?worker&inline`, so the whole engine lands inside `strudel-ui.html` as an
+  inlined module-worker blob. `worker.format: "es"` +
+  `inlineDynamicImports: true` are required - `evalScope` uses dynamic
+  imports, and a blob URL cannot resolve relative chunks.
+- **esbuild** (sampler only): bundles `src/max/sampler/main.mjs` into one
+  self-contained CJS file, `nodePaths` pointed at the submodule's own
+  `node_modules`, `max-api` external (Node for Max injects it). One file
+  because the Node process cannot see Max's frozen virtual filesystem and
+  there is no `node_modules` at runtime.
 
 ### Patcher generation (`generate-patchers.mjs`)
 
 The hand-authored base (`ableton-amxd/patcher.json`, ~120 lines: midiin/out,
 live.thisdevice, js, jweb) is parsed, deep-cloned and mutated per device:
 set `project.amxdtype` (`'mmmm'`/`'aaaa'`/`'iiii'`), give `[js]` its mode
-argument, splice in the node.script + tick chain, then the device-specific
-output chain (MIDI: route/pipe/makenote/midiformat; sampler: sfplay~ +
-plugin~→plugout~ passthrough; audio: poly~ voice bank). Each `[route]`'s
-unmatched outlet feeds `[jweb]`, which is how engine→UI messages travel.
+argument, splice in the tick chain, then the device-specific output chain
+fed from jweb's outlet (MIDI: route/pipe/makenote/midiformat; audio: poly~
+voice bank; sampler: node.script + sfplay~ + plugin~→plugout~ passthrough).
+For midi/audio each `[route]`'s unmatched outlet feeds `[js]`, carrying the
+UI's clip-I/O messages; for the sampler the route's unmatched outlet feeds
+`[jweb]`, carrying node's catalog feedback to the UI.
 
 ### The `.amxd` container writer (`build-amxd.mjs`)
 
@@ -121,17 +149,17 @@ external files.
 
 Self-containment is belt-and-braces:
 
-1. The UI html **and** the node engine bundle are frozen into the container
-   as dependency files, *and*
-2. both are appended to `strudel-wrapper.js` as base64 payloads
+1. The UI html (which now contains the engine worker) - and for the sampler
+   the node bundle - are frozen into the container as dependency files, *and*
+2. they are appended to `strudel-wrapper.js` as base64 payloads
    (`UI_PAYLOAD_*`, `NODE_PAYLOAD_*`). On first load the wrapper extracts
    them to real files next to the `.amxd` - necessary because jweb (Chromium)
    cannot read Max's virtual filesystem, and it doubles as the fallback if
    `[node.script]` can't resolve its frozen script.
 
-In addition, the installed layout ships the `.cjs` bundles loose next to the
-devices (postbuild copies them into the dist folder and the installers carry
-them over): `[node.script]` resolves its script argument when the device
+In addition, the installed layout ships the sampler's `.cjs` loose next to
+the devices (postbuild copies it into the dist folder and the installers
+carry it over): `[node.script]` resolves its script argument when the device
 loads, before the wrapper can extract anything, so a first load from a bare
 `.amxd` would find no script. The wrapper then only has to send
 `script start` (node.script accepts no message to repoint the script file).
@@ -139,24 +167,27 @@ loads, before the wrapper can extract anything, so a first load from a bare
 Two Max quirks shape the extractor: frozen files never exist on disk, and
 `File.writebytes` silently truncates (~16 KB), hence 4096-byte slices.
 
-## 3. Message protocol (jweb ⇄ js ⇄ node)
+## 3. Message protocol (jweb ⇄ js, jweb ⇄ node)
 
-Code and any payload that may contain commas/newlines travels
-**base64-encoded** - Max messages split on `,`/`;`.
+Payloads that may contain commas/newlines travel **base64-encoded** through
+Max messages (they split on `,`/`;`); code no longer needs this - it goes to
+the engine worker via `postMessage` and never crosses Max.
 
 | Direction | Message | Meaning |
 |---|---|---|
 | UI → js | `ui_ready`, `write_clip ...`, `read_notes` | handshake, clip I/O |
 | js → UI | `url`, `mode`, `notes ...`, `clip_available`, `read_error`, `scale` | boot + clip replies + Live scale |
-| UI → node | `code <b64>`, `hush` | live evaluation |
+| Max → UI | `tick <bar> <beat> <unit> <tempo> <playing>` | transport, forwarded to the worker |
+| UI → Max | `midinote ...`, `flush` (midi) / `voice ...`, `allnotesoff` (audio) | scheduled engine output |
+| UI ⇄ worker | `code`/`hush`/`tick` in, `ready`/`evalok`/`evalerr`/`notes`/`flush` out | postMessage, not Max messages |
 | UI → node (sampler) | `load_map`, `preview`, `preview_stop`, `download`, `download_all`, `open_folder` | catalog workflow |
-| node → UI | `evalok`, `evalerr <b64>`, `engine_ready`, `catalog <b64 json>`, `downloaded`, `progress`, `fetcherr` | feedback |
-| node → Max | `midinote ...`, `flush` / `voice ...`, `allnotesoff` / `preview_open/go/stop` | audio/MIDI output |
-| Max → node | `tick <bar> <beat> <unit> <tempo> <playing>` | transport |
+| node → UI (sampler) | `engine_ready`, `catalog <b64 json>`, `downloaded`, `progress`, `fetcherr` | feedback |
+| Max → node (sampler) | `tick ...` | beat-synced preview timing |
 
-jweb's single outlet fans out to both `[js]` and `[node.script]`; each side
-ignores the other's selectors (node registers no-op handlers, the wrapper has
-an ES5 `anything()` catch-all).
+In the sampler, jweb's outlet fans out to both `[js]` and `[node.script]`;
+each side ignores the other's selectors (node registers no-op handlers, the
+wrapper has an ES5 `anything()` catch-all). In midi/audio the `[route]`
+consumes note events and passes everything else to `[js]`.
 
 ## 4. Strudel: what we depend on, and on what terms
 
@@ -175,11 +206,12 @@ an ES5 `anything()` catch-all).
   bump - the `$:` collector (vs `core/repl.mjs`) and the sample-map URL
   resolution (vs `superdough/sampler.mjs`). Both are small and commented
   with their upstream source.
-- **What we deliberately do NOT use:** `@strudel/webaudio` / `superdough`
-  (browser-only - `AudioContext` doesn't exist in Node for Max). Sound
-  output is re-implemented natively: MIDI streaming for device 1, Max
-  `poly~` synthesis for device 3 (v1 covers superdough's basic-waveform
-  subset: sine/sawtooth/square/triangle + cutoff/gain).
+- **What we deliberately do NOT use:** `@strudel/webaudio` / `superdough`.
+  Even though the engine now runs in Chromium where `AudioContext` exists,
+  audio must come out of the *device*, not the embedded browser view. Sound
+  output is native: MIDI streaming for device 1, Max `poly~` synthesis for
+  device 3 (v1 covers superdough's basic-waveform subset:
+  sine/sawtooth/square/triangle + cutoff/gain).
 
 **The one networked feature** is the sampler's catalog: sample maps and
 audio files are fetched at runtime from their canonical hosts
@@ -193,17 +225,19 @@ audio files are fetched at runtime from their canonical hosts
 src/max/shared/engine.mjs      headless engine: evalScope boot, $: collector,
                                compile(), queryWindow(), hapToNote()
 src/max/shared/transport.mjs   LiveTransport: ticks → lookahead cycle windows
-src/max/{midi,sampler,audio}/main.mjs   per-device [node.script] entries
+src/workers/engine.worker.js   Web Worker hosting the engine (midi/audio),
+                               bundled inline into strudel-ui.html
+src/max/sampler/main.mjs       the sampler's [node.script] entry
 strudel-wrapper.js             [js] glue (ES5): payload extraction, clip I/O,
-                               scale observers, mode dispatch
-src/App.tsx, src/components/SampleCatalog.tsx, src/hooks/useDeviceMode.ts
-                               mode-switched React UI
+                               scale observers, mode dispatch, node start
+src/App.tsx, src/components/SampleCatalog.tsx, src/hooks/useDeviceMode.ts,
+src/hooks/useStrudel.ts        mode-switched React UI + worker wiring
 src/lib/mini/                  standalone mini-notation parser - powers only
                                the clip To/From converter, NOT live eval
 ableton-amxd/patcher.json      base patcher template (versioned as JSON)
 ableton-amxd/voice.maxpat      poly~ synth voice (audio device; generated
                                skeleton - verify in the Max editor)
-scripts/build-node-bundles.mjs esbuild engine bundling
+scripts/build-node-bundles.mjs esbuild bundling (sampler node entry)
 scripts/generate-patchers.mjs  patcher mutation per device
 scripts/build-amxd.mjs         binary .amxd container writer
 scripts/postbuild.mjs          per-device orchestration + release zip
@@ -216,13 +250,21 @@ strudel/                       upstream Strudel monorepo (git submodule, pinned)
 Generated blind, flagged in-source, cheap to check in Max's console/editor:
 
 1. `PLUGSYNC_OUT` outlet indices in `generate-patchers.mjs` (the most likely
-   wrong constant - fix the map if bar/beat/tempo arrive shuffled).
-2. `[node.script]` booting from the frozen bundle (`strudel engine ready` in
-   the console); otherwise the wrapper's `NODE_PAYLOAD` extraction is the
-   fallback.
+   wrong constant - fix the map if bar/beat/tempo arrive shuffled). The
+   `[loadbang]→[print strudel-gen]` probe in every device confirms the
+   generated boxes instantiated at all.
+2. The engine worker booting inside jweb: the device status line must show
+   *Strudel engine ready* shortly after load.
 3. `[pipe]` spreading a 5-element list across its inlets including the delay
    inlet.
 4. Whether the kept `midiin→midiout` thru double-notes (then sever it in
    `generate-patchers.mjs`).
 5. `voice.maxpat` - a generated JSON skeleton; open in the Max editor and
    verify envelope/`thispoly~` behavior before trusting the audio device.
+6. The sampler's `[node.script]`. History to know: Node for Max hosted the
+   midi/audio engines first, and in field testing `script start` was
+   silently ignored in Live, then a device load **crashed Live outright**
+   (minidump captured 2026-07-12). That is why the engines moved into the
+   jweb Web Worker. The sampler still depends on node for fetch+filesystem;
+   if it shows the same instability, the fallback design is jweb `fetch` +
+   base64 → `[js] File` writes (slower, but no node).

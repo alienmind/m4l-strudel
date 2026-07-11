@@ -9,7 +9,7 @@
  */
 import archiver from "archiver";
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
-import { rename, copyFile, mkdir, readFile, stat } from "node:fs/promises";
+import { readdir, rename, rm, copyFile, mkdir, readFile, stat } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,10 +24,19 @@ await mkdir(outDir, { recursive: true });
 await rename(path.join(dist, "index.html"), path.join(outDir, "strudel-ui.html"));
 console.log(`postbuild: dist/index.html → dist/${name}/strudel-ui.html`);
 
+// strudel core's neocyclist references a SharedWorker (clockworker.js) that
+// vite emits as an asset; we never instantiate it (Max is the clock), so
+// drop it rather than shipping a dead file.
+for (const f of await readdir(dist)) {
+	if (/^clockworker-.*\.js$/.test(f)) await rm(path.join(dist, f));
+}
+
+// Only the sampler embeds a node bundle; midi/audio run the engine in a jweb
+// Web Worker (bundled into strudel-ui.html by vite).
 const DEVICES = [
-	{ kind: "midi", out: "m4l-strudel-midi.amxd" },
-	{ kind: "sampler", out: "m4l-strudel-sampler.amxd" },
-	{ kind: "audio", out: "m4l-strudel-audio.amxd", extra: [path.join(root, "ableton-amxd", "voice.maxpat")] },
+	{ kind: "midi", out: "alienmind-strudel-midi.amxd" },
+	{ kind: "sampler", out: "alienmind-strudel-sampler.amxd", node: true },
+	{ kind: "audio", out: "alienmind-strudel-audio.amxd", extra: [path.join(root, "ableton-amxd", "voice.maxpat")] },
 ];
 for (const d of DEVICES) {
 	execFileSync(
@@ -37,7 +46,7 @@ for (const d of DEVICES) {
 			path.join(root, "dist", "patchers", `${d.kind}.json`),
 			path.join(root, "strudel-wrapper.js"),
 			path.join(outDir, d.out),
-			path.join(root, "dist", "node", `strudel-node-${d.kind}.cjs`),
+			...(d.node ? [path.join(root, "dist", "node", `strudel-node-${d.kind}.cjs`)] : []),
 			...(d.extra ?? []),
 		],
 		{ stdio: "inherit" },
@@ -50,7 +59,7 @@ console.log(`postbuild: strudel-wrapper.js → dist/${name}/strudel-wrapper.js`)
 // Loose node bundles next to the devices: node.script resolves its script
 // when the object instantiates, before the wrapper's payload extraction can
 // run, so the installed layout must already contain the .cjs files.
-const NODE_BUNDLES = DEVICES.map((d) => `strudel-node-${d.kind}.cjs`);
+const NODE_BUNDLES = DEVICES.filter((d) => d.node).map((d) => `strudel-node-${d.kind}.cjs`);
 for (const f of NODE_BUNDLES) {
 	await copyFile(path.join(root, "dist", "node", f), path.join(outDir, f));
 	console.log(`postbuild: ${f} → dist/${name}/${f}`);

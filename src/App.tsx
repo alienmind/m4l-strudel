@@ -8,7 +8,7 @@ const MODE_TITLE = { midi: "Strudel MIDI", audio: "Strudel Audio", sampler: "Str
 
 export default function App() {
 	const mode = useDeviceMode();
-	const s = useStrudel();
+	const s = useStrudel(mode);
 
 	if (mode === "sampler") return <SampleCatalog />;
 

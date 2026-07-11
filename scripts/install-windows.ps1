@@ -9,14 +9,13 @@ $ErrorActionPreference = "Stop"
 $deviceName = "m4l-strudel"
 # The three device variants produced by the build (see scripts/postbuild.mjs).
 $distFiles = @(
-    "m4l-strudel-midi.amxd",
-    "m4l-strudel-sampler.amxd",
-    "m4l-strudel-audio.amxd",
-    # Loose node engine bundles: node.script resolves its script when the
-    # device loads, before the wrapper's embedded-payload fallback can run.
-    "strudel-node-midi.cjs",
-    "strudel-node-sampler.cjs",
-    "strudel-node-audio.cjs"
+    "alienmind-strudel-midi.amxd",
+    "alienmind-strudel-sampler.amxd",
+    "alienmind-strudel-audio.amxd",
+    # Loose node bundle for the sampler: node.script resolves its script when
+    # the device loads, before the wrapper's embedded-payload fallback can run.
+    # midi/audio need no bundle - their engine runs in a jweb Web Worker.
+    "strudel-node-sampler.cjs"
 )
 
 # Source: ./m4l-strudel next to this script (zip layout) or ../dist/m4l-strudel (repo layout).
@@ -51,10 +50,11 @@ if (-not (Test-Path $userLib)) {
 $dest = Join-Path $userLib "Max For Live\$deviceName"
 if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
 New-Item -ItemType Directory -Force $dest | Out-Null
-# Each .amxd is self-contained (UI + node engine embedded as payloads in wrapper.js).
+# Each .amxd is self-contained (UI + engine embedded as payloads in wrapper.js).
 foreach ($f in $distFiles) {
     Copy-Item (Join-Path $src $f) $dest -Force
+    Write-Host "  installed $f"
 }
 
 Write-Host "Installed to $dest"
-Write-Host "In Live: User Library > Max For Live > $deviceName > {midi, sampler, audio}"
+Write-Host "In Live: User Library > Max For Live > $deviceName"

@@ -143,6 +143,7 @@ var nodeStartTask = new Task(startNodeScript, this);
 var nodeProbeTask = new Task(probeNodeScript, this);
 
 function extractNodeBundle() {
+	if (MODE !== "sampler") return; // midi/audio: engine runs in a jweb Web Worker
 	if (nodeStarted) return;
 	if (typeof NODE_PAYLOAD_B64 !== "undefined") {
 		var fp = this.patcher.filepath;
