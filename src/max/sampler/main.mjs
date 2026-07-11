@@ -23,7 +23,7 @@ async function fetchSampleMap(url) {
 	return [json, base];
 }
 
-/** Normalize a strudel.json map: { name: [urls] } — mirrors processSampleMap
+/** Normalize a strudel.json map: { name: [urls] } - mirrors processSampleMap
  *  (superdough/sampler.mjs): values are arrays OR {note: url(s)} objects. */
 function flattenMap(json, base) {
 	const out = {};
@@ -141,7 +141,7 @@ Max.addHandler("open_folder", async () => {
 	exec(cmd);
 });
 
-// Scale context from [js] observers (root 0-11, name string) — forwarded to UI by js
+// Scale context from [js] observers (root 0-11, name string) - forwarded to UI by js
 // directly; node only needs it if implementing transpose-on-download later.
 Max.addHandler("scale", () => {});
 for (const ignored of ["ui_ready", "code", "hush"]) Max.addHandler(ignored, () => {});

@@ -7,8 +7,9 @@
 # Live's default (~/Music/Ableton/User Library) is the fallback.
 set -eu
 device="m4l-strudel"
-# The three device variants produced by the build (see scripts/postbuild.mjs).
-amxd_files="m4l-strudel-midi.amxd m4l-strudel-sampler.amxd m4l-strudel-audio.amxd"
+# Devices plus loose node engine bundles (node.script resolves its script at
+# device load, before the wrapper's embedded-payload fallback can run).
+dist_files="m4l-strudel-midi.amxd m4l-strudel-sampler.amxd m4l-strudel-audio.amxd strudel-node-midi.cjs strudel-node-sampler.cjs strudel-node-audio.cjs"
 probe="m4l-strudel-midi.amxd"
 here="$(cd "$(dirname "$0")" && pwd)"
 
@@ -35,7 +36,7 @@ dest="$user_lib/Max For Live/$device"
 rm -rf "$dest"
 mkdir -p "$dest"
 # Each .amxd is self-contained (UI + node engine embedded as payloads in wrapper.js).
-for f in $amxd_files; do cp "$src/$f" "$dest/"; done
+for f in $dist_files; do cp "$src/$f" "$dest/"; done
 
 echo "Installed to $dest"
 echo "In Live: User Library > Max For Live > $device > {midi, sampler, audio}"

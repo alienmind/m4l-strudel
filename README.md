@@ -1,7 +1,7 @@
-# m4l-strudel — Strudel live coding inside Ableton Live
+# m4l-strudel - Strudel live coding inside Ableton Live
 
-Three **Max for Live devices** that bring [Strudel](https://strudel.cc) — the
-JavaScript port of TidalCycles' pattern language — natively into Ableton Live.
+Three **Max for Live devices** that bring [Strudel](https://strudel.cc) - the
+JavaScript port of TidalCycles' pattern language - natively into Ableton Live.
 No browser tab, no virtual MIDI cables, no sync hacks: the real
 `@strudel/core` engine runs headlessly inside each device, locked to Live's
 transport.
@@ -10,19 +10,19 @@ transport.
 
 | Device | Type | What it does for you |
 |---|---|---|
-| **Strudel MIDI** (`m4l-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it — tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
+| **Strudel MIDI** (`m4l-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
 | **Strudel Samples** (`m4l-strudel-sampler.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. |
-| **Strudel Audio** (`m4l-strudel-audio.amxd`) | Instrument | Strudel patterns drive a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) — no external instrument needed. v1, exploratory. |
+| **Strudel Audio** (`m4l-strudel-audio.amxd`) | Instrument | Strudel patterns drive a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) - no external instrument needed. v1, exploratory. |
 
-**New here? Start with the [user guide](doc/ABOUT.md)** — every control of
+**New here? Start with the [user guide](doc/ABOUT.md)** - every control of
 every device explained (Bars, Grid, Octave conventions, Shift, Run/Hush,
-the sample catalog…), with screenshots and typical workflows.
+the sample catalog...), with screenshots and typical workflows.
 
 ## Why a producer would care
 
 - **Generative sequencing in one line.** `note("c3 e3 g3 b3").sometimesBy(.3, x=>x.fast(2))`
   is a whole evolving part. Euclidean rhythms, polymeter, per-cycle
-  alternation — things that are tedious to click into a piano roll are one
+  alternation - things that are tedious to click into a piano roll are one
   expression in Strudel.
 - **It's really Live-native.** Patterns start on the bar, follow tempo
   automation, stop when you stop the transport, and notes land on the track
@@ -37,7 +37,7 @@ the sample catalog…), with screenshots and typical workflows.
 
 ## Install
 
-Build (or unzip a release), then run the installer for your OS — it locates
+Build (or unzip a release), then run the installer for your OS - it locates
 your Ableton User Library from Live's own config and copies all three
 devices into `User Library/Max For Live/m4l-strudel/`:
 
@@ -47,7 +47,7 @@ scripts/install-mac.sh        # macOS
 scripts/install-linux.sh      # Linux (Live under Wine)
 ```
 
-Each `.amxd` is fully **self-contained** — the React UI and the bundled
+Each `.amxd` is fully **self-contained** - the React UI and the bundled
 Strudel engine travel inside the device file and unpack themselves on first
 load. Drag from Live's browser onto a MIDI track (midi / audio devices) or an
 audio track (sampler) and go.
@@ -72,10 +72,10 @@ via `[plugsync~]`, and the engine queries pattern events ahead of time and
 schedules them sample-accurately through Max's `[pipe]`/`[makenote]`. The UI
 is a single React app in `[jweb]` that mode-switches per device; LiveAPI work
 (clips, Live 12 scale awareness) lives in an ES5 `[js]` glue script. The
-`.amxd` containers themselves are generated **entirely from Node scripts** —
+`.amxd` containers themselves are generated **entirely from Node scripts**  - 
 no manual Max editing in the build loop.
 
-**Full details:** [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) — the build
+**Full details:** [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) - the build
 pipeline, the amxd container writer, the exact jweb/js/node message protocol,
 and what we do (and deliberately don't) depend on from upstream strudel.cc.
 
@@ -90,7 +90,7 @@ The **To Clip / From Clip** feature uses a small built-in parser
 | Subdivision | `[e5 g5]` | nested equal division |
 | Rest | `~` | silence |
 | Repeat / speed | `[e5 g5]*2` | repeat the group twice in its slot |
-| Elongation | `c5@3 e5` | c5 takes 3× the weight |
+| Elongation | `c5@3 e5` | c5 takes 3x the weight |
 | Alternation | `<a5 b5>` | one element per cycle |
 | Stack (chord) | `[c5,e5,g5]` | parallel notes |
 | Polymeter | `{c5 e5, g5 b5 d6}%4` | 4 steps/cycle per layer |
@@ -99,7 +99,7 @@ The **To Clip / From Clip** feature uses a small built-in parser
 
 Octave convention defaults to **Strudel** (`c5` = MIDI 60); switch to
 Scientific (`c4` = 60) or apply an octave shift in the UI. The **live Run
-mode is not limited to this table** — it evaluates full Strudel code in the
+mode is not limited to this table** - it evaluates full Strudel code in the
 real engine.
 
 ## Clip I/O behaviour (To Clip / From Clip)
