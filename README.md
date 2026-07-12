@@ -37,19 +37,19 @@ the sample catalog...), with screenshots and typical workflows.
 
 ## Install
 
-Build (or unzip a release), then run the installer for your OS - it locates
-your Ableton User Library from Live's own config and copies all three
-devices into `User Library/Max For Live/m4l-strudel/`:
+Build (or unzip a release), then install the built devices into Ableton's
+User Library:
 
 ```
-scripts\install-windows.ps1   # Windows
-scripts/install-mac.sh        # macOS
+pnpm install:device
 ```
 
-Each `.amxd` is fully **self-contained** - the React UI and the bundled
-Strudel engine travel inside the device file and unpack themselves on first
-load. Drag from Live's browser onto a MIDI track (midi / audio devices) or an
-audio track (sampler) and go.
+This finds your Ableton User Library from Live's own config and copies all
+three devices into `User Library/Max For Live/m4l-strudel/`. Each `.amxd` is
+fully **self-contained** - the React UI and the bundled Strudel engine travel
+inside the device file and unpack themselves on first load. Drag from Live's
+browser onto a MIDI track (midi / audio devices) or an audio track (sampler)
+and go.
 
 ## Build & test
 
@@ -62,41 +62,67 @@ pnpm build   # → dist/m4l-strudel/alienmind-strudel-{midi,sampler,audio}.amxd
 pnpm dev     # browser dev for the UI; use maxSimulate('mode','sampler') etc.
 ```
 
-## How it works (short version)
+## Built on M4L-JWEB
 
-One codebase produces all three devices. The real Strudel engine
-(`@strudel/core` + mini + transpiler + tonal, bundled from the `strudel/`
-git submodule) runs in a **Web Worker inside `[jweb]`** - the same Chromium
-platform strudel.cc itself runs on. Live's transport is fed in as messages
-via `[plugsync~]`, the engine queries pattern events ahead of time, and Max's
-`[pipe]`/`[makenote]` apply the precise timing. The UI is a single React app
-that mode-switches per device; LiveAPI work (clips, Live 12 scale awareness)
-lives in an ES5 `[js]` glue script; the sampler additionally hosts a
-`[node.script]` for downloads. The `.amxd` containers themselves are
-generated **entirely from Node scripts** - no manual Max editing in the
-build loop.
+This is a **[M4L-JWEB](https://github.com/alienmind/m4l-jweb)** device repo:
+a web app in `src/app/`, a device manifest in `patcher/devices.mjs`, optional
+`[js]` extensions in `wrapper/device.ts`. Everything else - the `.amxd`
+container writer, the generated patchers, the `[js]` lifecycle, the ES5 gate
+- comes from the published `@m4l-jweb/bridge` and `@m4l-jweb/build` packages.
+
+If you were setting this repo up from scratch today, this is the path:
+
+1. **Scaffold the repo.**
+   ```bash
+   pnpm dlx @m4l-jweb/build init m4l-strudel
+   cd m4l-strudel && pnpm install
+   ```
+   This gives you a working one-device `hello-midi` build: `src/app/App.tsx`,
+   `src/app/protocol.ts`, `patcher/devices.mjs`, all the vite/tsconfig
+   plumbing - the exact shape this repo still has today.
+
+2. **Pull in the real engine.** `git submodule add` the upstream Strudel repo
+   at `strudel/`, and bundle `@strudel/core` + `mini` + `transpiler` + `tonal`
+   from it via vite aliases (see `vite.config.ts` / `vitest.config.ts`).
+
+3. **Grow `patcher/devices.mjs` to three devices.** One manifest entry per
+   device (`alienmind-strudel-midi` as `type: "midi"`, `-audio` as
+   `type: "instrument"`, `-sampler` as `type: "audio"` with `mode: "sampler"`),
+   each declaring its `chains` (`midiout`, or the project's own `poly` /
+   `sampler` chains registered via `patcher/chains.mjs`) and Push-visible
+   `parameters`.
+
+4. **Replace the scaffold's UI with the real one.** `src/app/App.tsx` becomes
+   the pattern editor + sample browser; the engine itself runs in a Web
+   Worker (`src/app/engine.worker.js`) instead of the scaffold's placeholder
+   worker, so pattern evaluation never blocks the UI thread.
+
+5. **Extend the wrapper.** `wrapper/device.ts` adds everything genuinely
+   device-specific on top of `@m4l-jweb/wrapper`'s packaged lifecycle: mode
+   resolution from `jsarguments`, Live 12 scale observers, clip-availability
+   polling, and the sampler's `[node.script]` bootstrap - hooking into
+   `onDeviceReady`/`onUiReady`/`onTick`/`onTempoChange`.
+
+6. **Add the sampler's node host as an extra payload.** The manifest's
+   `payloads`/`looseFiles` fields ship `strudel-node-sampler.cjs` alongside
+   the `.amxd`, extracted by the packaged wrapper on load.
+
+7. **Build.** `pnpm build` runs `m4l-jweb build` under the hood - `.amxd`
+   containers generated entirely from Node scripts, no manual Max editing,
+   on a machine that has never opened Max.
+
+One codebase produces all three devices. Live's transport is fed in as
+messages via `[plugsync~]`, the engine queries pattern events ahead of time,
+and Max's `[pipe]`/`[makenote]` apply the precise timing.
 
 **Full details:** [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) - the build
-pipeline, the amxd container writer, the exact jweb/js/node message protocol,
-and what we do (and deliberately don't) depend on from upstream strudel.cc.
-The underlying device-building approach (web UI in jweb, generated patchers,
-headless binary .amxd writer) is written up as a standalone article in
-[doc/M4L-JWEB.md](doc/M4L-JWEB.md) - read that if you want to build your own
-web-stack Live devices from this scaffold.
-
-### Relationship to m4l-jweb
-
-This repo was **not** scaffolded from `m4l-jweb init` - it is the other way
-around. m4l-strudel's build pipeline (the `.amxd` writer, the generated
-patchers, the `[js]` wrapper lifecycle) was generalized *out of* this project
-into the [m4l-jweb](https://github.com/alienmind/m4l-jweb) library
-(`@m4l-jweb/bridge`, `@m4l-jweb/wrapper`, `@m4l-jweb/build`), which now ships
-its own `m4l-jweb init` scaffold for starting new devices from scratch.
-m4l-strudel now *consumes* that library (`@m4l-jweb/bridge` in `package.json`,
-`m4l-jweb build`/`m4l-jweb wrapper`/`m4l-jweb patchers` in the npm scripts)
-rather than carrying its own copy of that infrastructure - it is the reference
-example of a real, non-trivial device built on the library, not the seed of a
-new one.
+pipeline, the exact jweb/js/node message protocol, and what we do (and
+deliberately don't) depend on from upstream strudel.cc. For the underlying
+M4L-JWEB approach itself - the two escape hatches, the generated patchers,
+the headless `.amxd` writer, `m4l-jweb init` - see
+[m4l-jweb's README](https://github.com/alienmind/m4l-jweb#readme) and
+[doc/ARCHITECTURE.md](https://github.com/alienmind/m4l-jweb/blob/main/doc/ARCHITECTURE.md)
+in that repo.
 
 ## Supported mini-notation (clip converter)
 
@@ -130,18 +156,10 @@ real engine.
   clip** found. The button disables itself when the track has no clips
   (polled once a second).
 
-## Related
-
-The sibling project `tmp/mcp-strudel` is an **MCP server** exposing the same
-mini-notation converter to Claude, so patterns can be written in natural
-language and pushed into Ableton. Both share `src/lib/mini`.
-
 ## License
 
 **AGPL-3.0-or-later**, matching [Strudel's own
 license](https://strudel.cc/technical-manual/project-start/). This project
 bundles the real `@strudel/core` engine (via the `strudel/` git submodule) and
-runs it directly, which makes it a derivative work under Strudel's AGPL terms
-- not just "inspired by" or "compatible with" Strudel, but legally bound to
-release under the same copyleft license. See [LICENSE](LICENSE) for the full
-text.
+runs it directly, which makes it a derivative work under Strudel's AGPL terms.
+See [LICENSE](LICENSE) for the full text.

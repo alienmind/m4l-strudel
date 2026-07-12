@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { bindInlet } from "@/lib/maxBridge";
+import { bindInlet } from "@m4l-jweb/bridge";
 
 export type DeviceMode = "midi" | "audio" | "sampler";
 

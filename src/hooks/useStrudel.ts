@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { bindInlet, inJweb, outlet } from "@/lib/maxBridge";
+import { bindInlet, inJweb, outlet, uiReady } from "@m4l-jweb/bridge";
 import { renderPattern, toFlatList } from "@/lib/mini/render";
 import { eventsToMini, type RawNote } from "@/lib/mini/unparse";
 import type { OctaveConvention } from "@/lib/mini/notes";
 import type { DeviceMode } from "@/hooks/useDeviceMode";
-import EngineWorker from "@/workers/engine.worker.js?worker&inline";
+import EngineWorker from "@/app/engine.worker.js?worker&inline";
 
 interface EngineNote {
 	pitch: number;
@@ -86,7 +86,7 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 				workerRef.current?.postMessage({ t: "tempo", bpm: Number(bpm) });
 			}
 		});
-		outlet("ui_ready");
+		uiReady();
 	}, []);
 
 	const { noteCount, errors } = useMemo(() => {

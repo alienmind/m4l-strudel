@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, FolderOpen, Play, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { bindInlet, outlet } from "@/lib/maxBridge";
+import { bindInlet, outlet } from "@m4l-jweb/bridge";
 
 const PITCH_CLASS_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
