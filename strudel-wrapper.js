@@ -44,6 +44,7 @@ function bang() {
 	startClipPoll();
 	setupScaleObservers();
 	setupTempoObserver();
+	startTickPoll();
 }
 function loadbang() {
 	post("strudel: loadbang\n");
@@ -56,6 +57,41 @@ function reload() {
 	startClipPoll();
 	setupScaleObservers();
 	setupTempoObserver();
+	startTickPoll();
+}
+
+/**
+ * Transport ticks: "tick <playing> <beats>" every 50ms, polled from LiveAPI
+ * (live_set is_playing + current_song_time, the position in beats). This
+ * replaced a [plugsync~]→[snapshot~] signal chain whose outlets read zero in
+ * the field (MIDI-effect devices do not reliably run a DSP graph); LiveAPI
+ * has no such dependency and provably works here (tempo, clips). The engine's
+ * lookahead window absorbs the 20Hz poll rate.
+ */
+var tickPoll = new Task(pollTransport, this);
+var liveSetApi = null;
+function startTickPoll() {
+	try {
+		liveSetApi = new LiveAPI("live_set");
+	} catch (e) {
+		post("strudel: tick poll unavailable - " + e.message + "\n");
+		return;
+	}
+	tickPoll.cancel();
+	tickPoll.interval = 50;
+	tickPoll.repeat();
+	post("strudel: transport poll on\n");
+}
+function pollTransport() {
+	if (!liveSetApi) return;
+	try {
+		var playing = parseInt(liveSetApi.get("is_playing"));
+		var beats = parseFloat(liveSetApi.get("current_song_time"));
+		outlet(0, "tick", playing, beats);
+		if (MODE === "sampler") outlet(1, "tick", playing, beats);
+	} catch (e) {
+		/* transient - next poll retries */
+	}
 }
 
 // Live's tempo in BPM, observed via LiveAPI and pushed to the UI (and to
