@@ -121,8 +121,6 @@ Live **Run** mode is not limited to this table - it evaluates full Strudel.
 
 ## Strudel Samples (`alienmind-strudel-sampler.amxd`)
 
-![Strudel Samples device](screenshot-sampler.png)
-
 A browser/downloader for the community sample maps behind strudel.cc. It is
 an **audio effect**: put it anywhere on an audio track; incoming audio passes
 through untouched and previews are mixed in.
@@ -163,9 +161,8 @@ synth, not a note editor. See [doc/TODO.md](TODO.md) for the design.
 - **Updated the device but nothing changed** → Live embeds a copy of the
   device in your set when you drag it in; reinstalling the `.amxd` does NOT
   update instances already on tracks. Delete the device from the track and
-  re-drag it from the browser. The header shows the UI version (e.g.
-  `v0.2.0`) and the Max console prints the build stamp - compare them after
-  updating.
+  re-drag it from the browser. The device's footer shows the UI version, and
+  the Max console prints the build stamp - compare them after updating.
 - **Run does nothing** → check the status line says *Strudel engine ready*
   and remember: no sound until **Live's transport is playing**. The Max
   console (device Edit button) logs every boot step (`strudel: ...`).
