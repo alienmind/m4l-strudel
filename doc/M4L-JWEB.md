@@ -216,6 +216,15 @@ Say you want a "chord memory" MIDI device with a web UI.
 
 Gotchas that will bite you exactly once:
 
+- **LiveAPI objects created during `loadbang` are dead.** They construct
+  without error but never observe or return anything - and if a guard like
+  `if (obs) return` protects the setup, the later valid attempt is silently
+  skipped. Create observers from `live.thisdevice`'s bang only; use
+  `loadbang` for file work at most.
+- **Live embeds a copy of the device in the set.** Reinstalling the `.amxd`
+  does not update instances already placed on tracks - delete and re-drag.
+  Stamp a build id into the wrapper and show it in the UI (this scaffold
+  does both) so a mixed or stale install is visible at a glance.
 - `[js]` is ES5. No `const`, no arrow functions, no template literals.
 - `route` strips the selector; a bare selector comes out as a `bang`. If the
   consumer needs the word itself, re-materialize it with a message box.
