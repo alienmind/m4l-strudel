@@ -174,6 +174,7 @@ start the transport, and it plays by itself.
 - **Sampler shows nothing after Load** → check the status line for a fetch
   error (the maps come from the network).
 
-More depth: [README](../README.md) and
+More depth: [README](../README.md) (includes how this project relates to the
+[m4l-jweb](https://github.com/alienmind/m4l-jweb) library it's built on) and
 [Architecture](ARCHITECTURE.md) (build pipeline, message protocol,
 upstream-Strudel policy).
