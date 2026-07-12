@@ -168,11 +168,11 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 			} else if (m.t === "notes") {
 				counters.sent += m.notes.length;
 				for (const n of m.notes) {
-					if (mode === "audio") outlet("voice", n.pitch, n.vel01, n.durMs, n.wave, n.cutoff, n.gain, n.delayMs);
+					if (mode === "instrument") outlet("voice", n.pitch, n.vel01, n.durMs, n.wave, n.cutoff, n.gain, n.delayMs);
 					else outlet("midinote", n.pitch, n.velocity, n.durMs, n.chan, n.delayMs);
 				}
 			} else if (m.t === "flush") {
-				outlet(mode === "audio" ? "allnotesoff" : "flush");
+				outlet(mode === "instrument" ? "allnotesoff" : "flush");
 			} else if (m.t === "clock") {
 				counters.clock = m.free ? "free" : "live";
 				if (m.free) setStatus("Running on the free clock - press Play in Live to lock to the grid");

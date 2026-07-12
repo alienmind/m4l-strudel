@@ -16,8 +16,11 @@ export default [
 		unmatchedTo: "js", // ui_ready / write_clip / read_notes reach the wrapper
 	},
 	{
-		name: "alienmind-strudel-audio",
+		name: "alienmind-strudel-instrument",
 		type: "instrument", // 'iiii' MIDI in -> audio out
+		mode: "instrument", // ... the wrapper's mode vocabulary is midi | sampler | instrument.
+		// Was "audio" - renamed because it collided with the unrelated "audio effect"
+		// container type used below by the sampler; see resolveStrudelMode().
 		chains: ["poly"], // ours: message-driven poly~ synth voices
 		// voice.maxpat is read by poly~, a Max-native object, so it can stay
 		// FROZEN inside the container - no extraction needed.
