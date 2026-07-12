@@ -232,7 +232,7 @@ git clone https://github.com/alienmind/m4l-jweb my-device
 cd my-device && pnpm install
 pnpm dev      # browser dev with the Max bridge simulated
 pnpm build    # emits dist/<name>/<device>.amxd + release zip
-scripts/install-windows.ps1   # or install-mac.sh / install-linux.sh
+scripts/install-windows.ps1   # or install-mac.sh
 ```
 
 You edit two places: `src/app/` (the web app - UI, optional worker, and

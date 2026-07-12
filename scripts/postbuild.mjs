@@ -77,7 +77,7 @@ await new Promise((resolve, reject) => {
 		const p = path.join(outDir, f);
 		if (existsSync(p)) archive.append(createReadStream(p), { name: `${name}/${f}` });
 	}
-	for (const installer of ["install-windows.ps1", "install-mac.sh", "install-linux.sh"]) {
+	for (const installer of ["install-windows.ps1", "install-mac.sh"]) {
 		archive.file(path.join(root, "scripts", installer), { name: installer, mode: 0o755 });
 	}
 	archive.finalize();
