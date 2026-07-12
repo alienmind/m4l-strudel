@@ -1,7 +1,7 @@
 /**
  * wrapper.js - Max-side glue for the Strudel devices (NOT the React app).
  * Shared by all three device variants (midi/sampler/audio), mode-switched by
- * jsarguments[0].
+ * the object-box argument (see resolveMode).
  *
  * 1. Load strudel-ui.html into [jweb] via a file:// URL from this patch path.
  * 2. write_clip: create a MIDI clip on THIS device's own track and fill it.
@@ -22,7 +22,31 @@ outlets = 2;
 
 post("wrapper.js loaded (build " + (typeof BUILD_STAMP !== "undefined" ? BUILD_STAMP : "dev - no stamp") + ")\n");
 
-var MODE = jsarguments.length > 0 ? String(jsarguments[0]) : "midi";
+/**
+ * Device mode, from the object box: [js strudel-wrapper.js <kind>], written by
+ * generate-patchers.mjs.
+ *
+ * TRAP: jsarguments[0] is the SCRIPT NAME, not the first argument - the args
+ * start at index 1. Reading index 0 sets MODE to "strudel-wrapper.js", so every
+ * `MODE === "sampler"` test is silently false forever: no node.script bootstrap,
+ * no tick/tempo forwarded to node, no scale observers, and the UI is told its
+ * mode is "strudel-wrapper.js". It fails quietly, which is why it survived.
+ *
+ * Scan for a known mode instead of trusting an index, so this cannot rot again.
+ */
+var MODES = ["midi", "sampler", "audio"];
+function resolveMode() {
+	for (var i = 0; i < jsarguments.length; i++) {
+		var a = String(jsarguments[i]);
+		for (var j = 0; j < MODES.length; j++) {
+			if (a === MODES[j]) return a;
+		}
+	}
+	post("strudel: WARNING - no device mode in jsarguments, defaulting to midi\n");
+	return "midi";
+}
+var MODE = resolveMode();
+post("strudel: mode " + MODE + "\n");
 
 // Clip availability: polled (LiveAPI has no single observable for "any clip
 // on this track"), pushed to the UI as `clip_available 0/1` on change so the

@@ -4,3 +4,6 @@ dist
 .DS_Store
 tsconfig.tsbuildinfo
 *.dmp
+
+# the m4l-jweb library lives in its own repo (github.com/alienmind/m4l-jweb)
+tmp/

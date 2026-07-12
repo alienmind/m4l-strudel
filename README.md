@@ -44,7 +44,6 @@ devices into `User Library/Max For Live/m4l-strudel/`:
 ```
 scripts\install-windows.ps1   # Windows
 scripts/install-mac.sh        # macOS
-scripts/install-linux.sh      # Linux (Live under Wine)
 ```
 
 Each `.amxd` is fully **self-contained** - the React UI and the bundled
