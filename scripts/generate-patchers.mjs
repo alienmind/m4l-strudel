@@ -35,28 +35,12 @@ const line = (srcId, srcOut, dstId, dstIn) => ({
 	patchline: { source: [srcId, srcOut], destination: [dstId, dstIn] },
 });
 
-// --- transport tick chain (shared by all 3 devices) ---------------------
-// Per the plugsync~ reference (verified 2026-07-12): outlet 0 = transport
-// running (0/1), outlet 6 = song position in beats (1 PPQ float). Both are
-// signals; snapshot at 10ms and pak into: "tick <playing> <beats>".
-// Tempo is NOT taken from plugsync~ (outlet 5 is samples-per-beat) - the
-// wrapper observes live_set tempo via LiveAPI and sends "tempo <bpm>".
-// Target: jweb for midi/audio (the engine Web Worker consumes ticks),
-// node.script for the sampler (beat-synced preview timing).
-const PLUGSYNC_OUT = { playing: 0, beats: 6 };
-function tickChain(boxes, lines, targetId) {
-	boxes.push(box("obj-sync", "plugsync~", { numoutlets: 9, outlettype: Array(9).fill("signal"), numinlets: 1 }));
-	const order = ["playing", "beats"];
-	order.forEach((k) => {
-		boxes.push(box(`obj-snap-${k}`, "snapshot~ 10", { numinlets: 2, numoutlets: 1, outlettype: ["float"] }));
-		lines.push(line("obj-sync", PLUGSYNC_OUT[k], `obj-snap-${k}`, 0));
-	});
-	boxes.push(box("obj-pak", "pak 0. 0.", { numinlets: 2, numoutlets: 1, outlettype: [""] }));
-	order.forEach((k, i) => lines.push(line(`obj-snap-${k}`, 0, "obj-pak", i)));
-	boxes.push(box("obj-ticktag", "prepend tick"));
-	lines.push(line("obj-pak", 0, "obj-ticktag", 0));
-	lines.push(line("obj-ticktag", 0, targetId, 0));
-}
+// Transport ticks are NOT a signal chain: the wrapper [js] polls LiveAPI
+// (live_set is_playing + current_song_time) on a 50ms Task and sends
+// "tick <playing> <beats>" out of its outlets (0 → jweb, 1 → node in
+// sampler mode). A [plugsync~]→[snapshot~] chain was tried first and its
+// outlets read zero in the field - MIDI-effect devices do not reliably run
+// a DSP graph.
 
 // --- MIDI output chain: jweb → pipe → makenote → midiformat → midiout ---
 // the engine worker (via the UI) emits: "midinote <pitch> <vel> <durMs> <chan> <delayMs>"
@@ -141,13 +125,10 @@ function makeDevice(kind) {
 		// visible in the Max console for field debugging.
 		boxes.push(box("obj-nodeprint", "print n4m"));
 		lines.push(line(nodeId, 1, "obj-nodeprint", 0));
-		tickChain(boxes, lines, nodeId);
 		// jweb → node (load_map/preview/download - node ignores js messages)
 		lines.push(line("obj-jweb", 0, nodeId, 0));
-		// js → node (scale updates, "script start" bootstrap)
+		// js → node (ticks, tempo, scale updates, "script start" bootstrap)
 		lines.push(line("obj-2", 1, nodeId, 0));
-	} else {
-		tickChain(boxes, lines, "obj-jweb");
 	}
 
 	if (kind === "midi") {

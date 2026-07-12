@@ -36,7 +36,7 @@ issue, see the Cycling '74 forums), then a full Live crash on device load.
                        [jweb] ──────┘  ui_ready, write_clip, read_notes)
                        │    ▲
    React UI + engine   │    │
-   Web Worker          │    └── [plugsync~]→[snapshot~ 10]x2→[pak]→[prepend tick]
+   Web Worker          │    └── ticks + tempo from [js] (LiveAPI poll/observer)
                        ▼
         [route midinote flush] / [route voice allnotesoff]
                        │
@@ -61,10 +61,13 @@ issue, see the Cycling '74 forums), then a full Live crash on device load.
   `root_note`/`scale_name` observers, and (sampler only) the node.script
   start sequence. It is **ES5 only** - Max's `[js]` has no modern JS. The
   device mode arrives as `jsarguments[0]`.
-- **The tick chain** (`[plugsync~]` playing + song-position outlets → `[snapshot~ 10]` → `[pak]` →
-  `prepend tick`) samples Live's transport (~every 10 ms) into
-  `tick <playing> <beats>` (plugsync~ outlets 0 and 6), fed into jweb (midi/audio)
-  or node (sampler).
+- **Transport ticks** come from the wrapper: a 50 ms LiveAPI poll of
+  `live_set is_playing` + `current_song_time` emits `tick <playing> <beats>`
+  to jweb (midi/audio) and node (sampler). A [plugsync~] signal chain was
+  tried first and read zero in the field (MIDI-effect devices do not
+  reliably run a DSP graph). While a pattern runs with the transport
+  stopped, the worker free-runs on an internal clock at the current tempo
+  and hands over to Live's clock when the transport starts.
 
 ### Transport → pattern scheduling (the interesting part)
 

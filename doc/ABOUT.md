@@ -22,8 +22,9 @@ transport.
 | **Strudel Samples** (`alienmind-strudel-sampler.amxd`) | Audio effect, any **audio track** (audio passes through) | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. |
 | **Strudel Audio** (`alienmind-strudel-audio.amxd`) | Instrument, a **MIDI track**, as the instrument | Strudel patterns drive a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) - no external instrument needed. v1, exploratory. |
 
-Nothing plays until **Live's transport is running** - patterns are scheduled
-against the playhead, start on the bar, and follow tempo changes.
+Press **Run** and patterns play immediately on a free-running clock at the
+project tempo; start **Live's transport** and they lock to the playhead,
+start on the bar, and follow tempo changes.
 
 ## Why a producer would care
 

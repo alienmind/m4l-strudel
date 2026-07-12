@@ -23,7 +23,8 @@ type EngineMessage =
 	| { t: "evalok" }
 	| { t: "evalerr"; message: string }
 	| { t: "notes"; notes: EngineNote[] }
-	| { t: "flush" };
+	| { t: "flush" }
+	| { t: "clock"; free: boolean };
 
 export interface StrudelState {
 	text: string;
@@ -147,7 +148,7 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 	// in the shape the device's output chain expects.
 	useEffect(() => {
 		if (mode === "sampler") return;
-		const counters = { engine: "booting", ticks: 0, sent: 0, playing: 0, beats: 0 };
+		const counters = { engine: "booting", ticks: 0, sent: 0, playing: 0, beats: 0, clock: "stop" };
 		const worker: Worker = new EngineWorker();
 		workerRef.current = worker;
 		// Deliver whatever tempo already arrived before this worker existed.
@@ -172,6 +173,10 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 				}
 			} else if (m.t === "flush") {
 				outlet(mode === "audio" ? "allnotesoff" : "flush");
+			} else if (m.t === "clock") {
+				counters.clock = m.free ? "free" : "live";
+				if (m.free) setStatus("Running on the free clock - press Play in Live to lock to the grid");
+				else setStatus("Pattern running (locked to Live)");
 			}
 		};
 		bindInlet("tick", (playing, beats) => {
@@ -189,7 +194,7 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 		const iv = setInterval(
 			() =>
 				setDebug(
-					`${counters.engine} / t ${counters.ticks} / play ${counters.playing} ` +
+					`${counters.engine} / t ${counters.ticks} / play ${counters.playing} / clk ${counters.clock} ` +
 						`/ beat ${counters.beats.toFixed(1)} / bpm ${Math.round(tempoRef.current)} / sent ${counters.sent}`,
 				),
 			1000,
