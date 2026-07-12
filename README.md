@@ -84,6 +84,20 @@ headless binary .amxd writer) is written up as a standalone article in
 [doc/M4L-JWEB.md](doc/M4L-JWEB.md) - read that if you want to build your own
 web-stack Live devices from this scaffold.
 
+### Relationship to m4l-jweb
+
+This repo was **not** scaffolded from `m4l-jweb init` - it is the other way
+around. m4l-strudel's build pipeline (the `.amxd` writer, the generated
+patchers, the `[js]` wrapper lifecycle) was generalized *out of* this project
+into the [m4l-jweb](https://github.com/alienmind/m4l-jweb) library
+(`@m4l-jweb/bridge`, `@m4l-jweb/wrapper`, `@m4l-jweb/build`), which now ships
+its own `m4l-jweb init` scaffold for starting new devices from scratch.
+m4l-strudel now *consumes* that library (`@m4l-jweb/bridge` in `package.json`,
+`m4l-jweb build`/`m4l-jweb wrapper`/`m4l-jweb patchers` in the npm scripts)
+rather than carrying its own copy of that infrastructure - it is the reference
+example of a real, non-trivial device built on the library, not the seed of a
+new one.
+
 ## Supported mini-notation (clip converter)
 
 The **To Clip / From Clip** feature uses a small built-in parser
@@ -121,3 +135,13 @@ real engine.
 The sibling project `tmp/mcp-strudel` is an **MCP server** exposing the same
 mini-notation converter to Claude, so patterns can be written in natural
 language and pushed into Ableton. Both share `src/lib/mini`.
+
+## License
+
+**AGPL-3.0-or-later**, matching [Strudel's own
+license](https://strudel.cc/technical-manual/project-start/). This project
+bundles the real `@strudel/core` engine (via the `strudel/` git submodule) and
+runs it directly, which makes it a derivative work under Strudel's AGPL terms
+- not just "inspired by" or "compatible with" Strudel, but legally bound to
+release under the same copyleft license. See [LICENSE](LICENSE) for the full
+text.
