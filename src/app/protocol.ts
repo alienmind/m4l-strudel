@@ -76,4 +76,4 @@ export const OUT = {
 	download: "download",
 } as const;
 
-export type DeviceMode = "midi" | "audio" | "sampler";
+export type DeviceMode = "midi" | "instrument" | "sampler";

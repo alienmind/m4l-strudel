@@ -91,13 +91,40 @@ When you use "From Clip", the plugin reads the raw MIDI notes back from the clip
     *   **No Interference / No Extra Threads needed:** Because `queryWindow` is a stateless evaluation, querying cycles `0` through `4` for a clip export will not mutate or disrupt the ongoing pattern playback (which simply queries the same pattern object for tiny real-time chunks as Ableton ticks). A single worker thread is perfectly sufficient.
     *   The worker returns an array of fully-baked MIDI notes to React, which then forwards them to Ableton. This instantly closes the gap, adding 100% support for every Strudel note transformation to the "To Clip" exporter.
 
-### [FEAT-04] Phase 6: Native Audio Instrument Mode (`iiii`)
+### [FEAT-04] Phase 6: Native Instrument Mode (`iiii`) - IMPLEMENTED, NOT USEFUL
 
 1.  **Context (from abandoned `STRUDEL_PLANS.md`):**
-    *   The original architectural plan called for an "Audio Instrument" device variant (`iiii`) that would take Strudel patterns (like `note("c3 e3").s("sawtooth")`) and generate audio directly from the device by routing Max messages into a `[poly~]` synthesizer, rather than just emitting MIDI notes.
-    *   Because the current Strudel engine runs in a Web Worker (inside `jweb`), it cannot route WebAudio directly into Ableton's signal path.
+    *   The original architectural plan called for an "Instrument" device variant (`iiii`) that would take Strudel patterns (like `note("c3 e3").s("sawtooth")`) and generate audio directly from the device by routing Max messages into a `[poly~]` synthesizer, rather than just emitting MIDI notes.
+    *   Because the current Strudel engine runs in a Web Worker (inside `jweb`), it cannot route WebAudio directly into Ableton's signal path. This is a hard constraint, not a bug to fix: `[jweb]` is a Chromium view with no object that pipes its audio output into `plugout~`. Any real sound from this device has to come from Max-native DSP objects.
 
-2.  **Implementation Plan:**
-    *   **Max/MSP Voice:** Hand-author a minimal `strudel-voice.maxpat` for `[poly~]` with a basic synth (e.g. cycle~, saw~, rect~, tri~ selected via message) and a simple ADSR envelope.
-    *   **Message Bridge:** Add an "Audio Mode" toggle to the UI. When enabled, the Web Worker maps events (like `s("sawtooth")`) into explicit voice messages (e.g., `voice <note> <vel> <durMs> <wave> <cutoff> <gain>`).
-    *   **Routing:** The JS bridge passes these `voice` messages from `jweb` out to the Max patch, which distributes them to the `[poly~]` object to generate native Ableton audio. This achieves a basic, minimal equivalent of `superdough` synthesis natively within Max for Live.
+2.  **What got built:** `ableton-amxd/voice.maxpat`, a hand-authored `[poly~]` synth (`cycle~`/`saw~`/`rect~`/`tri~` selected via message, basic envelope via `line~`), driven by `voice <note> <vel01> <durMs> <wave> <cutoff> <gain> <delayMs>` messages from the worker (`patcher/chains.mjs`'s `"poly"` chain). The mode was originally (and confusingly) called `"audio"`, colliding with the unrelated "audio effect" container type used by the Sampler; renamed to `"instrument"` (`resolveStrudelMode()` in `wrapper/device.ts`, `patcher/devices.mjs`, `alienmind-strudel-instrument.amxd`).
+
+3.  **Status: shipped but not musically useful, and unverified.** `voice.maxpat` carries its own comment flagging it as a "SKELETON PATCH - not hand-verified in the Max editor." It reinvents a crude oscillator synth instead of using Strudel's actual sound engine - `.s("bd")`-style sample references and most of the real transformation chain (`.room()`, real envelopes, etc.) do nothing here. Do not treat this as done; see Phase 7 below for the actual direction.
+
+### [FEAT-05] Phase 7: Sample-based instrument, reusing the Sampler's download pipeline
+
+The oscillator synth in Phase 6 is the wrong shape. What `s("<sound>")` should actually do:
+
+1.  **Wait on the `m4l-jweb` fetch-to-disk primitive** (see
+    [m4l-jweb's doc/TODO.md](https://github.com/alienmind/m4l-jweb/blob/main/doc/TODO.md)):
+    a generic `[js]`-driven "fetch this URL to this path" call that needs no
+    `[node.script]` at all. Once that lands, both this device and the Samples
+    device should move onto it - Samples to stop crashing Live, Instrument to
+    gain a real download path without ever needing Node.
+2.  **Materialize `s()` references as real sample files** using that
+    primitive, reusing the same dirt-samples/dough-samples/shabda map-fetching
+    logic already built for `alienmind-strudel-sampler` (currently
+    `[node.script]`-only, and only feeding the sample browser UI, not
+    playback) - so both devices share one fetch/cache implementation instead
+    of two.
+3.  **Trigger and shape those real samples with Max-native playback objects**
+    (`buffer~`/`groove~`/`sfplay~`) instead of synthesizing oscillators -
+    `poly~` voices that load a sample into a `buffer~` per voice, or a shared
+    `buffer~` pool, triggered per hap.
+4.  **Map Strudel's transformation functions to the equivalent Max signal
+    parameters** per hap, the same way `cutoff`/`gain` already do for the
+    current synth: pitch-shift via playback rate, `.gain()` to amplitude, a
+    real ADSR instead of the current fixed attack/release, and as many of
+    `.lpf()`/`.room()`/etc. as have a reasonable Max-native equivalent.
+5.  Neither device needs `[node.script]` once Phase 1 lands - both should end
+    up as stable as the MIDI device.

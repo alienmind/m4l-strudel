@@ -5,7 +5,7 @@ import { useDeviceMode } from "@/hooks/useDeviceMode";
 import { isBareMini } from "@/lib/strudelCode";
 import SampleCatalog from "@/components/SampleCatalog";
 
-const MODE_TITLE = { midi: "Strudel MIDI", audio: "Strudel Audio", sampler: "Strudel Samples" } as const;
+const MODE_TITLE = { midi: "Strudel MIDI", instrument: "Strudel Instrument", sampler: "Strudel Samples" } as const;
 
 /**
  * Live's device view is a FIXED ~169px tall - every row here is budgeted.

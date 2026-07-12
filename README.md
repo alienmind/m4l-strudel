@@ -8,11 +8,16 @@ transport.
 
 ## What's in the box
 
+**Strudel MIDI is the one that's ready to use.** Samples and Instrument are
+both **experimental** in this release - shipped so you can see where this is
+going, not for real sessions yet. Fixes for both are planned for an upcoming
+release; see [doc/TODO.md](doc/TODO.md).
+
 | Device | Type | What it does for you |
 |---|---|---|
 | **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
-| **Strudel Samples** (`alienmind-strudel-sampler.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. |
-| **Strudel Audio** (`alienmind-strudel-audio.amxd`) | Instrument | Strudel patterns drive a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) - no external instrument needed. v1, exploratory. |
+| **Strudel Samples** (`alienmind-strudel-sampler.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. **Experimental - not recommended for real sessions yet.** |
+| **Strudel Instrument** (`alienmind-strudel-instrument.amxd`) | Instrument | Drives a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) - no external instrument needed. **Experimental - not recommended for real sessions yet.** |
 
 **New here? Start with the [user guide](doc/ABOUT.md)** - every control of
 every device explained (Bars, Grid, Octave conventions, Shift, Run/Hush,
@@ -86,10 +91,11 @@ If you were setting this repo up from scratch today, this is the path:
    from it via vite aliases (see `vite.config.ts` / `vitest.config.ts`).
 
 3. **Grow `patcher/devices.mjs` to three devices.** One manifest entry per
-   device (`alienmind-strudel-midi` as `type: "midi"`, `-audio` as
-   `type: "instrument"`, `-sampler` as `type: "audio"` with `mode: "sampler"`),
-   each declaring its `chains` (`midiout`, or the project's own `poly` /
-   `sampler` chains registered via `patcher/chains.mjs`) and Push-visible
+   device (`alienmind-strudel-midi` as `type: "midi"`, `-instrument` as
+   `type: "instrument"` with `mode: "instrument"`, `-sampler` as `type: "audio"`
+   with `mode: "sampler"`), each declaring its `chains` (`midiout`, or the
+   project's own `poly` / `sampler` chains registered via
+   `patcher/chains.mjs`) and Push-visible
    `parameters`.
 
 4. **Replace the scaffold's UI with the real one.** `src/app/App.tsx` becomes

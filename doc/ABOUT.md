@@ -14,13 +14,17 @@ transport.
 
 ---
 
+**Strudel MIDI is the one that's ready to use.** Samples and Instrument are
+both **experimental** in this release - not for real sessions yet, fixes
+planned for an upcoming release.
+
 ## What's in the box
 
 | Device | Type, drop it on | What it does for you |
 |---|---|---|
 | **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect, a **MIDI track**, before an instrument | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
-| **Strudel Samples** (`alienmind-strudel-sampler.amxd`) | Audio effect, any **audio track** (audio passes through) | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. |
-| **Strudel Audio** (`alienmind-strudel-audio.amxd`) | Instrument, a **MIDI track**, as the instrument | Strudel patterns drive a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) - no external instrument needed. v1, exploratory. |
+| **Strudel Samples** (`alienmind-strudel-sampler.amxd`) | Audio effect, any **audio track** (audio passes through) | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. **Experimental - not recommended for real sessions yet.** |
+| **Strudel Instrument** (`alienmind-strudel-instrument.amxd`) | Instrument, a **MIDI track**, as the instrument | Drives a built-in polyphonic Max synth (`poly~`, basic waveforms + filter) - no external instrument needed. **Experimental - not recommended for real sessions yet.** |
 
 Press **Run** and patterns play immediately on a free-running clock at the
 project tempo; start **Live's transport** and they lock to the playhead,
@@ -141,20 +145,42 @@ samples into Simpler/Drum Racks natively.
 
 ---
 
-## Strudel Audio (`alienmind-strudel-audio.amxd`)
+## Strudel Instrument (`alienmind-strudel-instrument.amxd`)
 
-![Strudel Audio device](screenshot-audio.png)
+![Strudel Instrument device](screenshot-audio.png)
 
-Same editor, Run/Hush and clip controls as the MIDI device, but the pattern
-drives a **built-in 16-voice polyphonic synth** - no external instrument
-needed. v1 understands the basic Strudel synth params:
+**Experimental - not recommended for real sessions yet.** It drives a
+**built-in 16-voice polyphonic synth** (`poly~` with `cycle~`/`saw~`/`rect~`/
+`tri~` oscillators) instead of Strudel's real sample-based sound engine, so
+`.s("bd")`-style sample references and most of Strudel's transformation chain
+(`.room()`, envelopes beyond a basic attack/release, etc.) do nothing here.
+The voice-synthesis subpatch (`ableton-amxd/voice.maxpat`) was also never
+confirmed to actually produce audio in the real Max editor. Use the MIDI
+device for real sessions; a proper sample-based redesign is planned - see
+[doc/TODO.md](TODO.md).
+
+Same editor, Run/Hush and clip controls as the MIDI device. What v1
+understands, for whatever does come out of it:
 
 - `.s("sine" | "sawtooth" | "square" | "triangle")` - waveform (default sawtooth)
 - `.cutoff(hz)` - low-pass filter cutoff
 - `.gain(0..1)` - level (also used as velocity when `.velocity()` is absent)
 
 Example: `note("c3 e3 g3 b3").s("square").cutoff(1200)` - press **Run**,
-start the transport, and it plays by itself.
+start the transport.
+
+**Why this needs a different fix than "just debug the patch".** `[jweb]` can
+run Strudel's actual sound engine (`@strudel/core` + WebAudio) directly - it's
+a full Chromium view - but there is no way to pipe that browser's audio output
+into Live's signal chain; only Max-native DSP objects can reach `plugout~`.
+So real audio here can never come from running Strudel's JS engine in the
+browser and somehow forwarding the sound - it has to be produced by Max
+objects. The right shape, given that constraint, is closer to the Samples
+device than to a synth: reuse its download/cache pipeline to materialize
+whatever `s()` refers to as a real sample file, then trigger and shape *that*
+with Max-native sample-playback objects (`buffer~`/`groove~`/`sfplay~`)
+instead of synthesizing oscillators from scratch. See
+[doc/TODO.md](TODO.md).
 
 ---
 
@@ -173,6 +199,13 @@ start the transport, and it plays by itself.
 - **From Clip greyed out** → the track has no clips yet; To Clip makes one.
 - **Sampler shows nothing after Load** → check the status line for a fetch
   error (the maps come from the network).
+- **Live crashes with Strudel Samples loaded** → known issue, it hosts
+  `[node.script]` for downloads and that is the one unstable piece in this
+  project. Remove it if it happens repeatedly.
+- **Strudel Instrument makes no sound, or the wrong sound** → expected at
+  this stage - it's a placeholder oscillator synth, not Strudel's real sound
+  engine, and its voice patch was never confirmed to work in the Max editor.
+  Use the MIDI device into a regular instrument instead.
 
 More depth: [README](../README.md) (includes how this project relates to the
 [m4l-jweb](https://github.com/alienmind/m4l-jweb) library it's built on) and
