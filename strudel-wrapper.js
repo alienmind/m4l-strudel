@@ -33,6 +33,10 @@ var clipPoll = new Task(checkClipAvailable, this);
 // live.thisdevice fires bang() when the device is fully loaded in Live;
 // loadbang() is unreliable inside M4L (observed not firing in Live 12), so
 // the node bootstrap runs from BOTH and guards against double execution.
+// LiveAPI trap: objects created in a patcher-loading context (loadbang) are
+// DEAD - they construct without error but never observe or get anything.
+// Observers must be (re)created from live.thisdevice's bang, which fires
+// once the device is fully in the Live set. loadbang only does file work.
 function bang() {
 	post("strudel: bang (device ready)\n");
 	extractNodeBundle();
@@ -45,8 +49,6 @@ function loadbang() {
 	post("strudel: loadbang\n");
 	extractNodeBundle();
 	loadWebview();
-	setupScaleObservers();
-	setupTempoObserver();
 }
 function reload() {
 	extractNodeBundle();
@@ -62,10 +64,12 @@ function reload() {
 // current value when the property is attached.
 var tempoObs = null;
 function setupTempoObserver() {
-	if (tempoObs) return;
+	// Recreate unconditionally: a previous attempt from a loading context
+	// yields a dead object that must not block the real one.
 	try {
 		tempoObs = new LiveAPI(onTempo, "live_set");
 		tempoObs.property = "tempo";
+		post("strudel: tempo observer on (current " + tempoObs.get("tempo") + ")\n");
 	} catch (e) {
 		post("strudel: tempo observer unavailable - " + e.message + "\n");
 	}
@@ -122,7 +126,7 @@ function ui_ready() {
  *  ui_ready handshake re-reads the current tempo so the UI never misses it. */
 function sendCurrentTempo() {
 	try {
-		var api = new LiveAPI(null, "live_set");
+		var api = new LiveAPI("live_set");
 		var t = parseFloat(api.get("tempo"));
 		if (t > 0) {
 			outlet(0, "tempo", t);
@@ -334,7 +338,7 @@ var rootObs = null,
 	liveScale = "Major";
 function setupScaleObservers() {
 	if (MODE !== "sampler") return;
-	if (rootObs && scaleObs) return; // already set up
+	// Recreate unconditionally (same loading-context trap as the tempo observer).
 	try {
 		rootObs = new LiveAPI(onRoot, "live_set");
 		rootObs.property = "root_note";

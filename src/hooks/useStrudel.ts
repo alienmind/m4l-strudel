@@ -67,6 +67,8 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 	const [clipAvailable, setClipAvailable] = useState(!inJweb);
 
 	const [amxdBuild, setAmxdBuild] = useState("?");
+	const tempoRef = useRef(120);
+	const workerRef = useRef<Worker | null>(null);
 
 	useEffect(() => {
 		// The [js] side pushes `clip_available 0/1` (polled once a second).
@@ -74,6 +76,15 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 			setClipAvailable(Number(avail) === 1);
 		});
 		bindInlet("build", (stamp) => setAmxdBuild(String(stamp).split(" ")[0]));
+		// Tempo must be bound BEFORE ui_ready goes out - the wrapper replies
+		// with the current tempo immediately, and the worker effect below runs
+		// after this one. The ref carries the value across that gap.
+		bindInlet("tempo", (bpm) => {
+			if (Number(bpm) > 0) {
+				tempoRef.current = Number(bpm);
+				workerRef.current?.postMessage({ t: "tempo", bpm: Number(bpm) });
+			}
+		});
 		outlet("ui_ready");
 	}, []);
 
@@ -129,7 +140,6 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 	const [live, setLive] = useState(false);
 	const [evalError, setEvalError] = useState<string | null>(null);
 	const [debug, setDebug] = useState("");
-	const workerRef = useRef<Worker | null>(null);
 
 	// The Strudel engine runs in a Web Worker inside jweb (the sampler device
 	// has no live-eval engine). Max feeds transport ticks in as messages; the
@@ -137,9 +147,11 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 	// in the shape the device's output chain expects.
 	useEffect(() => {
 		if (mode === "sampler") return;
-		const counters = { engine: "booting", ticks: 0, sent: 0, playing: 0, beats: 0, bpm: 120 };
+		const counters = { engine: "booting", ticks: 0, sent: 0, playing: 0, beats: 0 };
 		const worker: Worker = new EngineWorker();
 		workerRef.current = worker;
+		// Deliver whatever tempo already arrived before this worker existed.
+		worker.postMessage({ t: "tempo", bpm: tempoRef.current });
 		worker.onmessage = (e: MessageEvent<EngineMessage>) => {
 			const m = e.data;
 			if (m.t === "ready") {
@@ -168,12 +180,6 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 			counters.beats = Number(beats);
 			worker.postMessage({ t: "tick", playing: Number(playing), beats: Number(beats) });
 		});
-		// BPM comes from the wrapper's LiveAPI tempo observer, not plugsync~
-		// (which only reports samples-per-beat).
-		bindInlet("tempo", (bpm) => {
-			counters.bpm = Number(bpm);
-			worker.postMessage({ t: "tempo", bpm: Number(bpm) });
-		});
 		// Health readout, refreshed 1x/s: instantly shows which hop is dead.
 		// ticks stay 0 -> the plugsync~ chain or jweb inbound messages are
 		// broken (ticks flow even with the transport stopped); beats frozen /
@@ -184,7 +190,7 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 			() =>
 				setDebug(
 					`${counters.engine} / t ${counters.ticks} / play ${counters.playing} ` +
-						`/ beat ${counters.beats.toFixed(1)} / bpm ${Math.round(counters.bpm)} / sent ${counters.sent}`,
+						`/ beat ${counters.beats.toFixed(1)} / bpm ${Math.round(tempoRef.current)} / sent ${counters.sent}`,
 				),
 			1000,
 		);
