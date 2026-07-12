@@ -1,11 +1,11 @@
 /**
  * Strudel engine Web Worker (runs inside jweb's Chromium).
  *
- * Replaces the [node.script] engine host for the midi/audio devices: Node for
- * Max proved unstable in the field (silent non-start, then a full Live crash,
- * see doc/ARCHITECTURE.md section 6). jweb is the same platform strudel.cc
- * runs on, and a dedicated worker is exempt from the background-tab timer
- * clamping that would affect the page's main thread.
+ * Replaces the [node.script] engine host: Node for Max proved unstable in the
+ * field (silent non-start, then a full Live crash, see doc/ARCHITECTURE.md
+ * section 6). jweb is the same platform strudel.cc runs on, and a dedicated
+ * worker is exempt from the background-tab timer clamping that would affect
+ * the page's main thread.
  *
  * The clock stays in Max: [plugsync~] ticks arrive as messages (never
  * timer-driven, so throttling does not apply), the lookahead window absorbs
@@ -18,16 +18,13 @@
  *        {t:'hush'}         -> {t:'flush'}
  *   out: {t:'ready'} once the strudel scope is booted
  *        {t:'clock', free} when the clock source flips (free-run vs Live)
- *        {t:'notes', notes:[...]} per lookahead window; each note carries both
- *          the MIDI fields (velocity 1-127, chan) and the synth fields
- *          (vel01, wave, cutoff, gain) - the UI picks per device mode.
+ *        {t:'notes', notes:[...]} per lookahead window, MIDI-shaped
+ *          (pitch, velocity 1-127, durMs, chan, delayMs)
  *        {t:'flush'} on transport stop
  */
-import { bootScope, compile, queryWindow, hapToNote } from "../max/shared/engine.mjs";
-import { LiveTransport } from "../max/shared/transport.mjs";
-import { asStrudelCode } from "../lib/strudelCode";
-
-const WAVES = new Set(["sine", "sawtooth", "square", "triangle"]);
+import { bootScope, compile, queryWindow, hapToNote } from "../../max/shared/engine.mjs";
+import { LiveTransport } from "../../max/shared/transport.mjs";
+import { asStrudelCode } from "../../lib/strudelCode";
 
 let pattern = null;
 let running = false;
@@ -83,17 +80,12 @@ const transport = new LiveTransport({
 		for (const hap of haps) {
 			const n = hapToNote(hap, cps);
 			if (!n) continue;
-			const v = n.value;
 			notes.push({
 				pitch: n.pitch,
 				velocity: n.velocity,
 				durMs: Math.round(n.durMs),
 				chan: n.chan,
 				delayMs: Math.round(transport.delayMs(n.beginCycle, nowBeats, bpm)),
-				vel01: v.velocity ?? v.gain ?? 0.75,
-				wave: WAVES.has(v.s) ? v.s : "sawtooth",
-				cutoff: v.cutoff ?? 8000,
-				gain: v.gain ?? 0.8,
 			});
 		}
 		if (notes.length) postMessage({ t: "notes", notes });

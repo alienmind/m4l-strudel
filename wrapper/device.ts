@@ -7,8 +7,8 @@
  * those, as one ES5 script, so it can see and extend them.
  *
  * What is genuinely ours:
- *   1. The device mode (midi | sampler | instrument), and the fan-out to outlet 1
- *      that the sampler's [node.script] needs.
+ *   1. The device mode (midi | sampler), and the fan-out to outlet 1 that the
+ *      sampler's [node.script] needs.
  *   2. clip_available: a poll, because LiveAPI has no observer for "any clip on
  *      this track", so the UI can disable From Clip when there is nothing to read.
  *   3. Live 12's global root_note/scale_name, forwarded to the UI and to node.
@@ -25,7 +25,7 @@
  * silently false forever - which is exactly the bug this project shipped for
  * months. Scan for a known token rather than trusting an index.
  */
-var MODES = ["midi", "sampler", "instrument"];
+var MODES = ["midi", "sampler"];
 function resolveStrudelMode(): string {
 	for (var i = 0; i < jsarguments.length; i++) {
 		var a = String(jsarguments[i]);

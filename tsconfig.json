@@ -18,7 +18,11 @@
 		"noFallthroughCasesInSwitch": true,
 		"baseUrl": ".",
 		"paths": {
-			"@/*": ["src/*"]
+			"@/*": ["src/*"],
+			// vite rebinds this per build (see vite.config.ts). tsc cannot, so it
+			// typechecks src/main.tsx against ONE device - which is enough, because
+			// every device's app is under src/ and gets typechecked on its own anyway.
+			"@device/*": ["src/app/midi/*"]
 		},
 		"types": ["vitest/globals"]
 	},

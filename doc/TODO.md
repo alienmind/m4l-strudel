@@ -23,9 +23,9 @@ When you use "From Clip", the plugin reads the raw MIDI notes back from the clip
 
 1.  **Forward Live 12 Scale to All Modes:**
     *   In `wrapper/device.ts`, the function `setupScaleObservers()` currently has an early exit `if (!IS_SAMPLER) return;`.
-    *   **Action:** Remove this guard so that the MIDI and Audio device modes also observe Live 12's `root_note` and `scale_name`. The wrapper will then send `scale <root> <name>` to the UI.
+    *   **Action:** Remove this guard so that the MIDI device mode also observes Live 12's `root_note` and `scale_name` (the Sampler already does). The wrapper will then send `scale <root> <name>` to the UI.
 
-2.  **Bind Scale in the UI (`useStrudel.ts`):**
+2.  **Bind Scale in the UI (`src/app/midi/useStrudel.ts`):**
     *   **Action:** In `useStrudel.ts`, add state variables for `rootNote` (number) and `scaleName` (string).
     *   Bind the `scale` inlet using `bindInlet("scale", (root, name) => { ... })` to update the state.
     *   Pass the `rootNote` and `scaleName` down into `renderPattern` (for To Clip functionality).
@@ -91,40 +91,95 @@ When you use "From Clip", the plugin reads the raw MIDI notes back from the clip
     *   **No Interference / No Extra Threads needed:** Because `queryWindow` is a stateless evaluation, querying cycles `0` through `4` for a clip export will not mutate or disrupt the ongoing pattern playback (which simply queries the same pattern object for tiny real-time chunks as Ableton ticks). A single worker thread is perfectly sufficient.
     *   The worker returns an array of fully-baked MIDI notes to React, which then forwards them to Ableton. This instantly closes the gap, adding 100% support for every Strudel note transformation to the "To Clip" exporter.
 
-### [FEAT-04] Phase 6: Native Instrument Mode (`iiii`) - IMPLEMENTED, NOT USEFUL
+### [FEAT-04] Phase 6, attempt 1: Native Instrument Mode (`iiii`) - REMOVED
 
-1.  **Context (from abandoned `STRUDEL_PLANS.md`):**
-    *   The original architectural plan called for an "Instrument" device variant (`iiii`) that would take Strudel patterns (like `note("c3 e3").s("sawtooth")`) and generate audio directly from the device by routing Max messages into a `[poly~]` synthesizer, rather than just emitting MIDI notes.
-    *   Because the current Strudel engine runs in a Web Worker (inside `jweb`), it cannot route WebAudio directly into Ableton's signal path. This is a hard constraint, not a bug to fix: `[jweb]` is a Chromium view with no object that pipes its audio output into `plugout~`. Any real sound from this device has to come from Max-native DSP objects.
+**History, kept so nobody re-proposes the same shape.** The original plan
+(from the abandoned `STRUDEL_PLANS.md`) called for an "Instrument" device
+variant that would take Strudel patterns (`note("c3 e3").s("sawtooth")`) and
+generate audio directly, by routing messages into a `[poly~]` synthesizer
+instead of emitting MIDI notes. What got built: `ableton-amxd/voice.maxpat`,
+a hand-authored `[poly~]` synth (`cycle~`/`saw~`/`rect~`/`tri~` selected via
+message, a basic envelope via `line~`), driven by `voice <note> <vel01>
+<durMs> <wave> <cutoff> <gain> <delayMs>` messages (`patcher/chains.mjs`'s
+`"poly"` chain, mode `"instrument"`, device `alienmind-strudel-instrument`).
 
-2.  **What got built:** `ableton-amxd/voice.maxpat`, a hand-authored `[poly~]` synth (`cycle~`/`saw~`/`rect~`/`tri~` selected via message, basic envelope via `line~`), driven by `voice <note> <vel01> <durMs> <wave> <cutoff> <gain> <delayMs>` messages from the worker (`patcher/chains.mjs`'s `"poly"` chain). The mode was originally (and confusingly) called `"audio"`, colliding with the unrelated "audio effect" container type used by the Sampler; renamed to `"instrument"` (`resolveStrudelMode()` in `wrapper/device.ts`, `patcher/devices.mjs`, `alienmind-strudel-instrument.amxd`).
+**Removed entirely** (`voice.maxpat`, the `"poly"` chain, the `"instrument"`
+manifest entry and mode). Two independent problems, not one:
 
-3.  **Status: shipped but not musically useful, and unverified.** `voice.maxpat` carries its own comment flagging it as a "SKELETON PATCH - not hand-verified in the Max editor." It reinvents a crude oscillator synth instead of using Strudel's actual sound engine - `.s("bd")`-style sample references and most of the real transformation chain (`.room()`, real envelopes, etc.) do nothing here. Do not treat this as done; see Phase 7 below for the actual direction.
+1.  **It never made musical sense.** It reinvented a crude oscillator synth
+    instead of using Strudel's real sound engine - `.s("bd")`-style sample
+    references and most of the real transformation chain (`.room()`, real
+    envelopes, etc.) did nothing. It also copied the MIDI device's note-editor
+    UI wholesale (Bars/Grid/Octave/Shift, To Clip/From Clip), which makes no
+    sense for something that is supposed to be an audio-effects surface, not
+    a pattern sequencer.
+2.  **`voice.maxpat` was also unverified** - it carried its own comment
+    flagging it as a "SKELETON PATCH - not hand-verified in the Max editor",
+    and in testing it never actually produced audio.
 
-### [FEAT-05] Phase 7: Sample-based instrument, reusing the Sampler's download pipeline
+See Phase 7 for the actual direction - and note it is a different KIND of
+device, not a fix to this one.
 
-The oscillator synth in Phase 6 is the wrong shape. What `s("<sound>")` should actually do:
+### [FEAT-05] Phase 7: Strudel Audio FX - a real audio effects chain, not an instrument
 
-1.  **Wait on the `m4l-jweb` fetch-to-disk primitive** (see
-    [m4l-jweb's doc/TODO.md](https://github.com/alienmind/m4l-jweb/blob/main/doc/TODO.md)):
-    a generic `[js]`-driven "fetch this URL to this path" call that needs no
-    `[node.script]` at all. Once that lands, both this device and the Samples
-    device should move onto it - Samples to stop crashing Live, Instrument to
-    gain a real download path without ever needing Node.
-2.  **Materialize `s()` references as real sample files** using that
-    primitive, reusing the same dirt-samples/dough-samples/shabda map-fetching
-    logic already built for `alienmind-strudel-sampler` (currently
-    `[node.script]`-only, and only feeding the sample browser UI, not
-    playback) - so both devices share one fetch/cache implementation instead
-    of two.
-3.  **Trigger and shape those real samples with Max-native playback objects**
-    (`buffer~`/`groove~`/`sfplay~`) instead of synthesizing oscillators -
-    `poly~` voices that load a sample into a `buffer~` per voice, or a shared
-    `buffer~` pool, triggered per hap.
-4.  **Map Strudel's transformation functions to the equivalent Max signal
-    parameters** per hap, the same way `cutoff`/`gain` already do for the
-    current synth: pitch-shift via playback rate, `.gain()` to amplitude, a
-    real ADSR instead of the current fixed attack/release, and as many of
-    `.lpf()`/`.room()`/etc. as have a reasonable Max-native equivalent.
-5.  Neither device needs `[node.script]` once Phase 1 lands - both should end
-    up as stable as the MIDI device.
+**The reframe.** The third device should never have been an instrument. Strudel
+already has a real vocabulary of audio-effect primitives (`.lpf()`, `.hpf()`,
+`.room()`, `.gain()`, `.delay()`, `.crush()`, `.pan()`, ...) - the thing this
+device should do is let you write **one line** describing an effects chain and
+apply it to whatever audio is already coming into the track, the way a
+producer reaches for Auto Filter or a reverb send. Not a synth, not a note
+editor, not a sample player: an **audio effect** (`type: "audio"`, same
+container tag as the Sampler), sitting anywhere in an audio chain.
+
+**What it is not.** No pattern editor, no Bars/Grid/Octave/Shift, no To
+Clip/From Clip - none of the MIDI device's UI has any business here. The UI
+this device wants is closer to the `hello-audio` example in `m4l-jweb` (a
+compact readout of the *live* effect parameters) than to anything in this
+repo today.
+
+**Design sketch:**
+
+1.  **Parse the one-line expression with Strudel's own machinery, not a new
+    parser.** `.lpf(800).room(0.3).gain(1.2)` is just JavaScript method
+    chaining - the same `@strudel/transpiler` this repo already depends on for
+    Live Play can evaluate it. Walk the resulting pattern (or, for the common
+    case of constant arguments, just the AST) to pull out `{ effect: "lpf",
+    args: [800] }` pairs. Reuse `src/lib/strudelCode.ts`'s existing
+    parse/compile path rather than inventing a second one, the same lesson
+    Phase 5 already learned about the mini-notation parser.
+2.  **Drive real Max DSP chains with the parsed values**, using
+    `writableParams()`'s `set_<id>` pattern (`packages/build/src/chains.mjs`
+    in `m4l-jweb`, already proven by the `lowpass`/`gain` chains there) -
+    `lpf`/`hpf` map onto `onepole~`/`svf~`, `gain` onto `*~`, `room` needs a
+    reverb object the chain vocabulary does not have yet (Stage 3.4 in
+    `m4l-jweb`'s `doc/TODO.md`: "`plugin~ -> DSP -> plugout~`... the obvious
+    gaps"). Growing that vocabulary in `m4l-jweb` (not duplicating it here)
+    benefits every device that wants an audible effect, not just this one.
+3.  **Static values are the honest v1.** The user edits the line, the app
+    parses it once, and writes each value with `set_<param>` - exactly like
+    `hello-audio`'s Cutoff slider, just driven by text instead of a drag.
+4.  **Pattern-driven modulation is the interesting v2, and it is not free.**
+    Strudel expressions like `.lpf(sine.range(200,2000))` describe continuous
+    modulation, which means re-querying the pattern on every transport tick
+    and writing new `set_<param>` values at 20 Hz - the same tick-driven
+    machinery the MIDI device already has (`src/app/midi/useStrudel.ts`'s
+    tick handler), repurposed to drive continuous parameters instead of
+    discrete notes. Do v1 first; only build this once static values work and
+    are worth automating.
+5.  **Depends on `m4l-jweb`'s Surface (Stage 2 there) for a clean parameter
+    set** - once it lands, the effect's live parameters (cutoff, room size,
+    gain) should be a `surface.ts` declaration like every other device's,
+    Push-visible and automatable, instead of hand-wired `writableParams()`
+    calls. Not blocking: v1 can ship with the manifest's `parameters` field
+    the way `hello-audio` does today.
+
+**Open questions, not yet answered:**
+
+- Which Strudel effect primitives get a real Max-native mapping first, and
+  which never will (some, like heavily convolution-based effects, may have no
+  reasonable `plugin~`-chain equivalent at all)?
+- Does one text line stay the whole interface, or does it need per-effect
+  sliders once more than two or three effects are chained?
+- How much of "the DSL is just JS method chaining" survives contact with
+  users who are not already Strudel users - is `.lpf(800)` legible without
+  strudel.cc's own docs open?

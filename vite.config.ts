@@ -1,43 +1,71 @@
-import { defineConfig } from "vite";
+import { defineConfig, type UserConfig } from "vite";
 import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
 import pkg from "./package.json";
+import { devices, uiDir } from "./scripts/devices.mjs";
 
-const pkg2 = (p: string) => fileURLToPath(new URL(`./strudel/packages/${p}`, import.meta.url));
+const strudelPkg = (p: string) => fileURLToPath(new URL(`./strudel/packages/${p}`, import.meta.url));
 
-export default defineConfig({
-	base: "./",
-	plugins: [react(), tailwindcss(), viteSingleFile()],
-	resolve: {
-		// @strudel/* resolve into the git submodule (same aliases as
-		// vitest.config.ts) - the engine worker bundles the real engine.
-		alias: [
-			{ find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
-			{ find: "@strudel/core/fraction.mjs", replacement: pkg2("core/fraction.mjs") },
-			{ find: "@strudel/core", replacement: pkg2("core/index.mjs") },
-			{ find: "@strudel/mini", replacement: pkg2("mini/index.mjs") },
-			{ find: "@strudel/transpiler", replacement: pkg2("transpiler/index.mjs") },
-			{ find: "@strudel/tonal", replacement: pkg2("tonal/index.mjs") },
-		],
-	},
-	define: {
-		__APP_VERSION__: JSON.stringify(pkg.version),
-	},
-	// The engine worker contains dynamic imports (evalScope). They must be
-	// bundled into the single inlined chunk: a ?worker&inline blob URL cannot
-	// resolve relative chunk imports at runtime.
-	worker: {
-		format: "es",
-		rollupOptions: {
-			output: {
-				inlineDynamicImports: true,
+/**
+ * ONE BUILD PER DEVICE.
+ *
+ * This repo ships two devices (MIDI, Samples), each `.amxd` embeds its OWN UI
+ * bundle, and a device should ship what it is - not its sibling's code. So the
+ * app to bundle is chosen here, by DEVICE, and src/main.tsx imports it through
+ * the `@device` alias. There is no `mode === "..."` branch anywhere in the app.
+ *
+ * DEVICE is set by scripts/dev.mjs and scripts/build-ui.mjs (which read the
+ * device list from patcher/devices.mjs). It is an env var rather than vite's
+ * `--mode` deliberately: `--mode` also flips `import.meta.env.DEV`, and a build
+ * with DEV=true would ship the dev harness inside the device.
+ *
+ * A FACTORY, not a plain object: scripts/build-ui.mjs sets DEVICE and calls
+ * vite's build() once per device in the same process; a top-level `const DEVICE
+ * = process.env.DEVICE` would be evaluated once, when the module was first
+ * loaded, and every device after the first would be built from the first one's
+ * sources.
+ */
+export default defineConfig(() => {
+	const DEVICE = process.env.DEVICE ?? uiDir(devices[0]);
+
+	const config: UserConfig = {
+		base: "./",
+		plugins: [react(), tailwindcss(), viteSingleFile()],
+		resolve: {
+			alias: [
+				{ find: "@device", replacement: fileURLToPath(new URL(`./src/app/${DEVICE}`, import.meta.url)) },
+				{ find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
+				// @strudel/* resolve into the git submodule (same aliases as
+				// vitest.config.ts) - the engine worker bundles the real engine.
+				{ find: "@strudel/core/fraction.mjs", replacement: strudelPkg("core/fraction.mjs") },
+				{ find: "@strudel/core", replacement: strudelPkg("core/index.mjs") },
+				{ find: "@strudel/mini", replacement: strudelPkg("mini/index.mjs") },
+				{ find: "@strudel/transpiler", replacement: strudelPkg("transpiler/index.mjs") },
+				{ find: "@strudel/tonal", replacement: strudelPkg("tonal/index.mjs") },
+			],
+		},
+		define: {
+			__APP_VERSION__: JSON.stringify(pkg.version),
+			__DEVICE__: JSON.stringify(DEVICE),
+		},
+		// The engine worker contains dynamic imports (evalScope). They must be
+		// bundled into the single inlined chunk: a ?worker&inline blob URL cannot
+		// resolve relative chunk imports at runtime.
+		worker: {
+			format: "es",
+			rollupOptions: {
+				output: {
+					inlineDynamicImports: true,
+				},
 			},
 		},
-	},
-	build: {
-		outDir: "dist",
-		emptyOutDir: true,
-	},
+		build: {
+			// dist/ui/<device>/index.html - one per device, picked up by `m4l-jweb build`.
+			outDir: `dist/ui/${DEVICE}`,
+			emptyOutDir: true,
+		},
+	};
+	return config;
 });

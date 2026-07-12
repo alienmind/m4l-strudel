@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { bindInlet, inJweb, outlet, uiReady } from "@m4l-jweb/bridge";
+import { bindInlet, flushNotes, inJweb, outlet, sendNote, uiReady } from "@m4l-jweb/bridge";
 import { renderPattern, toFlatList } from "@/lib/mini/render";
 import { eventsToMini, type RawNote } from "@/lib/mini/unparse";
 import type { OctaveConvention } from "@/lib/mini/notes";
-import type { DeviceMode } from "@/hooks/useDeviceMode";
-import EngineWorker from "@/app/engine.worker.js?worker&inline";
+import EngineWorker from "./engine.worker.js?worker&inline";
+import { IN, OUT } from "./protocol";
 
 interface EngineNote {
 	pitch: number;
@@ -12,10 +12,6 @@ interface EngineNote {
 	durMs: number;
 	chan: number;
 	delayMs: number;
-	vel01: number;
-	wave: string;
-	cutoff: number;
-	gain: number;
 }
 
 type EngineMessage =
@@ -44,7 +40,7 @@ export interface StrudelState {
 	clipAvailable: boolean;
 	toMidi: () => void;
 	fromMidi: () => void;
-	/** Live evaluation (midi/audio devices): real Strudel engine in a Web Worker. */
+	/** Real Strudel engine, running live in a Web Worker. */
 	live: boolean;
 	evalError: string | null;
 	run: () => void;
@@ -56,7 +52,7 @@ export interface StrudelState {
 	amxdBuild: string;
 }
 
-export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
+export function useStrudel(): StrudelState {
 	const [text, setText] = useState("c5 [e5 g5]*2 ~ <a5 b5>");
 	const [bars, setBars] = useState(1);
 	const [grid, setGrid] = useState(16);
@@ -73,14 +69,14 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 
 	useEffect(() => {
 		// The [js] side pushes `clip_available 0/1` (polled once a second).
-		bindInlet("clip_available", (avail) => {
+		bindInlet(IN.clip_available, (avail) => {
 			setClipAvailable(Number(avail) === 1);
 		});
-		bindInlet("build", (stamp) => setAmxdBuild(String(stamp).split(" ")[0]));
+		bindInlet(IN.build, (stamp) => setAmxdBuild(String(stamp).split(" ")[0]));
 		// Tempo must be bound BEFORE ui_ready goes out - the wrapper replies
 		// with the current tempo immediately, and the worker effect below runs
 		// after this one. The ref carries the value across that gap.
-		bindInlet("tempo", (bpm) => {
+		bindInlet(IN.tempo, (bpm) => {
 			if (Number(bpm) > 0) {
 				tempoRef.current = Number(bpm);
 				workerRef.current?.postMessage({ t: "tempo", bpm: Number(bpm) });
@@ -96,7 +92,7 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 
 	// From MIDI: the [js] side replies `notes <loopEndBeats> <n> <p s d> ...`
 	useEffect(() => {
-		bindInlet("notes", (...args) => {
+		bindInlet(IN.notes, (...args) => {
 			const loopEnd = Number(args[0]);
 			const n = Number(args[1]);
 			const raw: RawNote[] = [];
@@ -114,7 +110,7 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 			setText(mini);
 			setStatus(`Read ${n} notes → ${barsRead} bar(s)`);
 		});
-		bindInlet("read_error", () => {
+		bindInlet(IN.read_error, () => {
 			setStatus("No clip found on this track - create or play a MIDI clip first");
 		});
 	}, [grid, conv, octaveOffset]);
@@ -129,12 +125,12 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 			setStatus(`Parse error at ${errs[0].pos}: ${errs[0].msg}`);
 			return;
 		}
-		outlet("write_clip", ...toFlatList(notes, lengthBeats));
+		outlet(OUT.write_clip, ...toFlatList(notes, lengthBeats));
 		setStatus(`Wrote ${notes.length} notes over ${lengthBeats} beats`);
 	}, [text, bars, conv, octaveOffset]);
 
 	const fromMidi = useCallback(() => {
-		outlet("read_notes");
+		outlet(OUT.read_notes);
 		setStatus("Reading the playing/first clip on this track…");
 	}, []);
 
@@ -142,12 +138,10 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 	const [evalError, setEvalError] = useState<string | null>(null);
 	const [debug, setDebug] = useState("");
 
-	// The Strudel engine runs in a Web Worker inside jweb (the sampler device
-	// has no live-eval engine). Max feeds transport ticks in as messages; the
-	// worker replies with scheduled note events that we forward to the patcher
-	// in the shape the device's output chain expects.
+	// The Strudel engine runs in a Web Worker inside jweb. Max feeds transport
+	// ticks in as messages; the worker replies with scheduled note events that
+	// we forward to the packaged `midiout` chain via sendNote().
 	useEffect(() => {
-		if (mode === "sampler") return;
 		const counters = { engine: "booting", ticks: 0, sent: 0, playing: 0, beats: 0, clock: "stop" };
 		const worker: Worker = new EngineWorker();
 		workerRef.current = worker;
@@ -168,18 +162,17 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 			} else if (m.t === "notes") {
 				counters.sent += m.notes.length;
 				for (const n of m.notes) {
-					if (mode === "instrument") outlet("voice", n.pitch, n.vel01, n.durMs, n.wave, n.cutoff, n.gain, n.delayMs);
-					else outlet("midinote", n.pitch, n.velocity, n.durMs, n.chan, n.delayMs);
+					sendNote({ pitch: n.pitch, velocity: n.velocity, durationMs: n.durMs, channel: n.chan, delayMs: n.delayMs });
 				}
 			} else if (m.t === "flush") {
-				outlet(mode === "instrument" ? "allnotesoff" : "flush");
+				flushNotes();
 			} else if (m.t === "clock") {
 				counters.clock = m.free ? "free" : "live";
 				if (m.free) setStatus("Running on the free clock - press Play in Live to lock to the grid");
 				else setStatus("Pattern running (locked to Live)");
 			}
 		};
-		bindInlet("tick", (playing, beats) => {
+		bindInlet(IN.tick, (playing, beats) => {
 			counters.ticks++;
 			counters.playing = Number(playing);
 			counters.beats = Number(beats);
@@ -204,7 +197,7 @@ export function useStrudel(mode: DeviceMode = "midi"): StrudelState {
 			worker.terminate();
 			workerRef.current = null;
 		};
-	}, [mode]);
+	}, []);
 
 	const run = useCallback(() => {
 		workerRef.current?.postMessage({ t: "code", code: text });

@@ -1,32 +1,28 @@
 import { ArrowDownToLine, ArrowUpFromLine, Play, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useStrudel } from "@/hooks/useStrudel";
-import { useDeviceMode } from "@/hooks/useDeviceMode";
 import { isBareMini } from "@/lib/strudelCode";
-import SampleCatalog from "@/components/SampleCatalog";
-
-const MODE_TITLE = { midi: "Strudel MIDI", instrument: "Strudel Instrument", sampler: "Strudel Samples" } as const;
+import { useStrudel } from "./useStrudel";
 
 /**
+ * Strudel MIDI - a MIDI effect. Sits on a MIDI track, before an instrument,
+ * and streams live MIDI generated from a Strudel pattern.
+ *
  * Live's device view is a FIXED ~169px tall - every row here is budgeted.
  * Layout: header (14) + editor (flex, min 48) + controls (22) + one button
  * row (30) + footer (14) + gaps/padding ~= 160px. Never add a row without
  * removing one.
  */
 export default function App() {
-	const mode = useDeviceMode();
-	const s = useStrudel(mode);
+	const s = useStrudel();
 	// Full Strudel code is for the live engine only; the clip converter (and
 	// its parser errors / note counter) apply to bare mini-notation.
 	const codeMode = !isBareMini(s.text);
 
-	if (mode === "sampler") return <SampleCatalog />;
-
 	return (
-		<div className="flex h-full w-full flex-col gap-1 overflow-hidden bg-background p-1.5 text-foreground">
+		<div className="device flex h-full w-full flex-col gap-1 overflow-hidden bg-background p-1.5 text-foreground">
 			<div className="flex items-center justify-between leading-none">
 				<span className="text-xs font-semibold tracking-tight">
-					{MODE_TITLE[mode]}
+					Strudel MIDI
 					<span
 						className={cn(
 							"ml-1 font-normal",

@@ -80,3 +80,30 @@ body {
 	overflow: hidden;
 	user-select: none;
 }
+
+/*
+ * Dev only (@m4l-jweb/surface/dev). The harness renders beside the app in dev,
+ * so the PAGE is no longer the device view - but the DEVICE still is. It keeps
+ * its real ~169px box, deliberately: a UI that clips in Live must clip here
+ * too, or the harness is lying about the one constraint that is cheapest to
+ * catch.
+ */
+body:has(.dev-layout) {
+	height: 100vh;
+	overflow: auto;
+	user-select: auto;
+}
+
+.dev-layout {
+	align-items: flex-start;
+	background: #0e1013;
+	display: flex;
+	height: 100vh;
+}
+
+.dev-layout .device {
+	border: 1px solid #262a31;
+	flex: 1;
+	height: 169px;
+	max-width: 640px;
+}

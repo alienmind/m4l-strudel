@@ -1,81 +1,30 @@
 /**
  * chains.mjs - the chains that are specific to THIS project.
  *
- * @m4l-jweb/build ships a canned vocabulary (midiin, midiout, passthrough) that
- * covers the common shapes. Anything device-specific belongs here, and importing
- * this file is all it takes: the build loads patcher/chains.mjs if it exists, and
- * registerChain() mutates the shared vocabulary before any device is generated.
+ * @m4l-jweb/build ships a canned vocabulary (midiin, midiout, passthrough,
+ * gain, lowpass) that covers the common shapes. Anything device-specific
+ * belongs here, and importing this file is all it takes: the build loads
+ * patcher/chains.mjs if it exists, and registerChain() mutates the shared
+ * vocabulary before any device is generated.
  *
- * Two chains live here, both for reasons the library should not have to know:
+ * One chain lives here today:
  *
- *   poly     - a message-driven poly~ synth voice bank (the instrument device).
- *   sampler  - [node.script] + an sfplay~ preview (the sampler device).
+ *   sampler  - [node.script] + an sfplay~ preview (the Samples device).
  *
- * The sampler is the ONLY place in this project that uses node.script, and the
+ * This is the ONLY place in this project that uses node.script, and the
  * library deliberately does not support it: Node for Max is unstable inside Live
  * (silently ignoring `script start`, and at worst crashing the host), which is
  * why the Strudel engine itself runs in a Web Worker instead. The sampler pays
  * that cost because it genuinely needs the OS - HTTP fetch and a filesystem -
  * and a Web Worker has neither. Keeping it here keeps the risk where it is
  * understood.
+ *
+ * There used to be a second chain, "poly": a hand-rolled poly~ oscillator
+ * synth for an "Audio" instrument device. It was removed - see doc/TODO.md for
+ * why and what replaces it. The synth patch it depended on
+ * (ableton-amxd/voice.maxpat) is gone too.
  */
 import { box, line, registerChain, removeBox } from "@m4l-jweb/build/chains";
-
-/**
- * "poly" - the instrument device.
- *
- * The app emits `voice <note> <vel01> <durMs> <wave> <cutoff> <gain> <delayMs>`
- * and `allnotesoff`. Compute WHEN in the worker; let Max place the note.
- */
-registerChain("poly", ({ boxes, lines, jwebId, unmatchedId }) => {
-	// This chain owns jweb's output, so the template's direct jweb -> js cord is
-	// replaced by the route's unmatched outlet.
-	for (let i = lines.length - 1; i >= 0; i--) {
-		const pl = lines[i].patchline;
-		if (pl.source[0] === jwebId && pl.destination[0] === unmatchedId) lines.splice(i, 1);
-	}
-
-	// An instrument has MIDI in and audio out: midiout goes.
-	removeBox(boxes, lines, "obj-midiout");
-
-	boxes.push(box("obj-routev", "route voice allnotesoff", { numoutlets: 3, outlettype: ["", "", ""] }));
-	// Same right-to-left unpack as the packaged midiout chain: the delay must
-	// reach pipe's cold inlet before the note hits the hot one.
-	boxes.push(
-		box("obj-unpackv", "unpack 0 0. 0 s 0. 0. 0", {
-			numinlets: 1,
-			numoutlets: 7,
-			outlettype: ["int", "float", "int", "", "float", "float", "int"],
-		}),
-	);
-	boxes.push(box("obj-pipev", "pipe 0 0. 0 s 0. 0. 0", { numinlets: 7, numoutlets: 6 }));
-	boxes.push(box("obj-pakv", "pak 0 0. 0 s 0. 0.", { numinlets: 6, numoutlets: 1 }));
-	boxes.push(box("obj-notemsg", "prepend note"));
-	// The filename must match the frozen extra file's basename - see the
-	// manifest's extraFiles. poly~ is Max-native, so it CAN read it while frozen.
-	boxes.push(
-		box("obj-poly", "poly~ voice.maxpat 16 @steal 1", {
-			numinlets: 1,
-			numoutlets: 2,
-			outlettype: ["signal", "signal"],
-		}),
-	);
-	boxes.push(box("obj-plugout", "plugout~", { numinlets: 2, numoutlets: 0 }));
-	boxes.push(box("obj-voiceprint", "print strudel-voice"));
-
-	lines.push(line(jwebId, 0, "obj-routev", 0));
-	lines.push(line("obj-routev", 0, "obj-unpackv", 0));
-	lines.push(line("obj-routev", 0, "obj-voiceprint", 0));
-	for (let i = 0; i < 7; i++) lines.push(line("obj-unpackv", i, "obj-pipev", i));
-	for (let i = 0; i < 6; i++) lines.push(line("obj-pipev", i, "obj-pakv", i));
-	lines.push(line("obj-pakv", 0, "obj-notemsg", 0));
-	lines.push(line("obj-notemsg", 0, "obj-poly", 0));
-	lines.push(line("obj-poly", 0, "obj-plugout", 0));
-	lines.push(line("obj-poly", 1, "obj-plugout", 1));
-	// allnotesoff has no consumer: poly~ voices release on their own envelopes.
-	// Wire "target 0, mute 1" here if voices are ever observed hanging.
-	lines.push(line("obj-routev", 2, unmatchedId, 0)); // ui_ready / write_clip / read_notes
-});
 
 /**
  * "sampler" - the sample-fetcher device (an audio effect).

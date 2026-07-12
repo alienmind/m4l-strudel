@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, FolderOpen, Play, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { bindInlet, outlet } from "@m4l-jweb/bridge";
+import { bindInlet, outlet, uiReady } from "@m4l-jweb/bridge";
+import { IN, OUT } from "./protocol";
 
 const PITCH_CLASS_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -22,7 +23,12 @@ interface RowState {
 	downloadedPath: string | null;
 }
 
-export default function SampleCatalog() {
+/**
+ * Strudel Samples - an audio effect. Sits anywhere on an audio track (audio
+ * passes through untouched) and browses/downloads Strudel's sample-map
+ * universe via the [node.script] host.
+ */
+export default function App() {
 	const [mapUrl, setMapUrl] = useState(PRESET_MAPS[0].url);
 	const [loading, setLoading] = useState(false);
 	const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
@@ -33,38 +39,39 @@ export default function SampleCatalog() {
 	const [liveScaleName, setLiveScaleName] = useState<string | null>(null);
 
 	useEffect(() => {
-		bindInlet("catalog", (b64) => {
+		bindInlet(IN.catalog, (b64) => {
 			const entries = JSON.parse(atob(String(b64))) as CatalogEntry[];
 			setCatalog(entries);
 			setRows(Object.fromEntries(entries.map((e) => [e.name, { n: 0, progress: null, downloadedPath: null }])));
 			setLoading(false);
 			setStatus(`Loaded ${entries.length} sound(s)`);
 		});
-		bindInlet("downloaded", (b64) => {
+		bindInlet(IN.downloaded, (b64) => {
 			const file = atob(String(b64));
 			setStatus(`Downloaded → ${file}`);
 		});
-		bindInlet("progress", (name, done, total) => {
+		bindInlet(IN.progress, (name, done, total) => {
 			setRows((r) => ({
 				...r,
 				[String(name)]: { ...(r[String(name)] ?? { n: 0, downloadedPath: null }), progress: `${done}/${total}` },
 			}));
 		});
-		bindInlet("fetcherr", (b64) => {
+		bindInlet(IN.fetcherr, (b64) => {
 			setLoading(false);
 			setStatus(`Error: ${atob(String(b64))}`);
 		});
 		// v1: informational only - Live's global key/scale, not used to filter yet.
-		bindInlet("scale", (root, ...nameParts) => {
+		bindInlet(IN.scale, (root, ...nameParts) => {
 			setLiveRoot(Number(root));
 			setLiveScaleName(nameParts.join(" "));
 		});
+		uiReady();
 	}, []);
 
 	const load = () => {
 		setLoading(true);
 		setStatus(`Loading ${mapUrl}…`);
-		outlet("load_map", mapUrl);
+		outlet(OUT.load_map, mapUrl);
 	};
 
 	const setRowN = (name: string, n: number) => {
@@ -72,16 +79,16 @@ export default function SampleCatalog() {
 	};
 
 	const preview = (name: string, n: number) => {
-		outlet("preview", name, n);
+		outlet(OUT.preview, name, n);
 		setPlaying(name);
 	};
 	const stopPreview = () => {
-		outlet("preview_stop");
+		outlet(OUT.preview_stop);
 		setPlaying(null);
 	};
 
 	return (
-		<div className="flex h-full w-full flex-col gap-2 bg-background p-2 text-foreground">
+		<div className="device flex h-full w-full flex-col gap-2 bg-background p-2 text-foreground">
 			<div className="flex items-center justify-between">
 				<span className="text-xs font-semibold tracking-tight">Strudel Samples</span>
 				{liveScaleName && (
@@ -176,14 +183,14 @@ export default function SampleCatalog() {
 													</button>
 												)}
 												<button
-													onClick={() => outlet("download", e.name, row.n)}
+													onClick={() => outlet(OUT.download, e.name, row.n)}
 													className="rounded p-1 hover:bg-input/50"
 													title="Download this variation"
 												>
 													<Download className="size-3" />
 												</button>
 												<button
-													onClick={() => outlet("download_all", e.name)}
+													onClick={() => outlet(OUT.download_all, e.name)}
 													className={cn(
 														"rounded px-1 py-0.5 hover:bg-input/50",
 														row.progress && "text-accent-foreground",
@@ -205,7 +212,7 @@ export default function SampleCatalog() {
 			<div className="flex items-center justify-between gap-2">
 				<span className="truncate text-[10px] text-muted-foreground">{status}</span>
 				<button
-					onClick={() => outlet("open_folder")}
+					onClick={() => outlet(OUT.open_folder)}
 					className="flex shrink-0 items-center gap-1 rounded-md bg-input/50 px-2 py-1 text-[11px] hover:brightness-110"
 					title="Open the local samples folder"
 				>
