@@ -1,20 +1,23 @@
 {
 	"name": "m4l-strudel",
 	"private": true,
-	"version": "0.4.1",
+	"version": "0.5.0",
 	"type": "module",
 	"packageManager": "pnpm@10.0.0",
-	"description": "Max for Live MIDI device - Strudel mini-notation ↔ MIDI clip, rendered as a React app inside jweb",
+	"license": "AGPL-3.0-or-later",
+	"description": "Max for Live devices for Strudel - live pattern evaluation to MIDI, a poly~ synth and a sample fetcher, built on M4L-JWEB",
 	"scripts": {
 		"dev": "vite --host 127.0.0.1 --port 5175",
-		"build": "tsc -b && vite build && node scripts/build-node-bundles.mjs && node scripts/generate-patchers.mjs && node scripts/postbuild.mjs",
+		"build": "tsc -b && vite build && node scripts/build-node-bundles.mjs && m4l-jweb build",
 		"build:node": "node scripts/build-node-bundles.mjs",
-		"build:patchers": "node scripts/generate-patchers.mjs",
+		"build:patchers": "m4l-jweb patchers",
+		"install:device": "m4l-jweb install",
 		"preview": "vite preview --host 127.0.0.1 --port 4175",
 		"test": "vitest run",
-		"format": "prettier --write \"src/**/*.{ts,tsx,css}\""
+		"format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"wrapper/**/*.ts\""
 	},
 	"dependencies": {
+		"@m4l-jweb/bridge": "^0.1.0",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"lucide-react": "^0.460.0",
@@ -28,13 +31,11 @@
 		]
 	},
 	"devDependencies": {
+		"@m4l-jweb/build": "^0.1.0",
 		"@tailwindcss/vite": "^4.0.0",
-		"@types/archiver": "^6.0.3",
 		"@types/react": "^19.0.0",
 		"@types/react-dom": "^19.0.0",
 		"@vitejs/plugin-react": "^4.3.4",
-		"acorn": "^8.17.0",
-		"archiver": "^7.0.1",
 		"esbuild": "^0.24.0",
 		"prettier": "^3.4.0",
 		"tailwindcss": "^4.0.0",
