@@ -99,6 +99,10 @@ value (`.lpf(sine.range(200,2000))`) is refused for the same reason: see
   alternation - things that are tedious to click into a piano roll are one
   expression in Strudel.
 - **The ultimate hybrid workflow.** By exposing Strudel's engine states (like the `play` parameter) directly to Live, you can map them to your **Ableton Push** or external MIDI controllers. Start and stop complex algorithmic sequences with physical hardware!
+- **A dedicated drum machine.** The new **Strudel MIDI Drums** device brings Strudel's generative drum language (`bd`, `sd`, `hh`) straight to your Ableton Drum Racks. It features a visual **Kit** mapper that natively persists in your Live set, letting you easily route algorithmic sequences to any custom kit!
+
+![Strudel MIDI Drums Kit Mapping](doc/screenshot-midi-drums-mapping.png)
+
 - **It's really Live-native.** Patterns start on the bar, follow tempo
   automation, stop when you stop the transport, and notes land on the track
   the device sits on. Everything renders inside the device UI.
