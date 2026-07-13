@@ -19,8 +19,8 @@
 		"format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"wrapper/**/*.ts\" \"scripts/*.mjs\""
 	},
 	"dependencies": {
-		"@m4l-jweb/bridge": "^0.3.0",
-		"@m4l-jweb/surface": "^0.3.0",
+		"@m4l-jweb/bridge": "^0.4.0",
+		"@m4l-jweb/surface": "^0.4.0",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"lucide-react": "^0.460.0",
@@ -34,7 +34,7 @@
 		]
 	},
 	"devDependencies": {
-		"@m4l-jweb/build": "^0.3.0",
+		"@m4l-jweb/build": "^0.4.0",
 		"@tailwindcss/vite": "^4.0.0",
 		"@types/node": "^22.0.0",
 		"@types/react": "^19.0.0",
