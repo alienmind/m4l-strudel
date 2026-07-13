@@ -153,7 +153,7 @@ pnpm dev:fx         # browser dev for the Audio FX device
 ## Built on M4L-JWEB
 
 This is a **[M4L-JWEB](https://github.com/alienmind/m4l-jweb)** device repo, on
-the 0.4.0 shape: one `src/app/<device>/` folder per device (`App.tsx`,
+the 0.5.0 shape: one `src/app/<device>/` folder per device (`App.tsx`,
 `protocol.ts`, `surface.ts`), each building into its own `.amxd` with its own UI
 bundle - a device ships what it is, not what its sibling is. `patcher/devices.mjs`
 is the manifest; `wrapper/device.ts` holds the shared `[js]` extensions. A
