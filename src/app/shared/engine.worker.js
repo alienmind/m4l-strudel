@@ -60,6 +60,7 @@ let bpm = 120;
  */
 let livePlaying = false;
 let lastBeats = 0;
+let engineCtx = null;
 const free = { timer: null, beats: 0, last: 0 };
 
 function startFreeRun() {
@@ -118,7 +119,7 @@ const transport = new LiveTransport({
 		}
 		const notes = [];
 		for (const hap of haps) {
-			const n = hapToNote(hap, cps);
+			const n = hapToNote(hap, cps, engineCtx);
 			if (!n) continue;
 			notes.push({
 				pitch: n.pitch,
@@ -149,6 +150,7 @@ onmessage = async (e) => {
 	} else if (m.t === "code") {
 		try {
 			setLiveScale(m.liveScale);
+			engineCtx = m.ctx;
 			pattern = await compile(asStrudelCode(m.code, m.ctx));
 			running = true;
 			syncClockMode();
@@ -166,8 +168,8 @@ onmessage = async (e) => {
 			// One cycle spans `bars` bars, so its rate follows the tempo. Only
 			// patterns that read _cps care, but they should read the right one.
 			const cps = bpm / 60 / (m.bars * 4);
-			const cycles = patternCycles(pat, cps);
-			postMessage({ t: "clip", notes: exportNotes(pat, cycles, cps), cycles });
+			const cycles = patternCycles(pat, cps, m.ctx);
+			postMessage({ t: "clip", notes: exportNotes(pat, cycles, cps, m.ctx), cycles });
 		} catch (err) {
 			postMessage({ t: "exporterr", message: String((err && err.message) || err) });
 		}

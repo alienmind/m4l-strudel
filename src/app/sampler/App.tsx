@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Download, FolderOpen, Play, Square } from "l
 import { cn } from "@/lib/utils";
 import { bindInlet, outlet, uiReady } from "@m4l-jweb/bridge";
 import { IN, OUT } from "./protocol";
+import { AboutPanel } from "../shared/AboutPanel";
 
 const PITCH_CLASS_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -37,6 +38,7 @@ export default function App() {
 	const [status, setStatus] = useState("Pick a sample map and Load.");
 	const [liveRoot, setLiveRoot] = useState(0);
 	const [liveScaleName, setLiveScaleName] = useState<string | null>(null);
+	const [showAbout, setShowAbout] = useState(false);
 
 	useEffect(() => {
 		bindInlet(IN.catalog, (b64) => {
@@ -87,10 +89,19 @@ export default function App() {
 		setPlaying(null);
 	};
 
+	if (showAbout) {
+		return <AboutPanel amxdBuild={__APP_VERSION__} onClose={() => setShowAbout(false)} />;
+	}
+
 	return (
 		<div className="device flex h-full w-full flex-col gap-2 bg-background p-2 text-foreground">
 			<div className="flex items-center justify-between">
-				<span className="text-xs font-semibold tracking-tight">Strudel Samples</span>
+				<button 
+					onClick={() => setShowAbout(true)}
+					className="text-xs font-semibold tracking-tight hover:text-primary transition-colors cursor-pointer text-left"
+				>
+					Strudel Samples
+				</button>
 				{liveScaleName && (
 					<span className="rounded bg-input/50 px-1.5 py-0.5 text-[10px] text-muted-foreground">
 						Live scale: {PITCH_CLASS_NAMES[liveRoot % 12]} {liveScaleName}
@@ -116,7 +127,7 @@ export default function App() {
 				<input
 					value={mapUrl}
 					onChange={(e) => setMapUrl(e.target.value)}
-					placeholder="github:user/repo or shabda:query"
+					placeholder="ie: github:user/repo or shabda:query"
 					className="flex-1 rounded bg-input/40 px-1.5 py-0.5 font-mono"
 				/>
 				<button

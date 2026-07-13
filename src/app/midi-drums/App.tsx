@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { FolderOpen, Play, Square } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Drum, FolderOpen, Play, Square, ChevronLeft } from "lucide-react";
 import { isBareMini } from "@/lib/strudelCode";
+import { DrumMapPanel } from "./DrumMapPanel";
 import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
 import { ClipPanel } from "../shared/ClipPanel";
-import { scaleLabel, useStrudel } from "./useStrudel";
+import { useStrudel } from "./useStrudel";
 
 /**
  * Strudel MIDI - a MIDI effect. Sits on a MIDI track, before an instrument,
@@ -18,14 +18,14 @@ import { scaleLabel, useStrudel } from "./useStrudel";
  */
 export default function App() {
 	const s = useStrudel();
+	const [showDrums, setShowDrums] = useState(false);
+	const [showAbout, setShowAbout] = useState(false);
+	const [showClip, setShowClip] = useState(false);
+	
 	// Full Strudel code is real JavaScript: the local parser errors and note
 	// counter only apply to bare mini-notation. Both dialects export to a clip -
 	// the Strudel engine renders it either way.
 	const codeMode = !isBareMini(s.text);
-	const scale = scaleLabel(s.scale);
-
-	const [showAbout, setShowAbout] = useState(false);
-	const [showClip, setShowClip] = useState(false);
 
 	if (showAbout) {
 		return <AboutPanel amxdBuild={s.amxdBuild} onClose={() => setShowAbout(false)} />;
@@ -43,6 +43,29 @@ export default function App() {
 		);
 	}
 
+	if (showDrums) {
+		return (
+			<div className="device flex h-full w-full flex-col gap-1 overflow-hidden bg-background p-1.5 text-foreground">
+				<div className="flex items-center gap-2 leading-none pb-1 mb-1 border-b border-input">
+					<button 
+						onClick={() => setShowDrums(false)} 
+						className="flex items-center justify-center p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
+						title="Back to Sequencer"
+					>
+						<ChevronLeft className="size-4" />
+					</button>
+					<span className="text-xs font-semibold tracking-tight">Drum Map Configuration</span>
+				</div>
+				<DrumMapPanel
+					map={s.drumMap}
+					onChange={s.setDrumMap}
+					onReset={s.resetDrumMap}
+					onClose={() => setShowDrums(false)}
+				/>
+			</div>
+		);
+	}
+
 	return (
 		<div className="device flex h-full w-full flex-col gap-1 overflow-hidden bg-background p-1.5 text-foreground">
 			<div className="flex items-center justify-between leading-none bg-input/20 px-1 py-0.5 rounded">
@@ -50,7 +73,7 @@ export default function App() {
 					onClick={() => setShowAbout(true)}
 					className="text-xs font-semibold tracking-tight hover:text-primary transition-colors cursor-pointer"
 				>
-					Strudel MIDI
+					Strudel MIDI Drums
 				</button>
 				
 				<div className="flex items-center gap-1.5 text-[10px] leading-none">
@@ -74,18 +97,6 @@ export default function App() {
 							onChange={(e) => s.setOctaveOffset(Number(e.target.value))}
 							className="w-8 rounded bg-input/50 px-1 py-0.5 outline-none"
 						/>
-					</label>
-					<label
-						className="flex items-center gap-1"
-						title="Read bare numbers as degrees of Live's global scale. Off: a number is a raw MIDI pitch."
-					>
-						<input
-							type="checkbox"
-							checked={s.liveScale}
-							onChange={(e) => s.setLiveScale(e.target.checked)}
-							className="size-3 accent-primary"
-						/>
-						Scale
 					</label>
 				</div>
 			</div>
@@ -132,6 +143,14 @@ export default function App() {
 					<FolderOpen className="size-3.5" />
 					Clip
 				</button>
+				<button
+					onClick={() => setShowDrums(true)}
+					className="flex items-center justify-center gap-1 rounded-md bg-accent px-3 py-1 text-sm font-semibold text-accent-foreground hover:brightness-110"
+					title="Map drum words (bd, sd, hh) onto Drum Rack pads"
+				>
+					<Drum className="size-3.5" />
+					Kit
+				</button>
 			</div>
 
 			{s.warning && (
@@ -145,16 +164,6 @@ export default function App() {
 
 			<div className="flex items-center justify-between gap-2 leading-none">
 				<span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-					<span
-						className={cn(!scale.known && "text-destructive")}
-						title={
-							scale.known
-								? "Live's global scale - bare numbers in the pattern are degrees of it"
-								: `Live's scale "${s.scale.name}" is not one this device knows - degrees fall back to Major`
-						}
-					>
-						{scale.text}
-					</span>
 					<span>{codeMode ? "code" : `${s.noteCount} notes`}</span>
 				</span>
 				

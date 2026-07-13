@@ -23,6 +23,13 @@ export default [
 		unmatchedTo: "js", // ui_ready / write_clip / read_notes reach the wrapper
 	},
 	{
+		name: "alienmind-strudel-midi-drums",
+		ui: "midi-drums",
+		type: "midi", // 'mmmm' MIDI effect
+		chains: ["midiout"],
+		unmatchedTo: "js",
+	},
+	{
 		name: "alienmind-strudel-sampler",
 		ui: "sampler",
 		type: "audio", // 'aaaa' audio effect. Deliberate: a MIDI-effect device has no
@@ -60,7 +67,7 @@ export default [
 		name: "alienmind-strudel-fx",
 		ui: "fx",
 		type: "audio", // 'aaaa' audio effect: it sits anywhere in an audio chain
-		chains: ["strudelfx"], // ours: plugin~ -> onepole~ -> *~ -> plugout~
+		chains: ["lowpass", "drive", "strudel-delay", "strudel-room", "gain"],
 		unmatchedTo: "js",
 	},
 ];
