@@ -29,11 +29,6 @@ These features are fundamentally gated by capabilities not yet present in the `m
 - **`MAX_CYCLES` is 64.** A pathologically nested pattern is truncated rather than exported. Nobody has hit it; it exists so a typo cannot ask for a ten-thousand-bar clip.
 - **From Clip flattens structure.** It reads MIDI back as a flat grid of notes, so `<a b>` returns as its expanded note list. Inherent to reading MIDI - the structure is not in the clip - but now that To Clip exports the *whole* loop, a round trip produces a much longer flat pattern than it used to.
 
-## 2. Themes (Easy)
-- Add themes to this app - at the very least, dark, light and pastel.
-  - **Concrete Implementation**: We can utilize CSS custom properties (variables) defined in our `index.css` or Tailwind config. 
-  - Max/Live already provides Ableton's theme colors natively (which can be read by `m4l-jweb`). We can map Live's dynamically injected CSS variables (like `--live-bg-color`, `--live-text-color`) to our Tailwind tokens to automatically sync with the user's Ableton theme.
-  - Alternatively, we can add a manual override drop-down in the `About` panel to toggle `document.documentElement.classList.add('theme-pastel')` etc.
 
 ## 3. Scale and Pitch matching in full Strudel code (Medium)
 - **Full Strudel code does not see the Octave/Shift controls or the Live Scale toggle.** It is passed through untouched - correct, since it is real Strudel code and rewriting a user's JS would be worse - but it means `note("c5")` there is MIDI **72** (Strudel's note names are scientific), while `c5` in bare mini-notation is whatever the octave convention says. The UI warns in amber; it cannot fix it.
@@ -124,3 +119,9 @@ This is a change to note *generation*, not to the UI, and it deserves its own
 discussion: it makes the device honour a control it currently ignores, which is
 either the obvious kindness or a lie about what `s()` means, depending on your
 view. Worth deciding deliberately rather than drifting into.
+
+---
+
+# DONE: Themes
+
+Mapped Live's dynamically injected CSS variables (`--live-bg-color`, `--live-text-color`, etc.) to Tailwind tokens in `index.css`. The Strudel devices now automatically sync with the user's active Ableton theme natively.
