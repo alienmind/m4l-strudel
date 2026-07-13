@@ -1,11 +1,17 @@
 /**
  * render.ts - glue the parser + scheduler + note conversion into concrete MIDI
  * note events (in beats), and encode them for the Max [js] side.
+ *
+ * This is the LOCAL renderer. Since the clip exporter moved onto the Strudel
+ * engine (useStrudel.ts's toMidi), its job is the live note-count readout while
+ * the user types - instant, synchronous, and bare-mini-only. The engine is
+ * authoritative for what actually lands in a clip.
  */
 
 import { parseMini } from "./parser";
 import { schedule } from "./schedule";
-import { noteToMidi, type OctaveConvention } from "./notes";
+import { astCycleLength } from "./cycles";
+import { noteToMidi, type NoteContext } from "./notes";
 import type { ParseError } from "./ast";
 
 export interface NoteEvent {
@@ -15,34 +21,35 @@ export interface NoteEvent {
 	velocity: number;
 }
 
-export interface RenderOptions {
+export interface RenderOptions extends NoteContext {
 	bars: number; // one cycle spans this many bars
-	cycles?: number; // how many cycles to render (default 1)
+	/** How many cycles to render. Defaults to the pattern's own loop length, so
+	 *  `<a b>` renders both halves instead of being truncated at cycle 1. */
+	cycles?: number;
 	beatsPerBar?: number; // default 4
-	conv: OctaveConvention;
-	octaveOffset?: number;
 	velocity?: number;
 }
 
 export interface RenderResult {
 	notes: NoteEvent[];
 	lengthBeats: number;
+	cycles: number;
 	errors: ParseError[];
 }
 
 export function renderPattern(src: string, opts: RenderOptions): RenderResult {
 	const beatsPerBar = opts.beatsPerBar ?? 4;
-	const cycles = opts.cycles ?? 1;
 	const velocity = opts.velocity ?? 100;
 	const beatsPerCycle = opts.bars * beatsPerBar;
 
 	const { ast, errors } = parseMini(src);
+	const cycles = opts.cycles ?? astCycleLength(ast);
 	const notes: NoteEvent[] = [];
 
 	for (let c = 0; c < cycles; c++) {
 		const evs = schedule(ast, c);
 		for (const ev of evs) {
-			const pitch = noteToMidi(ev.note, opts.conv, opts.octaveOffset ?? 0);
+			const pitch = noteToMidi(ev.note, opts);
 			if (pitch === null) continue;
 			notes.push({
 				pitch,
@@ -53,7 +60,7 @@ export function renderPattern(src: string, opts: RenderOptions): RenderResult {
 		}
 	}
 
-	return { notes, lengthBeats: cycles * beatsPerCycle, errors };
+	return { notes, lengthBeats: cycles * beatsPerCycle, cycles, errors };
 }
 
 /** [lengthBeats, n, p1,s1,d1,v1, ...] for the Max write_clip message. */

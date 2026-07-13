@@ -1,185 +1,290 @@
-This is a reporting with a number of behaviours that are perceived to be incorrect or misunderstood. Some of these might be bugs, some others might be feature requests
+# M4L-STRUDEL: the plan
 
-# Fixes for Strudel Max for Live Notes and Expansion
+The backlog for the devices themselves. Anything that belongs to the *library* -
+patcher codegen, the Surface, fetch-to-disk - lives in `m4l-jweb`'s own
+[doc/TODO.md](../../m4l-jweb/doc/TODO.md), not here.
 
-## Explanation of Current Behavior
+**What comes next is at the top. What is already done is at the bottom.**
 
-### [FEAT-01] 1. "Stream of notes is super low. There's no scale awareness."
-When you type bare mini-notation like `<[[2 ~] [2 ~] 2 3] [[3 ~] [3 ~] 3 3]>@4`, it gets processed in two different ways depending on whether it is playing live or saving to a clip:
+---
 
-*   **Live Play (Strudel Engine):** The UI checks if the text is bare mini-notation. Since it is, it wraps it using `asStrudelCode` into `note("...")`. In Strudel, the `note` function expects absolute pitch values (like "c5"). When it receives numbers like `2` or `3`, it treats them as exact MIDI pitches (e.g., MIDI note 2, which is D-2). If you want numbers to be treated as scale degrees (relative to a root and scale), they need to be wrapped in the `n("...")` function instead.
-*   **Save to Clip (Clip Converter):** The bare mini-notation is parsed by a custom parser (`src/lib/mini/notes.ts`). In `noteToMidi`, any plain number is explicitly converted to `parseInt(t, 10) + octaveOffset * 12`. Again, a `2` becomes MIDI pitch `2`. There is currently no scale-awareness implemented in the custom clip converter because it doesn't receive or apply the Live 12 global scale.
+# NEXT: Phase 7 - Strudel Audio FX
 
-### [FIX-01] 2. "If I click on 'save to clip' I get a sequence of notes under E-2... If I load back from midi clip... '4 notes'. I would expect this sequence to have been expanded"
-The `<A B>` syntax in mini-notation means "alternate between A and B on each successive cycle." Thus, `<A B>` takes 2 full cycles to loop.
+**Nothing in `m4l-jweb` blocks a v1 of this**, as long as v1 is scoped to `.lpf()`
+and `.gain()`. Both DSP chains already ship there (`lowpass` and `gain`, Stage 3.4,
+proven by its `hello-audio` example), and the one-line expression is parsed with
+`@strudel/transpiler`, which this repo already bundles. What is NOT available is a
+generated Push-visible parameter set (`m4l-jweb` Stage 2 has the declaration but
+not the codegen), so v1 hand-wires `writableParams()` and the manifest's
+`parameters` field, exactly as `hello-audio` does today.
 
-Currently, when you click "To Clip", the `renderPattern` function (in `src/lib/mini/render.ts`) defaults to rendering exactly `1` cycle (`cycles ?? 1`). It completely ignores any `alt` elements that would expand the loop over multiple cycles. Because only the first cycle is exported to MIDI, only the first half of your sequence (`[2 ~] [2 ~] 2 3`) makes it to the Ableton clip.
+## The reframe
 
-When you use "From Clip", the plugin reads the raw MIDI notes back from the clip and converts them back into a flat mini-notation string (`d0@2 ~ ~ ...`). Because the Ableton clip only contained the truncated one-cycle version of your sequence, the plugin only "sees" 4 notes, and the structural information (the `<>` brackets) is lost forever.
+The third device should never have been an instrument. Strudel already has a real
+vocabulary of audio-effect primitives (`.lpf()`, `.hpf()`, `.room()`, `.gain()`,
+`.delay()`, `.crush()`, `.pan()`, ...) - the thing this device should do is let you
+write **one line** describing an effects chain and apply it to whatever audio is
+already coming into the track, the way a producer reaches for Auto Filter or a
+reverb send. Not a synth, not a sample player, not a note editor: an **audio
+effect** (`type: "audio"`, the same container tag as the Sampler), sitting anywhere
+in an audio chain.
 
-## Implementation Plan
+**What it is not.** No pattern editor, no Bars/Grid/Octave/Shift, no To Clip/From
+Clip - none of the MIDI device's UI has any business here. The UI it wants is
+closer to `hello-audio` (a compact readout of the *live* effect parameters) than to
+anything in this repo.
 
-### [FEAT-01] Phase 1: Enable Scale Awareness
+## 7.1 v1: static values, `.lpf()` and `.gain()` only
 
-1.  **Forward Live 12 Scale to All Modes:**
-    *   In `wrapper/device.ts`, the function `setupScaleObservers()` currently has an early exit `if (!IS_SAMPLER) return;`.
-    *   **Action:** Remove this guard so that the MIDI device mode also observes Live 12's `root_note` and `scale_name` (the Sampler already does). The wrapper will then send `scale <root> <name>` to the UI.
+1.  **Parse the line with Strudel's own machinery, not a new parser.**
+    `.lpf(800).gain(1.2)` is JavaScript method chaining; the transpiler that
+    already backs Live Play can evaluate it. Walk the resulting pattern (or, for
+    constant arguments, the AST) to pull out `{ effect: "lpf", args: [800] }`.
+    Reuse `src/lib/strudelCode.ts`'s parse path rather than inventing a second one
+    - the same lesson Phase 5 learned about the mini-notation parser.
+2.  **Drive the real DSP chains** with `writableParams()`'s `set_<id>` pattern.
+    `lpf` maps onto the packaged `lowpass` chain (`plugin~ -> onepole~ ->
+    plugout~`), `gain` onto `gain` (`*~`).
+3.  **Static values are the honest v1.** The user edits the line, the app parses it
+    once and writes each value with `set_<param>` - `hello-audio`'s Cutoff slider,
+    driven by text instead of a drag.
 
-2.  **Bind Scale in the UI (`src/app/midi/useStrudel.ts`):**
-    *   **Action:** In `useStrudel.ts`, add state variables for `rootNote` (number) and `scaleName` (string).
-    *   Bind the `scale` inlet using `bindInlet("scale", (root, name) => { ... })` to update the state.
-    *   Pass the `rootNote` and `scaleName` down into `renderPattern` (for To Clip functionality).
+## 7.2 v2: pattern-driven modulation, and it is not free
 
-3.  **Fix Live Play Scale Degrees (`strudelCode.ts`):**
-    *   **Action:** Modify `asStrudelCode` to wrap bare mini-notation in `n("...")` instead of `note("...")`.
-    *   *Note:* Strudel's `n()` function natively resolves numbers into scale degrees based on the current scale. By changing this wrapper, Live Play will immediately become scale-aware.
+`.lpf(sine.range(200,2000))` describes continuous modulation: re-query the pattern
+on every transport tick and write new `set_<param>` values at 20 Hz - the same
+tick-driven machinery `useStrudel.ts` already has, driving continuous parameters
+instead of discrete notes. Only build this once static values work and are worth
+automating.
 
-4.  **Fix Clip Converter Scale Degrees (`notes.ts`):**
-    *   **Action:** In `src/lib/mini/notes.ts`, update `noteToMidi` to accept `rootNote` and `scaleName`.
-    *   Add a simple lookup table for Live 12 scale intervals (e.g., Major = `[0, 2, 4, 5, 7, 9, 11]`, Minor = `[0, 2, 3, 5, 7, 8, 10]`, etc.).
-    *   When parsing a plain number (`/^-?\d+$/`), treat it as a scale degree. Map the degree to a semitone offset using the scale intervals, add it to the `rootNote`, and compute the final MIDI pitch.
+## Open questions, not yet answered
 
-### [FIX-01] Phase 2: Ultimate Consequence Loop Expansion (Cycle LCM)
+- Which Strudel effects get a real Max-native mapping first, and which never will
+  (heavily convolution-based ones may have no reasonable `plugin~`-chain
+  equivalent at all)?
+- Does one text line stay the whole interface, or does it need per-effect sliders
+  once more than two or three effects are chained?
+- Is `.lpf(800)` legible to someone who does not already have strudel.cc's docs
+  open?
 
-1.  **Compute AST Cycle Length (`render.ts` or `ast.ts`):**
-    *   **Action:** Create a recursive function `astCycleLength(node)` that calculates how many cycles are required for a pattern to fully loop back to its starting state.
-    *   **Logic:**
-        *   `rest` / `note`: `1` cycle.
-        *   `seq` / `stack`: LCM (Least Common Multiple) of the cycle lengths of all children.
-        *   `alt` (`<A B C>`): `lcm(...items.map(item => astCycleLength(item) * items.length))`. Since each item gets one cycle and then waits for the others, an item that takes `N` cycles inside an `alt` of size `M` will take `N * M` cycles to loop fully.
-        *   `repeat` (`A*f`): `N / gcd(N, f)` where `N` is `astCycleLength(node)`.
-        *   `poly` (`{A, B}%s`): Cycle length depends on the LCM of the array lengths of the layers, divided by the steps advanced per cycle.
+---
 
-2.  **Apply Cycle Expansion in `useStrudel.ts`:**
-    *   **Action:** When "To Clip" is pressed in `useStrudel.ts`, parse the AST first.
-    *   Compute `const totalCycles = astCycleLength(ast);`.
-    *   Pass `cycles: totalCycles` in the options to `renderPattern`.
-    *   This ensures the generated MIDI clip contains the fully expanded loop (e.g., 2 cycles, 4 cycles, or 64 notes if highly nested) so nothing is truncated.
+# Parked: waiting on `m4l-jweb`'s spikes
 
-### [FIX-02] Phase 3: Fix Negative Numbers in Bare Mini-Notation
+Not blocked on design - blocked on a Max behaviour nobody has verified. `m4l-jweb`
+gates all three behind cheap spikes ([SPIKES.md](../../m4l-jweb/doc/SPIKES.md));
+**none have been run**, so everything here is still a drawing, not code.
 
-1.  **The Bug:** The custom tokenizer (`src/lib/mini/parser.ts`) used for "To Clip" currently does not recognize the minus sign `-` as the start of a number. It throws an `unexpected character "-"` error, even though the internal `noteToMidi` function supports parsing negative numbers. This prevents users from writing bare relative sequences with negative numbers (like `[-1 ~] -1`) without wrapping them in `n("...")`.
-2.  **Action:** Update the `tokenize` function in `parser.ts` to correctly identify and consume negative numbers (e.g., `if (ch === "-" && /[0-9]/.test(src[i+1]) || /[0-9]/.test(ch)) { ... }`).
+| Wanted | Needs | Spike |
+|---|---|---|
+| Sampler without `[node.script]` (which can crash Live) | fetch-to-disk, `m4l-jweb` Stage 3.1 | **1.3** - `[maxurl]` or `[jit.uldl]`? |
+| `.room()`, `.delay()`, `.crush()` in the Audio FX device | a reverb/delay chain vocabulary `m4l-jweb` does not have | - |
+| A Push-visible parameter set for Audio FX | Surface codegen, `m4l-jweb` Stage 2 | - |
 
-### [FEAT-02] Phase 4: Drum Rack Translation Mode
+**We are not hard-blocked on any of them.** A missing chain can be self-hosted here
+in `patcher/chains.mjs`, exactly as the `sampler` chain already is. The cost of
+doing that is that *we* own running the `[maxurl]` spike and eating the risk,
+instead of `m4l-jweb` running it once for every device that will ever want it. Do
+it there unless waiting is genuinely blocking a release.
 
-1.  **Drum Mapping UI:**
-    *   **Action:** Add a new "Drum Map" settings panel or screen to the React UI. This screen will allow the user to define a dictionary mapping arbitrary strings (like `bd`, `sd`, `hh`) to specific MIDI notes (e.g., `C1` / 36, `D1` / 38).
-    *   This map should be stored in the React state and optionally persisted so it remembers your kit configuration.
+---
 
-2.  **Drum Rack Translator:**
-    *   **Action:** Update the bare mini parser and the clip converter to be aware of this map. If a token isn't a standard note (like `bd`), it checks the Drum Map. If found, it outputs the mapped MIDI note.
-    *   To support live play evaluation, we can inject a Strudel function (or use a global `drumMap`) so that when the Strudel engine plays `sound("bd")` (or `n("bd")`), the Max bridge translates the outgoing `bd` string into the correct MIDI note before sending the `midinote` message to Ableton's Drum Rack.
+# Loose ends surfaced while building Phases 1-5
 
-### [FEAT-03] Phase 5: Full Support for Note Transformations in "To Clip"
+Small, real, and none of them blocking:
 
-1.  **Assessment of Available Note Transformations:**
-    Strudel core contains dozens of functions to manipulate a stream of MIDI notes, independent of audio synthesis. The most relevant ones for sequencing include:
-    *   **Pitch & Scales:** `.transpose(n)`, `.scaleTranspose(n)`, `.scale("name")`, `.octave(n)`
-    *   **Chords & Voicings:** `.voicing()`, `.rootNotes()`, `.chord()`, `addVoicings()`
-    *   **Math & Mapping:** `.add()`, `.sub()`, `.mult()`, `.div()`
-    *   **Pattern Generation:** `.arp()`, `.struct()`, `.jux()`, `.superimpose()`
+- **The playhead highlight only works for bare mini-notation.** It is computed
+  from our own AST, whose tokens carry source positions. Full Strudel code is real
+  JavaScript: its events come out of the engine with no link back to the characters
+  the user typed, so it gets no highlight. Strudel's own editor solves this with
+  hap `context.locations` from the transpiler; wiring that up would mean mapping
+  locations in the *rewritten* string back to the user's text, which is a real
+  piece of work for a feature that mostly matters in the dialect that already has
+  it.
+- **Full Strudel code does not see the Octave/Shift controls, or the Live Scale
+  toggle.** Bare mini-notation is resolved to absolute MIDI numbers before it
+  reaches the engine, so Live Play and To Clip agree exactly (see DONE below). Real
+  JavaScript is passed through untouched, so `note("c5")` there means whatever
+  *Strudel* says it means - MIDI **72**, since Strudel's own note names are
+  scientific (`c4` = 60, verified against `@strudel/core`). That is correct - it is
+  real Strudel code, and rewriting the user's JS would be worse - but the two
+  dialects disagree about `c5`. The UI says so in amber; it cannot fix it.
+- **The drum map does not travel with the Live set.** It is in `localStorage`, so
+  it survives a device reload but not a move to another machine, and two instances
+  on two tracks share one map. Persisting per-device state needs the wrapper to own
+  it (a `pattr`, or the Surface once it lands).
+- **From Clip still flattens structure.** It reads MIDI back as a flat grid of
+  notes, so `<a b>` comes back as its expanded note list, not as `<a b>`. Inherent
+  to reading MIDI - the structure is not in the clip - but now that To Clip
+  exports the *whole* loop, a round trip produces a much longer flat pattern than
+  it used to.
+- **`MAX_CYCLES` is 64.** A pathologically nested pattern is truncated rather than
+  exported. No user has hit it; it exists so a typo cannot ask for a ten-thousand-
+  bar clip.
 
-2.  **Gap Analysis (Live Play vs "To Clip"):**
-    *   **Live Play (Strudel Engine):** *Fully Supported.* Because Live Play evaluates the actual JavaScript using the Strudel Web Worker, 100% of these note transformations are natively supported out of the box. You can run `.transpose(2).scale('C:minor')` and it works flawlessly.
-    *   **"To Clip" Converter:** *Completely Unsupported.* The "To Clip" logic uses a custom parser (`src/lib/mini`) that only understands "bare mini-notation" strings (e.g. `[A B] * 2`). It literally cannot parse JavaScript method chaining. If you add `.transpose(2)`, the "To Clip" button becomes greyed out/disabled. Thus, there is a massive gap: you cannot export *any* pattern to MIDI if it relies on Strudel's native JavaScript functions.
+---
+---
 
-3.  **Implementation Plan for the Clip Converter Gap:**
-    *   *Do not reinvent the wheel:* Attempting to recreate `.scale()`, `.transpose()`, `.arp()`, and all other Strudel functions inside the custom `src/lib/mini` parser would be an impossible task.
-    *   **Action:** Rewrite the "To Clip" mechanism to leverage the existing Web Worker. Instead of manually parsing the text locally in React, the UI should send a new message (e.g., `{ t: "export_clip", cycles: totalCycles }`) to the worker. 
-    *   **"Accelerated" / Instant Export:** Strudel patterns are purely functional and stateless. The worker does not need to wait for Ableton's transport or run in real-time. By calling `queryWindow(pattern, 0, totalCycles, cps)`, the worker instantly computes the entire sequence of events for the requested cycle window at full speed.
-    *   **No Interference / No Extra Threads needed:** Because `queryWindow` is a stateless evaluation, querying cycles `0` through `4` for a clip export will not mutate or disrupt the ongoing pattern playback (which simply queries the same pattern object for tiny real-time chunks as Ableton ticks). A single worker thread is perfectly sufficient.
-    *   The worker returns an array of fully-baked MIDI notes to React, which then forwards them to Ableton. This instantly closes the gap, adding 100% support for every Strudel note transformation to the "To Clip" exporter.
+# DONE
 
-### [FEAT-04] Phase 6, attempt 1: Native Instrument Mode (`iiii`) - REMOVED
+## Phase 1 - scale awareness [FEAT-01]
 
-**History, kept so nobody re-proposes the same shape.** The original plan
-(from the abandoned `STRUDEL_PLANS.md`) called for an "Instrument" device
-variant that would take Strudel patterns (`note("c3 e3").s("sawtooth")`) and
-generate audio directly, by routing messages into a `[poly~]` synthesizer
-instead of emitting MIDI notes. What got built: `ableton-amxd/voice.maxpat`,
-a hand-authored `[poly~]` synth (`cycle~`/`saw~`/`rect~`/`tri~` selected via
-message, a basic envelope via `line~`), driven by `voice <note> <vel01>
-<durMs> <wave> <cutoff> <gain> <delayMs>` messages (`patcher/chains.mjs`'s
-`"poly"` chain, mode `"instrument"`, device `alienmind-strudel-instrument`).
+> *"Stream of notes is super low. There's no scale awareness."*
 
-**Removed entirely** (`voice.maxpat`, the `"poly"` chain, the `"instrument"`
-manifest entry and mode). Two independent problems, not one:
+A bare number in mini-notation is a **scale degree**, not a MIDI pitch. Both paths
+used to read `2` as MIDI pitch 2 - a D-2, below the bottom of a piano, which is
+exactly the reported symptom.
 
-1.  **It never made musical sense.** It reinvented a crude oscillator synth
-    instead of using Strudel's real sound engine - `.s("bd")`-style sample
-    references and most of the real transformation chain (`.room()`, real
-    envelopes, etc.) did nothing. It also copied the MIDI device's note-editor
-    UI wholesale (Bars/Grid/Octave/Shift, To Clip/From Clip), which makes no
-    sense for something that is supposed to be an audio-effects surface, not
-    a pattern sequencer.
-2.  **`voice.maxpat` was also unverified** - it carried its own comment
-    flagging it as a "SKELETON PATCH - not hand-verified in the Max editor",
-    and in testing it never actually produced audio.
+- **The wrapper now forwards Live 12's global scale to the MIDI device too**
+  (`wrapper/device.ts`: `setupScaleObservers()` lost its `if (!IS_SAMPLER) return`,
+  and `onUiReady()` re-sends, because the observers fire before the page exists).
+- **`src/lib/mini/scales.ts`** owns the intervals for 30 of Live's scales, with a
+  fallback to Major for the ones it does not know (the UI says so, in red).
+  Degree 0 is anchored on middle C, so a C-major song puts degree 0 on MIDI 60.
+- **Strudel's own `.scale()` is deliberately NOT used.** It cannot be:
+  `.scale("C4:harmonic minor")` mis-parses, because Strudel reads that argument as
+  mini-notation and the space splits the name in two. It also disagrees with
+  Ableton about the pentatonics. The seven-note modes, where tonal is
+  authoritative, are pinned against Strudel's own output by a test.
 
-See Phase 7 for the actual direction - and note it is a different KIND of
-device, not a fix to this one.
+## Phase 2 - loop expansion [FIX-01]
 
-### [FEAT-05] Phase 7: Strudel Audio FX - a real audio effects chain, not an instrument
+> *"If I click 'save to clip' I get 4 notes. I would expect this sequence to have been expanded."*
 
-**The reframe.** The third device should never have been an instrument. Strudel
-already has a real vocabulary of audio-effect primitives (`.lpf()`, `.hpf()`,
-`.room()`, `.gain()`, `.delay()`, `.crush()`, `.pan()`, ...) - the thing this
-device should do is let you write **one line** describing an effects chain and
-apply it to whatever audio is already coming into the track, the way a
-producer reaches for Auto Filter or a reverb send. Not a synth, not a note
-editor, not a sample player: an **audio effect** (`type: "audio"`, same
-container tag as the Sampler), sitting anywhere in an audio chain.
+`<A B>` takes two cycles to come back around; To Clip rendered exactly one and
+threw the rest away.
 
-**What it is not.** No pattern editor, no Bars/Grid/Octave/Shift, no To
-Clip/From Clip - none of the MIDI device's UI has any business here. The UI
-this device wants is closer to the `hello-audio` example in `m4l-jweb` (a
-compact readout of the *live* effect parameters) than to anything in this
-repo today.
+- **`src/lib/mini/cycles.ts`** computes a pattern's true loop length from the AST
+  (LCM across sequences and stacks; an alternation of *m* items whose items each
+  take *N* cycles takes *N*·*m*; `A*f` realigns after `N / gcd(N, f)`).
+- **`patternCycles()` in the engine** measures the same thing empirically, by
+  querying cycles and finding the shortest period they are consistent with. That is
+  what To Clip actually uses, because it works for **full Strudel code too**, whose
+  loop length no parser of ours could ever compute.
+- **Found and fixed a real bug in `schedule.ts` on the way:** a nested alternation
+  was handed the absolute cycle index, so `<<p q> y>` played `p y p y` and `q` never
+  sounded at all. Strudel's `slowcat` advances the inner pattern once per *visit*;
+  now so do we, and it plays `p y q y`.
 
-**Design sketch:**
+## Phase 3 - negative numbers [FIX-02]
 
-1.  **Parse the one-line expression with Strudel's own machinery, not a new
-    parser.** `.lpf(800).room(0.3).gain(1.2)` is just JavaScript method
-    chaining - the same `@strudel/transpiler` this repo already depends on for
-    Live Play can evaluate it. Walk the resulting pattern (or, for the common
-    case of constant arguments, just the AST) to pull out `{ effect: "lpf",
-    args: [800] }` pairs. Reuse `src/lib/strudelCode.ts`'s existing
-    parse/compile path rather than inventing a second one, the same lesson
-    Phase 5 already learned about the mini-notation parser.
-2.  **Drive real Max DSP chains with the parsed values**, using
-    `writableParams()`'s `set_<id>` pattern (`packages/build/src/chains.mjs`
-    in `m4l-jweb`, already proven by the `lowpass`/`gain` chains there) -
-    `lpf`/`hpf` map onto `onepole~`/`svf~`, `gain` onto `*~`, `room` needs a
-    reverb object the chain vocabulary does not have yet (Stage 3.4 in
-    `m4l-jweb`'s `doc/TODO.md`: "`plugin~ -> DSP -> plugout~`... the obvious
-    gaps"). Growing that vocabulary in `m4l-jweb` (not duplicating it here)
-    benefits every device that wants an audible effect, not just this one.
-3.  **Static values are the honest v1.** The user edits the line, the app
-    parses it once, and writes each value with `set_<param>` - exactly like
-    `hello-audio`'s Cutoff slider, just driven by text instead of a drag.
-4.  **Pattern-driven modulation is the interesting v2, and it is not free.**
-    Strudel expressions like `.lpf(sine.range(200,2000))` describe continuous
-    modulation, which means re-querying the pattern on every transport tick
-    and writing new `set_<param>` values at 20 Hz - the same tick-driven
-    machinery the MIDI device already has (`src/app/midi/useStrudel.ts`'s
-    tick handler), repurposed to drive continuous parameters instead of
-    discrete notes. Do v1 first; only build this once static values work and
-    are worth automating.
-5.  **Depends on `m4l-jweb`'s Surface (Stage 2 there) for a clean parameter
-    set** - once it lands, the effect's live parameters (cutoff, room size,
-    gain) should be a `surface.ts` declaration like every other device's,
-    Push-visible and automatable, instead of hand-wired `writableParams()`
-    calls. Not blocking: v1 can ship with the manifest's `parameters` field
-    the way `hello-audio` does today.
+The tokenizer rejected `-` outright (`unexpected character "-"`), so a bare
+relative sequence like `[-1 ~] -1` could not be written without hand-wrapping it in
+`n("...")`. It now reads a leading `-` as part of the number, and negative degrees
+resolve below the root (`-1` in C major is the B underneath middle C).
 
-**Open questions, not yet answered:**
+## Phase 4 - drum rack translation [FEAT-02]
 
-- Which Strudel effect primitives get a real Max-native mapping first, and
-  which never will (some, like heavily convolution-based effects, may have no
-  reasonable `plugin~`-chain equivalent at all)?
-- Does one text line stay the whole interface, or does it need per-effect
-  sliders once more than two or three effects are chained?
-- How much of "the DSL is just JS method chaining" survives contact with
-  users who are not already Strudel users - is `.lpf(800)` legible without
-  strudel.cc's own docs open?
+- **`src/lib/mini/drums.ts`**: a word -> MIDI map, defaulting to the General MIDI
+  layout a stock Live Drum Rack uses (`bd` 36, `sd` 38, `hh` 42, ...), with
+  Strudel's own abbreviations so a pattern copied off strudel.cc hits the right pad.
+- **A "Kit" panel in the UI** (it *replaces* the editor area rather than adding a
+  row - Live's device view is a fixed ~169px and every row is spoken for). Edits
+  persist to `localStorage`.
+- **The tokenizer stopped splitting drum words.** `bd` used to tokenize as the note
+  B followed by the note D; word tokens are now greedy over letters.
+- A word only reaches the drum map if it is **not** a valid note name, so `e` is
+  always the note E. The two-letter defaults never collide.
+
+## Phase 5 - note transformations in To Clip [FEAT-03]
+
+> *"You cannot export any pattern to MIDI if it relies on Strudel's native JavaScript functions."*
+
+**To Clip now renders on the Strudel engine, not on the local mini parser.** The UI
+sends `{t:"export", code, ctx, bars}` to the Web Worker that already runs Live Play;
+the worker compiles the pattern, measures its loop length, and queries the whole
+window at once (`exportNotes()` -> `queryWindow(0, cycles)`). Strudel patterns are
+pure functions of time, so this is instant, needs no transport, and cannot disturb
+a pattern that is currently playing.
+
+- **Every Strudel transformation now exports**: `.transpose()`, `.scale()`,
+  `.arp()`, `.jux()`, `.add()`, full JS chains. To Clip is **no longer disabled in
+  code mode** - that grey button was the whole complaint.
+- **The local parser was not extended to do this, and never should be.**
+  Reimplementing Strudel's function library inside `src/lib/mini` was never going to
+  work. It survives as the **note-count readout while you type** - instant,
+  synchronous, bare-mini only - and the engine is authoritative for what lands in
+  the clip.
+
+## The mechanism underneath all five: one resolver
+
+`src/lib/mini/resolve.ts` rewrites bare mini-notation so every token is an absolute
+MIDI number, in place, leaving structure and spacing untouched:
+
+```
+"0 [2 ~] bd*2"   ->   "60 [64 ~] 36*2"      (C major, default kit)
+```
+
+Live Play and To Clip then compile the **same** string, which is what makes them
+agree by construction rather than by two parsers being kept in step by hand. Scale
+degrees, drum words, note names and the octave convention all resolve in exactly
+one place (`notes.ts`), and a test asserts the two paths produce identical pitches
+for degrees, negative degrees, note names, drum words, shifted octaves and other
+keys.
+
+## Phase 5.1 - the Live Scale toggle, and live-coding ergonomics
+
+Fixes and refinements from the first real session with the device in Live.
+
+- **Live Scale is now a toggle, not a law.** ON (the default): a bare number is a
+  degree of Live's scale, resolved by us. OFF: it is a raw MIDI pitch - Strudel's
+  own reading - and the pattern is free to set its own scale in code. Live's scale
+  is *also* published into the pattern scope as **`liveScale`** ("C4:major")
+  whichever way the toggle is set, so code can opt into **Strudel's** implementation
+  deliberately: `n("0 2 4").scale(liveScale)`.
+- **An amber line warns where the two implementations part company.** They are not
+  interchangeable: Strudel's `.scale()` mis-reads any name containing a space
+  (it parses its argument as mini-notation, so "harmonic minor" splits in two) and
+  disagrees with Ableton on the pentatonics and blues scales. Rather than hide
+  that, the UI names it - and `strudelAgrees()` records exactly where the two can
+  be trusted to match (the seven-note modes, pinned by a test).
+- **A change of scale reaches a pattern that is already playing.** The scale is
+  baked into the code the worker compiled, so changing it means recompiling; the
+  pattern used to keep playing in the key it was *started* in until the user
+  stopped and started again. Same for Octave, Shift and the kit.
+- **Ctrl+Enter re-evaluates**, and does it from where the cycle already is - the
+  worker swaps the pattern object and leaves its clock alone, so nothing restarts.
+- **The sounding step is highlighted in the editor**, the way strudel.cc does it.
+  The worker posts a playhead position ~20 Hz (it has to: the free-run clock, when
+  Live's transport is stopped, exists only in there), and the editor lights the
+  source range of whatever is sounding - including every note of a chord, and the
+  correct half of an `<a b>`.
+
+### The `bd!4` machine gun
+
+`!` was not a token the parser knew. It **dropped it silently** and then read the
+`4` as a *note* - degree 4 of C major, MIDI 67. So `bd!4` was rewritten to
+`36!67`, and Strudel dutifully fired the kick **67 times a cycle**. `bd*4` was fine
+(`*` was a known token), and `bd bd bd bd` was fine (no `!` at all), which is
+exactly the pattern of symptoms reported.
+
+`!` now replicates properly: `a!3` takes three *steps* of the sequence (unlike
+`a*3`, which subdivides one), a bare `a!` is two, and a spaced `a ! !` repeats the
+previous step. That last form is why the tokenizer now records whether a token was
+preceded by whitespace: it is the only thing distinguishing a modifier from a step.
+
+> **The real lesson is the silent drop.** An unknown character was discarded, and
+> the *next* token quietly changed meaning. Every unknown character is now a parse
+> error the UI shows - but a stray one in a pattern that still parses can shift a
+> neighbouring token's role, and no test will notice unless someone writes it.
+
+## Phase 6 - Native Instrument Mode (`iiii`) - REMOVED
+
+**History, kept so nobody re-proposes the same shape.** The plan called for an
+"Instrument" device that would take Strudel patterns and generate audio directly,
+routing into a `[poly~]` synth instead of emitting MIDI. What got built:
+`ableton-amxd/voice.maxpat`, a hand-authored `poly~` synth driven by `voice <note>
+<vel01> <durMs> ...` messages.
+
+**Removed entirely.** Two independent problems:
+
+1.  **It never made musical sense.** It reinvented a crude oscillator synth instead
+    of using Strudel's real sound engine - `.s("bd")`-style sample references and
+    most of the real transformation chain did nothing. It also copied the MIDI
+    device's note editor wholesale, which makes no sense for something meant to be
+    an audio-effects surface.
+2.  **`voice.maxpat` was never verified** - it carried its own "SKELETON PATCH -
+    not hand-verified" comment, and in testing it never produced audio.
+
+Phase 7 is its replacement, and it is a different KIND of device - not a fix to
+this one.

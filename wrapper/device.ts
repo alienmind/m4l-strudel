@@ -92,9 +92,13 @@ function checkClipAvailable(): void {
 }
 
 /* ------------------------------------------------------------------ *
- * Live 12 global scale (sampler only)
+ * Live 12 global scale (BOTH modes)
  *
- * Forwarded to the UI (which filters the catalog by key) and to node.
+ * The sampler filters its catalog by key. The MIDI device needs it for a
+ * different reason: a bare number in mini-notation is a SCALE DEGREE, and
+ * without the song's root and scale it can only be read as a raw MIDI pitch -
+ * which is why `2 3` used to come out as a pair of notes near the bottom of the
+ * keyboard instead of the second and third degrees of the current key.
  * ------------------------------------------------------------------ */
 
 var rootObs: LiveAPI | null = null;
@@ -103,7 +107,6 @@ var liveRoot: unknown = 0;
 var liveScale = "Major";
 
 function setupScaleObservers(): void {
-	if (!IS_SAMPLER) return;
 	// Recreate unconditionally: an observer built in a loading context is dead,
 	// and a `if (obs) return` guard would make that permanent.
 	try {
@@ -132,8 +135,8 @@ function onScale(a: unknown[]): void {
 }
 
 function sendScale(): void {
-	outlet(0, "scale", liveRoot, liveScale); // -> jweb (catalog filter)
-	outlet(1, "scale", liveRoot, liveScale); // -> node
+	outlet(0, "scale", liveRoot, liveScale); // -> jweb (scale degrees / catalog filter)
+	if (IS_SAMPLER) outlet(1, "scale", liveRoot, liveScale); // -> node
 }
 
 /* ------------------------------------------------------------------ *
@@ -196,6 +199,7 @@ function onDeviceReady(): void {
 /** The UI announced itself; the packaged core has already sent mode/build/tempo. */
 function onUiReady(): void {
 	outlet(0, "mode", STRUDEL_MODE); // the real mode, not the packaged default
+	sendScale(); // the observers fired before this page existed
 	lastClipAvail = -1;
 	if (!IS_SAMPLER) checkClipAvailable();
 }

@@ -11,7 +11,9 @@ export interface Weighted {
 }
 
 export type Node =
-	| { kind: "note"; name: string }
+	/** `pos`/`len` locate the token in the source, so a rewrite pass can replace
+	 *  it in place (see resolve.ts) without re-printing the whole pattern. */
+	| { kind: "note"; name: string; pos: number; len: number }
 	| { kind: "rest" }
 	| { kind: "seq"; items: Weighted[] } // whitespace-separated sequence
 	| { kind: "stack"; layers: Node[] } // "," inside [ ] or { } → parallel

@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bindInlet, flushNotes, inJweb, outlet, sendNote, uiReady } from "@m4l-jweb/bridge";
-import { renderPattern, toFlatList } from "@/lib/mini/render";
+import { renderPattern, toFlatList, type NoteEvent } from "@/lib/mini/render";
 import { eventsToMini, type RawNote } from "@/lib/mini/unparse";
-import type { OctaveConvention } from "@/lib/mini/notes";
+import type { NoteContext, OctaveConvention } from "@/lib/mini/notes";
+import {
+	DEFAULT_SCALE,
+	isKnownScale,
+	ROOT_NAMES,
+	strudelAgrees,
+	strudelScaleName,
+	type Scale,
+} from "@/lib/mini/scales";
+import { isBareMini } from "@/lib/strudelCode";
+import { miniNoteTokens } from "@/lib/mini/resolve";
+import { activeSpans, parseForPlayhead, type Span } from "@/lib/mini/playhead";
+import { DEFAULT_DRUM_MAP, loadDrumMap, saveDrumMap, type DrumMap } from "@/lib/mini/drums";
 import EngineWorker from "./engine.worker.js?worker&inline";
 import { IN, OUT } from "./protocol";
 
@@ -14,13 +26,26 @@ interface EngineNote {
 	delayMs: number;
 }
 
+/** A clip note, in cycles - the exporter's units (see engine.mjs). */
+interface ClipNote {
+	pitch: number;
+	velocity: number;
+	start: number;
+	duration: number;
+}
+
 type EngineMessage =
 	| { t: "ready" }
 	| { t: "evalok" }
 	| { t: "evalerr"; message: string }
 	| { t: "notes"; notes: EngineNote[] }
+	| { t: "clip"; notes: ClipNote[]; cycles: number }
+	| { t: "exporterr"; message: string }
+	| { t: "phase"; cycle: number }
 	| { t: "flush" }
 	| { t: "clock"; free: boolean };
+
+const BEATS_PER_BAR = 4;
 
 export interface StrudelState {
 	text: string;
@@ -40,6 +65,21 @@ export interface StrudelState {
 	clipAvailable: boolean;
 	toMidi: () => void;
 	fromMidi: () => void;
+	/** Live 12's global scale, as reported by the wrapper. */
+	scale: Scale;
+	/** Apply it? When on, bare numbers are degrees of Live's scale. When off, they
+	 *  are raw MIDI pitches and the pattern may set its own scale in code. */
+	liveScale: boolean;
+	setLiveScale: (on: boolean) => void;
+	/** An amber note about the two scale implementations, or null. */
+	warning: string | null;
+	/** Source ranges of the step(s) sounding right now, for the editor highlight.
+	 *  Empty for full Strudel code, which has no link back to the typed text. */
+	playing: Span[];
+	/** Drum words ("bd", "hh") -> MIDI notes, for Drum Rack patterns. */
+	drumMap: DrumMap;
+	setDrumMap: (m: DrumMap) => void;
+	resetDrumMap: () => void;
 	/** Real Strudel engine, running live in a Web Worker. */
 	live: boolean;
 	evalError: string | null;
@@ -59,6 +99,9 @@ export function useStrudel(): StrudelState {
 	const [conv, setConv] = useState<OctaveConvention>("strudel");
 	const [octaveOffset, setOctaveOffset] = useState(0);
 	const [status, setStatus] = useState("Ready");
+	const [scale, setScale] = useState<Scale>(DEFAULT_SCALE);
+	const [liveScale, setLiveScaleState] = useState<boolean>(() => loadLiveScale());
+	const [drumMap, setDrumMapState] = useState<DrumMap>(() => loadDrumMap());
 	// Outside Max (browser dev) there is no wrapper to report availability, so
 	// default to enabled there and let the wrapper drive it inside Live.
 	const [clipAvailable, setClipAvailable] = useState(!inJweb);
@@ -67,12 +110,39 @@ export function useStrudel(): StrudelState {
 	const tempoRef = useRef(120);
 	const workerRef = useRef<Worker | null>(null);
 
+	/** Everything a mini-notation token needs to become a pitch. Both paths - the
+	 *  live engine and the clip exporter - resolve tokens through this, which is
+	 *  what keeps them agreeing.
+	 *
+	 *  `scale` is omitted entirely when the toggle is off: no scale, no degrees. */
+	const noteCtx = useMemo<NoteContext>(
+		() => ({ conv, octaveOffset, scale: liveScale ? scale : undefined, drumMap }),
+		[conv, octaveOffset, scale, liveScale, drumMap],
+	);
+	/** Live's scale in Strudel's own spelling, published to the pattern scope as
+	 *  `liveScale` whether or not the toggle is on - code may want it either way. */
+	const liveScaleName = useMemo(() => strudelScaleName(scale), [scale]);
+	// The clip exporter reads these inside a worker callback; a ref keeps that
+	// callback from having to be rebuilt (and the worker restarted) on every edit.
+	const exportRef = useRef({ bars, text: "" });
+	exportRef.current.bars = bars;
+
 	useEffect(() => {
 		// The [js] side pushes `clip_available 0/1` (polled once a second).
 		bindInlet(IN.clip_available, (avail) => {
 			setClipAvailable(Number(avail) === 1);
 		});
 		bindInlet(IN.build, (stamp) => setAmxdBuild(String(stamp).split(" ")[0]));
+		// Live 12's global scale: `scale <root 0-11> <name...>`. The name arrives as
+		// separate words ("Harmonic", "Minor"), because Max messages are space-
+		// separated - rejoin them before looking the scale up.
+		bindInlet(IN.scale, (root, ...name) => {
+			const nm = name.join(" ").trim();
+			setScale({
+				root: Math.max(0, Math.min(11, Math.round(Number(root) || 0))),
+				name: nm || DEFAULT_SCALE.name,
+			});
+		});
 		// Tempo must be bound BEFORE ui_ready goes out - the wrapper replies
 		// with the current tempo immediately, and the worker effect below runs
 		// after this one. The ref carries the value across that gap.
@@ -85,10 +155,12 @@ export function useStrudel(): StrudelState {
 		uiReady();
 	}, []);
 
+	// The note-count readout while typing: local, instant, bare-mini only. The
+	// engine is what actually renders the clip (toMidi below).
 	const { noteCount, errors } = useMemo(() => {
-		const r = renderPattern(text, { bars, conv, octaveOffset });
+		const r = renderPattern(text, { bars, ...noteCtx });
 		return { noteCount: r.notes.length, errors: r.errors };
-	}, [text, bars, conv, octaveOffset]);
+	}, [text, bars, noteCtx]);
 
 	// From MIDI: the [js] side replies `notes <loopEndBeats> <n> <p s d> ...`
 	useEffect(() => {
@@ -104,8 +176,7 @@ export function useStrudel(): StrudelState {
 					duration: Number(args[o + 2]),
 				});
 			}
-			const beatsPerBar = 4;
-			const barsRead = Math.max(1, Math.round(loopEnd / beatsPerBar));
+			const barsRead = Math.max(1, Math.round(loopEnd / BEATS_PER_BAR));
 			const mini = eventsToMini(raw, { bars: barsRead, grid, conv, octaveOffset });
 			setText(mini);
 			setStatus(`Read ${n} notes → ${barsRead} bar(s)`);
@@ -115,23 +186,61 @@ export function useStrudel(): StrudelState {
 		});
 	}, [grid, conv, octaveOffset]);
 
+	/**
+	 * To Clip. The pattern is rendered by the Strudel engine, not by the local
+	 * mini parser, so everything Strudel can do - .transpose(), .scale(), .arp(),
+	 * .jux(), full JS chains - exports to MIDI exactly as it plays. The engine
+	 * also measures the pattern's true loop length, so `<a b>` writes both cycles
+	 * instead of being cut off after the first.
+	 */
 	const toMidi = useCallback(() => {
-		const { notes, lengthBeats, errors: errs } = renderPattern(text, {
-			bars,
-			conv,
-			octaveOffset,
-		});
-		if (errs.length > 0) {
-			setStatus(`Parse error at ${errs[0].pos}: ${errs[0].msg}`);
+		if (isBareMini(text) && errors.length > 0) {
+			setStatus(`Parse error at ${errors[0].pos}: ${errors[0].msg}`);
 			return;
 		}
-		outlet(OUT.write_clip, ...toFlatList(notes, lengthBeats));
-		setStatus(`Wrote ${notes.length} notes over ${lengthBeats} beats`);
-	}, [text, bars, conv, octaveOffset]);
+		exportRef.current.text = text;
+		workerRef.current?.postMessage({
+			t: "export",
+			code: text,
+			ctx: noteCtx,
+			bars,
+			liveScale: liveScaleName,
+		});
+		setStatus("Rendering the pattern…");
+	}, [text, noteCtx, bars, liveScaleName, errors]);
 
 	const fromMidi = useCallback(() => {
 		outlet(OUT.read_notes);
 		setStatus("Reading the playing/first clip on this track…");
+	}, []);
+
+	const setLiveScale = useCallback((on: boolean) => {
+		setLiveScaleState(on);
+		saveLiveScale(on);
+	}, []);
+
+	const warning = useMemo(
+		() => scaleWarning(text, { scale, liveScale }),
+		[text, scale, liveScale],
+	);
+
+	// The playhead. The worker posts a cycle position ~20x a second; the AST is
+	// parsed once per edit, and only the (cheap) schedule lookup runs per frame.
+	const [phase, setPhase] = useState(-1);
+	const playAst = useMemo(() => parseForPlayhead(text), [text]);
+	const playing = useMemo<Span[]>(
+		() => (playAst && phase >= 0 ? activeSpans(playAst, phase) : []),
+		[playAst, phase],
+	);
+
+	const setDrumMap = useCallback((m: DrumMap) => {
+		setDrumMapState(m);
+		saveDrumMap(m);
+	}, []);
+
+	const resetDrumMap = useCallback(() => {
+		setDrumMapState({ ...DEFAULT_DRUM_MAP });
+		saveDrumMap({ ...DEFAULT_DRUM_MAP });
 	}, []);
 
 	const [live, setLive] = useState(false);
@@ -164,6 +273,25 @@ export function useStrudel(): StrudelState {
 				for (const n of m.notes) {
 					sendNote({ pitch: n.pitch, velocity: n.velocity, durationMs: n.durMs, channel: n.chan, delayMs: n.delayMs });
 				}
+			} else if (m.t === "clip") {
+				// Cycles -> beats. One cycle is `bars` bars, which is the only thing
+				// the UI gets to decide about the clip's shape.
+				const beatsPerCycle = exportRef.current.bars * BEATS_PER_BAR;
+				const notes: NoteEvent[] = m.notes.map((n) => ({
+					pitch: n.pitch,
+					velocity: n.velocity,
+					start: n.start * beatsPerCycle,
+					duration: n.duration * beatsPerCycle,
+				}));
+				const lengthBeats = m.cycles * beatsPerCycle;
+				outlet(OUT.write_clip, ...toFlatList(notes, lengthBeats));
+				setStatus(
+					`Wrote ${notes.length} notes over ${lengthBeats} beats (${m.cycles} cycle${m.cycles === 1 ? "" : "s"})`,
+				);
+			} else if (m.t === "exporterr") {
+				setStatus(`Cannot export: ${m.message}`);
+			} else if (m.t === "phase") {
+				setPhase(m.cycle);
 			} else if (m.t === "flush") {
 				flushNotes();
 			} else if (m.t === "clock") {
@@ -199,10 +327,50 @@ export function useStrudel(): StrudelState {
 		};
 	}, []);
 
+	/**
+	 * Re-evaluate, keeping the transport where it is. The worker swaps the pattern
+	 * object and leaves its clock alone, so the new pattern is picked up at the
+	 * point in the cycle we are already at - it does not restart from zero. That is
+	 * what makes Ctrl+Enter feel like strudel.cc, and it is also what lets the
+	 * effect below re-evaluate on a scale change without a stutter.
+	 */
 	const run = useCallback(() => {
-		workerRef.current?.postMessage({ t: "code", code: text });
-		setLive(true);
-	}, [text]);
+		// Refuse a bare pattern that does not parse. The rewrite resolves the tokens
+		// it DID understand and leaves the rest, which turns a typo into a pattern
+		// that plays something else entirely - "bd!4" once became "36!67", 67 kicks
+		// a cycle. A red error the user can ignore is not enough; do not run it.
+		if (!isBareMini(text) || errors.length === 0) {
+			workerRef.current?.postMessage({ t: "code", code: text, ctx: noteCtx, liveScale: liveScaleName });
+			setLive(true);
+			return;
+		}
+		setStatus(`Parse error at ${errors[0].pos}: ${errors[0].msg}`);
+	}, [text, noteCtx, liveScaleName, errors]);
+
+	// Live 12's scale (and the octave/shift/kit controls) must reach a pattern that
+	// is ALREADY PLAYING. They are baked into the code the worker compiled, so a
+	// change to any of them means recompiling - otherwise the pattern keeps playing
+	// in the key it was started in until the user stops and starts again.
+	//
+	// `text` is deliberately NOT a dependency: re-evaluating on every keystroke is
+	// not what a live coder wants (that is what Ctrl+Enter is for), so the current
+	// text is read from a ref.
+	const textRef = useRef(text);
+	textRef.current = text;
+	const firstEval = useRef(true);
+	useEffect(() => {
+		if (firstEval.current) {
+			firstEval.current = false;
+			return;
+		}
+		if (!live) return;
+		workerRef.current?.postMessage({
+			t: "code",
+			code: textRef.current,
+			ctx: noteCtx,
+			liveScale: liveScaleName,
+		});
+	}, [noteCtx, liveScaleName, live]);
 
 	const hush = useCallback(() => {
 		workerRef.current?.postMessage({ t: "hush" });
@@ -226,6 +394,14 @@ export function useStrudel(): StrudelState {
 		clipAvailable,
 		toMidi,
 		fromMidi,
+		scale,
+		liveScale,
+		setLiveScale,
+		warning,
+		playing,
+		drumMap,
+		setDrumMap,
+		resetDrumMap,
 		live,
 		evalError,
 		run,
@@ -233,4 +409,62 @@ export function useStrudel(): StrudelState {
 		debug,
 		amxdBuild,
 	};
+}
+
+/** The scale, as the header shows it: "C Major", or a warning when Live named a
+ *  scale whose intervals we do not know (degrees then fall back to Major). */
+export function scaleLabel(scale: Scale): { text: string; known: boolean } {
+	return {
+		text: `${ROOT_NAMES[scale.root] ?? "C"} ${scale.name}`,
+		known: isKnownScale(scale.name),
+	};
+}
+
+/**
+ * The amber line along the bottom: where the two scale implementations can bite.
+ *
+ * There are two of them, and the toggle picks which one is in force. Ours resolves
+ * degrees before Strudel ever sees them, so it always matches what To Clip writes.
+ * Strudel's own `.scale()` is reachable from code via the `liveScale` global, and
+ * it does not always agree - see strudelAgrees(). Neither is wrong; the user just
+ * has to know which one they are getting.
+ */
+export function scaleWarning(text: string, opts: { scale: Scale; liveScale: boolean }): string | null {
+	const bare = isBareMini(text);
+	const usesStrudelScale = !bare && /\.scale\s*\(/.test(text);
+
+	if (usesStrudelScale && !strudelAgrees(opts.scale.name)) {
+		return `This pattern calls Strudel's own .scale(), which disagrees with Ableton on "${opts.scale.name}" - and mis-reads any scale name containing a space.`;
+	}
+	if (opts.liveScale && !bare) {
+		return "Live Scale applies to bare mini-notation only. In code, write .scale(liveScale) to opt into Strudel's own version of it.";
+	}
+	if (!opts.liveScale && bare && hasBareNumber(text)) {
+		return "Live Scale is off: a bare number is a raw MIDI pitch, so 2 is a D-2. Turn it on to read numbers as scale degrees.";
+	}
+	return null;
+}
+
+function hasBareNumber(text: string): boolean {
+	return miniNoteTokens(text).some((t) => /^-?\d+$/.test(t));
+}
+
+const LIVE_SCALE_KEY = "m4l-strudel.liveScale";
+
+function loadLiveScale(): boolean {
+	try {
+		// Default ON: reading a bare number as a scale degree is what a Live user
+		// expects, and what the bug report asked for.
+		return localStorage.getItem(LIVE_SCALE_KEY) !== "0";
+	} catch {
+		return true;
+	}
+}
+
+function saveLiveScale(on: boolean): void {
+	try {
+		localStorage.setItem(LIVE_SCALE_KEY, on ? "1" : "0");
+	} catch {
+		// Storage disabled: the toggle still works, it just will not be remembered.
+	}
 }

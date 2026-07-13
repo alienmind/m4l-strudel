@@ -1,7 +1,10 @@
-import { ArrowDownToLine, ArrowUpFromLine, Play, Square } from "lucide-react";
+import { useState } from "react";
+import { ArrowDownToLine, ArrowUpFromLine, Drum, Play, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isBareMini } from "@/lib/strudelCode";
-import { useStrudel } from "./useStrudel";
+import { DrumMapPanel } from "./DrumMapPanel";
+import { PatternEditor } from "./PatternEditor";
+import { scaleLabel, useStrudel } from "./useStrudel";
 
 /**
  * Strudel MIDI - a MIDI effect. Sits on a MIDI track, before an instrument,
@@ -14,9 +17,12 @@ import { useStrudel } from "./useStrudel";
  */
 export default function App() {
 	const s = useStrudel();
-	// Full Strudel code is for the live engine only; the clip converter (and
-	// its parser errors / note counter) apply to bare mini-notation.
+	const [showDrums, setShowDrums] = useState(false);
+	// Full Strudel code is real JavaScript: the local parser errors and note
+	// counter only apply to bare mini-notation. Both dialects export to a clip -
+	// the Strudel engine renders it either way.
 	const codeMode = !isBareMini(s.text);
+	const scale = scaleLabel(s.scale);
 
 	return (
 		<div className="device flex h-full w-full flex-col gap-1 overflow-hidden bg-background p-1.5 text-foreground">
@@ -35,19 +41,37 @@ export default function App() {
 						ui {__APP_VERSION__} / amxd {s.amxdBuild}
 					</span>
 				</span>
-				<span className="text-[10px] text-muted-foreground">{codeMode ? "code" : `${s.noteCount} notes`}</span>
+				<span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+					<span
+						className={cn(!scale.known && "text-destructive")}
+						title={
+							scale.known
+								? "Live's global scale - bare numbers in the pattern are degrees of it"
+								: `Live's scale "${s.scale.name}" is not one this device knows - degrees fall back to Major`
+						}
+					>
+						{scale.text}
+					</span>
+					<span>{codeMode ? "code" : `${s.noteCount} notes`}</span>
+				</span>
 			</div>
 
-			<textarea
-				value={s.text}
-				onChange={(e) => s.setText(e.target.value)}
-				spellCheck={false}
-				className={cn(
-					"min-h-12 flex-1 resize-none rounded-md bg-input/40 p-1.5 font-mono text-sm outline-none",
-					(s.evalError || (!codeMode && s.errors.length > 0)) && "ring-1 ring-destructive",
-				)}
-				placeholder='note("c3 e3 g3 b3").midichan(1)'
-			/>
+			{showDrums ? (
+				<DrumMapPanel
+					map={s.drumMap}
+					onChange={s.setDrumMap}
+					onReset={s.resetDrumMap}
+					onClose={() => setShowDrums(false)}
+				/>
+			) : (
+				<PatternEditor
+					value={s.text}
+					onChange={s.setText}
+					onRun={s.run}
+					spans={s.playing}
+					invalid={Boolean(s.evalError || (!codeMode && s.errors.length > 0))}
+				/>
+			)}
 
 			{(s.evalError || (!codeMode && s.errors.length > 0)) && (
 				<span className="truncate text-[10px] leading-none text-destructive">
@@ -87,9 +111,21 @@ export default function App() {
 						onChange={(e) => s.setConv(e.target.value as "strudel" | "scientific")}
 						className="rounded bg-input/50 px-1 py-0.5"
 					>
-						<option value="strudel">Strudel (c5=60)</option>
-						<option value="scientific">Scientific (c4=60)</option>
+						<option value="strudel">c5=60</option>
+						<option value="scientific">c4=60</option>
 					</select>
+				</label>
+				<label
+					className="flex items-center gap-1"
+					title="Read bare numbers as degrees of Live's global scale. Off: a number is a raw MIDI pitch, and the pattern sets its own scale in code."
+				>
+					<input
+						type="checkbox"
+						checked={s.liveScale}
+						onChange={(e) => s.setLiveScale(e.target.checked)}
+						className="size-3 accent-primary"
+					/>
+					Live Scale
 				</label>
 				<label className="flex items-center gap-1">
 					Shift
@@ -102,6 +138,17 @@ export default function App() {
 						className="w-9 rounded bg-input/50 px-1 py-0.5"
 					/>
 				</label>
+				<button
+					onClick={() => setShowDrums((v) => !v)}
+					className={cn(
+						"ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 hover:brightness-110",
+						showDrums ? "bg-primary text-primary-foreground" : "bg-accent text-accent-foreground",
+					)}
+					title="Map drum words (bd, sd, hh) onto Drum Rack pads"
+				>
+					<Drum className="size-2.5" />
+					Kit
+				</button>
 			</div>
 
 			{/* Single action row: live eval + clip I/O */}
@@ -119,7 +166,7 @@ export default function App() {
 					<button
 						className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1 text-sm font-semibold text-primary-foreground hover:brightness-110"
 						onClick={s.run}
-						title="Evaluate and run this pattern, locked to Live's transport"
+						title="Evaluate and run this pattern, locked to Live's transport (Ctrl+Enter)"
 					>
 						<Play className="size-3.5" />
 						Run
@@ -128,12 +175,7 @@ export default function App() {
 				<button
 					className="flex items-center justify-center gap-1 rounded-md bg-accent px-2 py-1 text-sm font-semibold text-accent-foreground hover:brightness-110 disabled:opacity-40"
 					onClick={s.toMidi}
-					disabled={codeMode}
-					title={
-						codeMode
-							? "The clip converter needs bare mini-notation (e.g. c5 [e5 g5]*2) - full Strudel code is Run-only"
-							: "Write the pattern as a MIDI clip on this track"
-					}
+					title="Write the pattern as a MIDI clip on this track - the Strudel engine renders it, so transformations and multi-cycle loops export in full"
 				>
 					<ArrowDownToLine className="size-3.5" />
 					To Clip
@@ -152,6 +194,15 @@ export default function App() {
 					From Clip
 				</button>
 			</div>
+
+			{s.warning && (
+				<span
+					className="truncate text-[10px] leading-none text-amber-500"
+					title={s.warning}
+				>
+					{s.warning}
+				</span>
+			)}
 
 			<div className="flex items-center justify-between gap-2 leading-none">
 				<span className="truncate text-[10px] text-muted-foreground">{s.status}</span>
