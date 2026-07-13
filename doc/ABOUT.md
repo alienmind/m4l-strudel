@@ -124,6 +124,23 @@ Live **Run** mode is not limited to this table - it evaluates full Strudel.
 
 ---
 
+## Strudel MIDI Drums (`alienmind-strudel-midi-drums.amxd`)
+
+![Strudel MIDI Drums device](screenshot-midi-drums.png)
+
+This device runs the exact same engine as Strudel MIDI, but is purpose-built for driving Drum Racks. Instead of writing absolute pitches or scale degrees, you write standard Strudel drum words (`bd`, `sd`, `hh`) which are automatically translated into Drum Rack pad triggers.
+
+### Visual Kit Mapping
+
+![Strudel MIDI Drums Kit Mapping](screenshot-midi-drums-mapping.png)
+
+Clicking the **Kit** button opens a dedicated visual mapper. This lets you route Strudel's vocabulary directly to your Ableton Drum Rack. For example, if you have a kick on pad C1, you simply assign `bd` to `36`. 
+
+- **Custom words**: You can type any non-note text string (e.g. `clap2`) and assign it to a pad.
+- **Persistence**: These mappings are stored natively, meaning your kit setup saves and loads automatically with your Ableton Live set.
+
+---
+
 ## Strudel Samples (`alienmind-strudel-sampler.amxd`)
 
 A browser/downloader for the community sample maps behind strudel.cc. It is
