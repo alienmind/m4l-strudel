@@ -154,9 +154,9 @@ export function useStrudel(): StrudelState {
 
 	// The note-count readout while typing: local, instant, bare-mini only. The
 	// engine is what actually renders the clip (toMidi below).
-	const { noteCount, errors } = useMemo(() => {
+	const { noteCount, errors, capped } = useMemo(() => {
 		const r = renderPattern(text, { bars, ...noteCtx });
-		return { noteCount: r.notes.length, errors: r.errors };
+		return { noteCount: r.notes.length, errors: r.errors, capped: r.capped };
 	}, [text, bars, noteCtx]);
 
 	// From MIDI: the [js] side replies `notes <loopEndBeats> <n> <p s d> ...`
@@ -176,7 +176,7 @@ export function useStrudel(): StrudelState {
 			const barsRead = Math.max(1, Math.round(loopEnd / BEATS_PER_BAR));
 			const mini = eventsToMini(raw, { bars: barsRead, grid, conv, octaveOffset });
 			setText(mini);
-			setStatus(`Read ${n} notes → ${barsRead} bar(s)`);
+			setStatus(`Read ${n} notes → ${barsRead} bar(s) (Structure is flattened)`);
 		});
 		bindInlet(IN.read_error, () => {
 			setStatus("No clip found on this track - create or play a MIDI clip first");
@@ -216,10 +216,10 @@ export function useStrudel(): StrudelState {
 		saveLiveScale(on);
 	}, []);
 
-	const warning = useMemo(
-		() => scaleWarning(text, { scale, liveScale }),
-		[text, scale, liveScale],
-	);
+	const warning = useMemo(() => {
+		if (capped) return "Pattern loop length exceeds MAX_CYCLES (64). Export will be truncated.";
+		return scaleWarning(text, { scale, liveScale });
+	}, [text, scale, liveScale, capped]);
 
 	// The playhead. The worker posts a cycle position ~20x a second; the AST is
 	// parsed once per edit, and only the (cheap) schedule lookup runs per frame.

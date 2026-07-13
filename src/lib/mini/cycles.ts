@@ -15,8 +15,12 @@ import type { Node } from "./ast";
 /** Deeply nested alternations multiply out fast; a clip has to end somewhere. */
 export const MAX_CYCLES = 64;
 
-export function astCycleLength(node: Node): number {
-	return Math.min(MAX_CYCLES, Math.max(1, cycleLength(node)));
+export function astCycleLength(node: Node): { length: number; capped: boolean } {
+	const len = cycleLength(node);
+	return {
+		length: Math.min(MAX_CYCLES, Math.max(1, len)),
+		capped: len > MAX_CYCLES,
+	};
 }
 
 function cycleLength(node: Node): number {
@@ -81,7 +85,10 @@ function lcm(a: number, b: number): number {
 }
 
 function lcmAll(ns: number[]): number {
-	// Clamp as we go: a pathological nest could otherwise overflow before the
-	// caller ever gets to cap it.
-	return ns.reduce((acc, n) => Math.min(MAX_CYCLES, lcm(acc, n)), 1);
+	return ns.reduce((acc, n) => {
+		// We compute the true LCM to know if we crossed the cap.
+		// We'll return the true value, and astCycleLength will cap it at the very end
+		// so it can accurately report if capping occurred.
+		return lcm(acc, n);
+	}, 1);
 }

@@ -4,7 +4,7 @@ import { astCycleLength, MAX_CYCLES } from "../cycles";
 import { schedule } from "../schedule";
 import { renderPattern } from "../render";
 
-const cyclesOf = (src: string) => astCycleLength(parseMini(src).ast);
+const cyclesOf = (src: string) => astCycleLength(parseMini(src).ast).length;
 
 describe("astCycleLength", () => {
 	it("is 1 for a pattern with no alternation", () => {
@@ -44,7 +44,7 @@ describe("astCycleLength", () => {
 	it("agrees with what schedule() actually plays", () => {
 		for (const src of ["<a5 b5>", "<a5 b5 c5>", "<<c5 d5> e5>", "<a5 b5> <c5 d5 e5>"]) {
 			const { ast } = parseMini(src);
-			const n = astCycleLength(ast);
+			const { length: n } = astCycleLength(ast);
 			const sig = (c: number) => JSON.stringify(schedule(ast, c));
 			// The claimed period is real...
 			for (let c = 0; c < 2 * n; c++) expect(sig(c)).toBe(sig(c % n));
