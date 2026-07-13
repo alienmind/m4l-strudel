@@ -38,10 +38,8 @@ import { box, line, registerChain, removeBox } from "@m4l-jweb/build/chains";
  *   preview_go           -> 1
  *   preview_stop         -> 0
  */
-registerChain("sampler", ({ boxes, lines, jwebId, unmatchedId }) => {
-	// An audio effect has no MIDI ports at all.
-	removeBox(boxes, lines, "obj-midiin");
-	removeBox(boxes, lines, "obj-midiout");
+registerChain("sampler", (ctx) => {
+	const { boxes, lines, jwebId, unmatchedId } = ctx;
 
 	// @autostart 0: [js] owns the start sequence (see wrapper/device.ts), so the
 	// script is only started once the payload is known to be extracted.
@@ -65,18 +63,8 @@ registerChain("sampler", ({ boxes, lines, jwebId, unmatchedId }) => {
 	// js -> node (ticks, tempo, scale, and the "script start" bootstrap).
 	lines.push(line(unmatchedId, 1, nodeId, 0));
 
-	// Preview player + passthrough.
-	boxes.push(box("obj-plugin", "plugin~", { numinlets: 1, numoutlets: 2, outlettype: ["signal", "signal"] }));
-	boxes.push(box("obj-sf", "sfplay~ 2", { numinlets: 1, numoutlets: 3, outlettype: ["signal", "signal", "bang"] }));
-	boxes.push(
-		box("obj-routes", "route preview_open preview_go preview_stop", {
-			numoutlets: 4,
-			outlettype: ["", "", "", ""],
-		}),
-	);
 	boxes.push(box("obj-openmsg", "prepend open"));
 	boxes.push(box("obj-gomsg", "t 1"), box("obj-stopmsg", "t 0"));
-	boxes.push(box("obj-plugout", "plugout~", { numinlets: 2, numoutlets: 0 }));
 
 	lines.push(line(nodeId, 0, "obj-routes", 0));
 	lines.push(line("obj-routes", 0, "obj-openmsg", 0));
@@ -90,57 +78,97 @@ registerChain("sampler", ({ boxes, lines, jwebId, unmatchedId }) => {
 	lines.push(line("obj-routes", 3, jwebId, 0));
 
 	// Passthrough + preview mix. Multiple signal cords into one inlet SUM in MSP.
-	lines.push(line("obj-plugin", 0, "obj-plugout", 0));
-	lines.push(line("obj-plugin", 1, "obj-plugout", 1));
-	lines.push(line("obj-sf", 0, "obj-plugout", 0));
-	lines.push(line("obj-sf", 1, "obj-plugout", 1));
+	for (const ch of [0, 1]) {
+		const [srcId, srcOut] = ctx.audioIn(ch);
+		const mixId = `obj-mix-${ch}`;
+		boxes.push(box(mixId, "+~", { numinlets: 2, numoutlets: 1, outlettype: ["signal"] }));
+		lines.push(line(srcId, srcOut, mixId, 0));
+		lines.push(line("obj-sf", ch, mixId, 1));
+		ctx.setAudioOut(ch, mixId, 0);
+	}
 });
 
-/**
- * "strudelfx" - the Audio FX device's signal path:
- *
- *   plugin~ -> onepole~ (cutoff, Hz) -> *~ (gain) -> plugout~     ... per channel
- *
- * WHY NOT JUST `chains: ["lowpass", "gain"]`. Both canned chains build their own
- * `plugin~` and `plugout~` and wire the input straight to their own DSP, so
- * running them together would produce two boxes with the same ids and two parallel
- * paths from input to output - the filtered signal AND the unfiltered one, summed.
- * A chain owns the whole path from input to output; two of them cannot share it.
- * So the composition happens here, once, in the order the effects apply.
- *
- * NO ARITHMETIC HAPPENS HERE, and that is the point of the 0.4.0 Surface: the
- * cutoff parameter is declared in Hz with an `exponent` curve (see
- * src/app/fx/surface.ts), so the value arriving is already the frequency the
- * filter wants. The old shape - a 0-1 dial with `expr 40 * pow(450, x)` hidden in
- * the chain - lied to the automation lane, to Push and to the app, all three of
- * which then read a number that was not the cutoff.
- */
-registerChain("strudelfx", (ctx) => {
+registerChain("strudel-delay", (ctx) => {
 	const { boxes, lines } = ctx;
-	// An audio effect has no MIDI ports at all.
-	removeBox(boxes, lines, "obj-midiin");
-	removeBox(boxes, lines, "obj-midiout");
 
-	boxes.push(box("obj-plugin", "plugin~", { numinlets: 1, numoutlets: 2, outlettype: ["signal", "signal"] }));
-	boxes.push(box("obj-plugout", "plugout~", { numinlets: 2, numoutlets: 0 }));
+	for (const ch of [0, 1]) {
+		const [srcId, srcOut] = ctx.audioIn(ch);
+		const side = "lr"[ch];
+		const tapin = `obj-tapin-${side}`;
+		const tapout = `obj-tapout-${side}`;
+		const fbGain = `obj-fb-${side}`;
+		const dryGain = `obj-dly-dry-${side}`;
+		const wetGain = `obj-dly-wet-${side}`;
+		const mix = `obj-dly-mix-${side}`;
+		const inv = `obj-dly-inv-${side}`;
+		
+		boxes.push(box(tapin, "tapin~ 2000", { numinlets: 1, numoutlets: 1, outlettype: ["tapconnect"] }));
+		boxes.push(box(tapout, "tapout~ 0", { numinlets: 1, numoutlets: 1, outlettype: ["signal"] }));
+		boxes.push(box(fbGain, "*~ 0.", { numinlets: 2, numoutlets: 1, outlettype: ["signal"] }));
+		
+		// DSP path
+		lines.push(line(srcId, srcOut, tapin, 0));
+		lines.push(line(tapin, 0, tapout, 0));
+		lines.push(line(tapout, 0, fbGain, 0));
+		lines.push(line(fbGain, 0, tapin, 0)); // Feedback loop
+		
+		// Parameter bindings
+		fanParamInto(ctx, "delaytime", tapout, 0);
+		fanParamInto(ctx, "delayfeedback", fbGain, 1);
+		
+		// Dry/Wet Mix
+		boxes.push(box(dryGain, "*~ 1.", { numinlets: 2, numoutlets: 1, outlettype: ["signal"] }));
+		boxes.push(box(wetGain, "*~ 0.", { numinlets: 2, numoutlets: 1, outlettype: ["signal"] }));
+		boxes.push(box(mix, "+~", { numinlets: 2, numoutlets: 1, outlettype: ["signal"] }));
+		boxes.push(box(inv, "!- 1.", { numinlets: 2, numoutlets: 1, outlettype: ["float"] })); // 1 - mix
+		
+		lines.push(line(srcId, srcOut, dryGain, 0));
+		lines.push(line(tapout, 0, wetGain, 0));
+		lines.push(line(dryGain, 0, mix, 0));
+		lines.push(line(wetGain, 0, mix, 1));
+		
+		fanParamInto(ctx, "delay", wetGain, 1);
+		fanParamInto(ctx, "delay", inv, 0);
+		lines.push(line(inv, 0, dryGain, 1)); // Inverted mix drives dry gain
+		
+		ctx.setAudioOut(ch, mix, 0);
+	}
+});
 
-	// One filter and one multiplier PER CHANNEL: a signal object handles ONE
-	// signal, and plugin~ hands us a stereo pair. Both sides take the same cutoff
-	// and the same gain, so the stereo image does not shift.
-	//
-	// `18000.` and `1.` are floats, not ints, deliberately: an int right-inlet
-	// would quantise a smooth sweep into steps.
-	for (const [i, lpf, amp] of [
-		[0, "obj-fx-lpf-l", "obj-fx-gain-l"],
-		[1, "obj-fx-lpf-r", "obj-fx-gain-r"],
-	]) {
-		boxes.push(box(lpf, "onepole~ 18000.", { numinlets: 2, numoutlets: 1, outlettype: ["signal"] }));
-		boxes.push(box(amp, "*~ 1.", { numinlets: 2, numoutlets: 1, outlettype: ["signal"] }));
-		lines.push(line("obj-plugin", i, lpf, 0));
-		lines.push(line(lpf, 0, amp, 0));
-		lines.push(line(amp, 0, "obj-plugout", i));
-		fanParamInto(ctx, "cutoff", lpf, 1);
-		fanParamInto(ctx, "gain", amp, 1);
+registerChain("strudel-room", (ctx) => {
+	const { boxes, lines } = ctx;
+
+	for (const ch of [0, 1]) {
+		const [srcId, srcOut] = ctx.audioIn(ch);
+		const side = "lr"[ch];
+		const verb = `obj-verb-${side}`;
+		const dryGain = `obj-verb-dry-${side}`;
+		const wetGain = `obj-verb-wet-${side}`;
+		const mix = `obj-verb-mix-${side}`;
+		const inv = `obj-verb-inv-${side}`;
+		
+		// cverb~ defaults to a decent room sound; we send it signal on inlet 0.
+		// It has one outlet (mono reverb per channel).
+		boxes.push(box(verb, "cverb~", { numinlets: 2, numoutlets: 2, outlettype: ["signal", "signal"] }));
+		
+		lines.push(line(srcId, srcOut, verb, 0));
+		
+		// Dry/Wet Mix
+		boxes.push(box(dryGain, "*~ 1.", { numinlets: 2, numoutlets: 1, outlettype: ["signal"] }));
+		boxes.push(box(wetGain, "*~ 0.", { numinlets: 2, numoutlets: 1, outlettype: ["signal"] }));
+		boxes.push(box(mix, "+~", { numinlets: 2, numoutlets: 1, outlettype: ["signal"] }));
+		boxes.push(box(inv, "!- 1.", { numinlets: 2, numoutlets: 1, outlettype: ["float"] }));
+		
+		lines.push(line(srcId, srcOut, dryGain, 0));
+		lines.push(line(verb, 0, wetGain, 0));
+		lines.push(line(dryGain, 0, mix, 0));
+		lines.push(line(wetGain, 0, mix, 1));
+		
+		fanParamInto(ctx, "room", wetGain, 1);
+		fanParamInto(ctx, "room", inv, 0);
+		lines.push(line(inv, 0, dryGain, 1));
+		
+		ctx.setAudioOut(ch, mix, 0);
 	}
 });
 

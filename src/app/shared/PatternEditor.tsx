@@ -64,7 +64,7 @@ export function PatternEditor({
 				}}
 				spellCheck={false}
 				className={cn(layout, "relative w-full resize-none bg-transparent outline-none")}
-				placeholder='note("c3 e3 g3 b3").midichan(1)'
+				placeholder='ie: note("c3 e3 g3 b3").midichan(1)'
 			/>
 		</div>
 	);

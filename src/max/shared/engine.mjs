@@ -3,9 +3,9 @@
  * - bootScope(): register @strudel/{core,mini,tonal} into globalThis (once).
  * - compile(code): code string -> Pattern ($:-aware, mirrors core/repl.mjs).
  * - queryWindow(pat, from, to, cps): onset haps in a cycle window.
- * - hapToNote(hap, cps): normalized MIDI-ish event or null (live play).
- * - hapToClipNote(hap): the same event in CYCLES, not ms (clip export).
- * - patternCycles(pat, cps): how many cycles before the pattern repeats.
+ * - hapToNote(hap, cps, ctx): normalized MIDI-ish event or null (live play).
+ * - hapToClipNote(hap, ctx): the same event in CYCLES, not ms (clip export).
+ * - patternCycles(pat, cps, ctx): how many cycles before the pattern repeats.
  */
 import { evalScope, evaluate, silence, stack, Pattern, isPattern, noteToMidi } from "@strudel/core";
 import { transpiler } from "@strudel/transpiler";
@@ -79,8 +79,8 @@ export function queryWindow(pat, fromCycle, toCycle, cps) {
 	return pat.queryArc(fromCycle, toCycle, { _cps: cps }).filter((h) => h.hasOnset());
 }
 
-export function hapToNote(hap, cps) {
-	const p = hapPitch(hap);
+export function hapToNote(hap, cps, ctx) {
+	const p = hapPitch(hap, ctx);
 	if (p === null) return null;
 	const v = hap.value ?? {};
 	const durCycles = hap.duration.valueOf(); // Fraction → number (cycles)
@@ -99,8 +99,8 @@ export function hapToNote(hap, cps) {
  * in beats, not milliseconds - one cycle is however many bars the user picked,
  * and nothing here needs to know the tempo.
  */
-export function hapToClipNote(hap) {
-	const p = hapPitch(hap);
+export function hapToClipNote(hap, ctx) {
+	const p = hapPitch(hap, ctx);
 	if (p === null) return null;
 	return {
 		pitch: p,
@@ -110,9 +110,13 @@ export function hapToClipNote(hap) {
 	};
 }
 
-function hapPitch(hap) {
+function hapPitch(hap, ctx) {
 	const v = hap.value ?? {};
 	let note = v.note ?? v.n;
+	if (note === undefined && v.s && ctx?.drumMap) {
+		const mapped = ctx.drumMap[v.s];
+		if (mapped !== undefined) return mapped;
+	}
 	if (typeof note === "string") note = noteToMidi(note);
 	if (typeof note !== "number" || Number.isNaN(note)) return null;
 	return Math.max(0, Math.min(127, Math.round(note)));
@@ -135,13 +139,13 @@ function hapVelocity(hap) {
  * A period is only trusted if it survives the whole probe window, so a pattern
  * that repeats every 3 cycles is not mistaken for one that repeats every 6.
  */
-export function patternCycles(pat, cps, maxCycles = 16) {
+export function patternCycles(pat, cps, ctx, maxCycles = 16) {
 	const probe = maxCycles * 2;
 	const sigs = [];
 	for (let c = 0; c < probe; c++) {
 		const events = queryWindow(pat, c, c + 1, cps)
 			.map((h) => {
-				const n = hapToClipNote(h);
+				const n = hapToClipNote(h, ctx);
 				if (!n) return null;
 				// Relative to this cycle's start, so cycle k looks like cycle 0 when
 				// the pattern has come back around.
@@ -166,8 +170,8 @@ export function patternCycles(pat, cps, maxCycles = 16) {
  * time, so the whole clip can be queried instantly - no transport, no real-time
  * wait - and querying it does not disturb a pattern that is currently playing.
  */
-export function exportNotes(pat, cycles, cps) {
+export function exportNotes(pat, cycles, cps, ctx) {
 	return queryWindow(pat, 0, cycles, cps)
-		.map(hapToClipNote)
+		.map(h => hapToClipNote(h, ctx))
 		.filter(Boolean);
 }
