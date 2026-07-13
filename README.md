@@ -2,13 +2,35 @@
 
 ![Devices Overview](doc/screenshot-devices-1.png)
 
-This started as a fun experiment: *How cool is Strudel? Can I connect it to Ableton and control it from the Push to create the ultimate hybrid workflow?*
+This started as a fun experiment: *How cool is Strudel! Can I connect it to Ableton and control it from the Push to create the ultimate hybrid workflow?*
 
 The result is a set of **Max for Live devices** that bring [Strudel](https://strudel.cc) - the
 JavaScript port of TidalCycles' pattern language - natively into Ableton Live.
 No browser tab, no virtual MIDI cables, no sync hacks: the real
 `@strudel/core` engine runs headlessly inside each device, locked to Live's
 transport, and fully mappable to Ableton Push for hands-on control!
+
+## Why a producer would care
+
+- **Generative sequencing in one line.** `note("c3 e3 g3 b3").sometimesBy(.3, x=>x.fast(2))`
+  is a whole evolving part. Euclidean rhythms, polymeter, per-cycle
+  alternation - things that are tedious to click into a piano roll are one
+  expression in Strudel.
+- **The ultimate hybrid workflow.** By exposing Strudel's engine states (like the `play` parameter) directly to Live, you can map them to your **Ableton Push** or external MIDI controllers. Start and stop complex algorithmic sequences with physical hardware!
+- **A dedicated drum machine.** The new **Strudel MIDI Drums** device brings Strudel's generative drum language (`bd`, `sd`, `hh`) straight to your Ableton Drum Racks. It features a visual **Kit** mapper that natively persists in your Live set, letting you easily route algorithmic sequences to any custom kit!
+
+![Strudel MIDI Drums Kit Mapping](doc/screenshot-midi-drums-mapping.png)
+
+- **It's really Live-native.** Patterns start on the bar, follow tempo
+  automation, stop when you stop the transport, and notes land on the track
+  the device sits on. Everything renders inside the device UI.
+- **From sketch to clip.** The MIDI device can freeze any pattern into a
+  regular MIDI clip (and read clips back into mini-notation), so generative
+  sketches become ordinary arrangeable material.
+- **A sample library browser with taste.** The community sample maps behind
+  strudel.cc (hundreds of drum machines, folk instruments, found sound)
+  become browsable, beat-synced-previewable, and downloadable straight into
+  your User Library workflow.
 
 ## What's in the box
 
@@ -92,31 +114,15 @@ them yet - the device tells you so rather than pretending they worked. A modulat
 value (`.lpf(sine.range(200,2000))`) is refused for the same reason: see
 [doc/TODO.md](doc/TODO.md).
 
-## Why a producer would care
+## Download
 
-- **Generative sequencing in one line.** `note("c3 e3 g3 b3").sometimesBy(.3, x=>x.fast(2))`
-  is a whole evolving part. Euclidean rhythms, polymeter, per-cycle
-  alternation - things that are tedious to click into a piano roll are one
-  expression in Strudel.
-- **The ultimate hybrid workflow.** By exposing Strudel's engine states (like the `play` parameter) directly to Live, you can map them to your **Ableton Push** or external MIDI controllers. Start and stop complex algorithmic sequences with physical hardware!
-- **A dedicated drum machine.** The new **Strudel MIDI Drums** device brings Strudel's generative drum language (`bd`, `sd`, `hh`) straight to your Ableton Drum Racks. It features a visual **Kit** mapper that natively persists in your Live set, letting you easily route algorithmic sequences to any custom kit!
-
-![Strudel MIDI Drums Kit Mapping](doc/screenshot-midi-drums-mapping.png)
-
-- **It's really Live-native.** Patterns start on the bar, follow tempo
-  automation, stop when you stop the transport, and notes land on the track
-  the device sits on. Everything renders inside the device UI.
-- **From sketch to clip.** The MIDI device can freeze any pattern into a
-  regular MIDI clip (and read clips back into mini-notation), so generative
-  sketches become ordinary arrangeable material.
-- **A sample library browser with taste.** The community sample maps behind
-  strudel.cc (hundreds of drum machines, folk instruments, found sound)
-  become browsable, beat-synced-previewable, and downloadable straight into
-  your User Library workflow.
+You can download the pre-built `.amxd` devices ready for Ableton Live from:
+- **[GitHub Releases](https://github.com/alienmind/m4l-strudel/releases)** (Latest)
+- **[Gumroad](https://alienmindzzz.gumroad.com/l/m4l-strudel)**
 
 ## Install
 
-Build (or unzip a release), then install the built devices into Ableton's
+Once downloaded (or if you build from source), install the devices into Ableton's
 User Library:
 
 ```
@@ -211,7 +217,7 @@ time, and Max's `[pipe]`/`[makenote]` apply the precise timing.
 **Full details:** [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) - the build
 pipeline, the exact jweb/js/node message protocol, and what we do (and
 deliberately don't) depend on from upstream strudel.cc. For the underlying
-M4L-JWEB approach itself - the two escape hatches, the generated patchers,
+M4L-JWEB approach itself, the generated patchers,
 the headless `.amxd` writer, `m4l-jweb init` - see
 [m4l-jweb's README](https://github.com/alienmind/m4l-jweb#readme) and
 [doc/ARCHITECTURE.md](https://github.com/alienmind/m4l-jweb/blob/main/doc/ARCHITECTURE.md)
