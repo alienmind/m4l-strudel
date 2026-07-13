@@ -26,7 +26,7 @@ see [doc/TODO.md](TODO.md).
 | **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect, a **MIDI track**, before an instrument | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
 | **Strudel MIDI Drums** (`alienmind-strudel-midi-drums.amxd`) | MIDI effect, a **MIDI track**, before a Drum Rack | The same generative power as Strudel MIDI, but focused purely on drums. It provides a visual **Kit** mapper to route drum words (`bd`, `sd`, `hh`) directly to specific Drum Rack pads. |
 | **Strudel Audio FX** (`alienmind-strudel-fx.amxd`) | Audio effect, any **audio track** | Type a single line of Strudel's DSP effect vocabulary (e.g., `.lpf(800).gain(1.2)`) and it generates a real Max signal chain on the track. Effects become native, automatable Live parameters. |
-| **Strudel Samples** (`alienmind-strudel-sampler.amxd`) | Audio effect, any **audio track** (audio passes through) | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. **Experimental - not recommended for real sessions yet.** |
+| **Strudel Samples** (`alienmind-strudel-sampler-browser.amxd`) | Audio effect, any **audio track** (audio passes through) | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. **Experimental - not recommended for real sessions yet.** |
 
 Press **Run** and patterns play immediately on a free-running clock at the
 project tempo; start **Live's transport** and they lock to the playhead,
@@ -141,7 +141,7 @@ Clicking the **Kit** button opens a dedicated visual mapper. This lets you route
 
 ---
 
-## Strudel Samples (`alienmind-strudel-sampler.amxd`)
+## Strudel Samples (`alienmind-strudel-sampler-browser.amxd`)
 
 A browser/downloader for the community sample maps behind strudel.cc. It is
 an **audio effect**: put it anywhere on an audio track; incoming audio passes

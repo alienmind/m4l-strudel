@@ -41,7 +41,7 @@ transport, and fully mappable to Ableton Push for hands-on control!
 | **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Scale-aware (it follows Live 12's key). Converts patterns **to and from MIDI clips** on the track. |
 | **Strudel MIDI Drums** (`alienmind-strudel-midi-drums.amxd`) | MIDI effect | The exact same engine as Strudel MIDI, but purpose-built for driving Drum Racks. Features a dedicated mapping UI to route drum words (`bd`, `sd`, `hh`) directly to specific Drum Rack pads. |
 | **Strudel Audio FX** (`alienmind-strudel-fx.amxd`) | Audio effect | Write **one line** of Strudel's effect vocabulary - `.lpf(800).gain(1.2)` - and it applies to whatever audio is already on the track. The values become real Live parameters: automatable, MIDI-mappable, and visible on Push. |
-| **Strudel Samples** (`alienmind-strudel-sampler.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. **Experimental - not recommended for real sessions yet.** |
+| **Strudel Samples** (`alienmind-strudel-sampler-browser.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. **Experimental - not recommended for real sessions yet.** |
 
 **New here? Start with the [user guide](doc/ABOUT.md)** - every control of
 every device explained (Bars, Grid, Octave conventions, Shift, Run/Hush,
@@ -122,19 +122,11 @@ You can download the pre-built `.amxd` devices ready for Ableton Live from:
 
 ## Install
 
-Once downloaded (or if you build from source), install the devices into Ableton's
-User Library:
+Once downloaded, simply extract the ZIP file and copy the `.amxd` devices into your Ableton **User Library** (e.g. `User Library/Max For Live/m4l-strudel/`).
 
-```
-pnpm install:device
-```
+Each `.amxd` is fully **self-contained** - its own React UI bundle (the Strudel engine only travels inside the MIDI device, which is the only one that needs it) unpacks itself on first load. Drag from Live's browser onto a MIDI track (midi) or an audio track (sampler) and go.
 
-This finds your Ableton User Library from Live's own config and copies the
-devices into `User Library/Max For Live/m4l-strudel/`. Each `.amxd` is fully
-**self-contained** - its own React UI bundle (the Strudel engine only travels
-inside the MIDI device, which is the only one that needs it) unpacks itself on
-first load. Drag from Live's browser onto a MIDI track (midi) or an audio
-track (sampler) and go.
+*(For developers building from source, you can use `pnpm install:device` to automatically copy the compiled devices to your local Ableton User Library).*
 
 ## Build & test
 
@@ -142,7 +134,7 @@ track (sampler) and go.
 pnpm install
 git submodule update --init   # strudel/ - the engine is bundled from here
 pnpm test          # vitest: mini-notation parser + headless engine tests
-pnpm build         # → dist/m4l-strudel/alienmind-strudel-{midi,sampler,fx}.amxd
+pnpm build         # → dist/m4l-strudel/alienmind-strudel-{midi,sampler-browser,fx}.amxd
                     #   + dist/m4l-strudel.zip (release archive incl. installers)
 pnpm dev:midi       # browser dev for the MIDI device, mocked Live beside it
 pnpm dev:midi-drums # browser dev for the MIDI Drums device

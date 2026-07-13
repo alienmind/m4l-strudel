@@ -31,7 +31,7 @@ export default [
 	},
 	/*
 	{
-		name: "alienmind-strudel-sampler",
+		name: "alienmind-strudel-sampler-browser",
 		ui: "sampler",
 		type: "audio", // 'aaaa' audio effect. Deliberate: a MIDI-effect device has no
 		// audio output path, so its BPM-synced preview (sfplay~ -> plugout~) would
