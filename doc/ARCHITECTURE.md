@@ -375,13 +375,16 @@ audio files are fetched at runtime from their canonical hosts
 ## 5. File map
 
 ```
-src/app/midi/                  the MIDI device: App.tsx, protocol.ts,
-                                surface.ts, useStrudel.ts, engine.worker.js,
-                                PatternEditor.tsx (playhead), DrumMapPanel.tsx
-src/app/sampler/                the Samples device: App.tsx, protocol.ts,
-                                surface.ts
-src/app/fx/                     the Audio FX device: App.tsx, protocol.ts,
-                                surface.ts (cutoff/gain, in real units)
+src/app/shared/                shared engine and UI: PatternEditor.tsx (playhead),
+                               protocol.ts, engine.worker.js, useStrudelEngine.ts,
+                               surface.ts
+src/app/midi/                  the MIDI device: App.tsx, useStrudel.ts
+src/app/midi-drums/            the Drums device: App.tsx, useStrudel.ts,
+                               DrumMapPanel.tsx
+src/app/sampler/               the Samples device: App.tsx, protocol.ts,
+                               surface.ts
+src/app/fx/                    the Audio FX device: App.tsx, protocol.ts,
+                               surface.ts (cutoff/drive/delay/room/gain in real units)
 src/lib/fx.ts                  the effects line -> parameter values (a recorder,
                                not a parser)
 src/lib/strudelCode.ts         bare mini vs code; wraps mini in note(...)
@@ -402,9 +405,7 @@ wrapper/device.ts              [js] glue (ES5) specific to this repo: mode
 patcher/devices.mjs            the device manifest (name, type, mode, chains).
                                No `parameters` field - that is surface.ts now
 patcher/chains.mjs             this repo's own chains: sampler (node.script +
-                               sfplay~ preview), strudelfx (plugin~ -> onepole~
-                               -> *~ -> plugout~)
-scripts/build-node-bundles.mjs esbuild bundling (sampler node entry)
+                               sfplay~ preview), strudel-delay, strudel-room
 scripts/build-ui.mjs           one vite build per device -> dist/ui/<device>/
 scripts/dev.mjs                pnpm dev:<device> - one device in a browser
                                with the mocked-Live harness
