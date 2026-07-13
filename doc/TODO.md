@@ -11,7 +11,59 @@ the designs that were tried and rejected, so nobody proposes them again.
 
 ---
 
-# NEXT: the effects rack
+# Parked: waiting on `m4l-jweb`
+
+These features are fundamentally gated by capabilities not yet present in the `m4l-jweb` framework. We must wait for them to be implemented upstream.
+
+- **Strudel Audio Instrument (Phase 8)**: Producing a true Strudel INSTRUMENT that streams its own synthesized audio (e.g., from Strudel's WebAudio engine) directly into Max's MSP signal graph. Waiting on `FEAT-STRUDEL-002` (native C++ external shared-memory bridge).
+- **Pattern-driven modulation (Phase 7.2)**: `.lpf(sine.range(200, 2000))` describes continuous modulation at 20 Hz, which steps audibly and fights automation lanes. Waiting on a Max-native `LFO` chain stage in `m4l-jweb` to support fast parameter modulation.
+- **Device Persistence**: The drum map and the Audio FX text expression do not travel with the Live set. Per-device persistence needs the wrapper to own it. Waiting on `FEAT-STRUDEL-003` (`definePersistence`).
+- **Sampler without `[node.script]`**: Using `[node.script]` to fetch samples can crash Live. Waiting on `m4l-jweb` Stage 3.1 (`fetch-to-disk` / `[maxurl]`).
+- **`.room()`, `.delay()`, `.crush()`**: Waiting on a proper reverb/delay chain vocabulary natively in `m4l-jweb`. *(Note: This is not a hard block, we could self-host them in `chains.mjs` but upstreaming is preferred).*
+
+---
+
+# Active Backlog (Prioritized Easy to Hard)
+
+## 1. Constants & Caveats (Trivial)
+- **`MAX_CYCLES` is 64.** A pathologically nested pattern is truncated rather than exported. Nobody has hit it; it exists so a typo cannot ask for a ten-thousand-bar clip.
+- **From Clip flattens structure.** It reads MIDI back as a flat grid of notes, so `<a b>` returns as its expanded note list. Inherent to reading MIDI - the structure is not in the clip - but now that To Clip exports the *whole* loop, a round trip produces a much longer flat pattern than it used to.
+
+## 2. Themes (Easy)
+- Add themes to this app - at the very least, dark, light and pastel.
+  - **Concrete Implementation**: We can utilize CSS custom properties (variables) defined in our `index.css` or Tailwind config. 
+  - Max/Live already provides Ableton's theme colors natively (which can be read by `m4l-jweb`). We can map Live's dynamically injected CSS variables (like `--live-bg-color`, `--live-text-color`) to our Tailwind tokens to automatically sync with the user's Ableton theme.
+  - Alternatively, we can add a manual override drop-down in the `About` panel to toggle `document.documentElement.classList.add('theme-pastel')` etc.
+
+## 3. Scale and Pitch matching in full Strudel code (Medium)
+- **Full Strudel code does not see the Octave/Shift controls or the Live Scale toggle.** It is passed through untouched - correct, since it is real Strudel code and rewriting a user's JS would be worse - but it means `note("c5")` there is MIDI **72** (Strudel's note names are scientific), while `c5` in bare mini-notation is whatever the octave convention says. The UI warns in amber; it cannot fix it.
+
+## 4. Playhead highlighting for full Strudel code (Medium)
+- **The playhead highlight only works for bare mini-notation.** It is computed from our own AST, whose tokens carry source positions; full Strudel code has no link back to the characters the user typed. Strudel's own editor solves this with hap `context.locations` from the transpiler - wiring that up means mapping locations in the *rewritten* string back to the user's text, which is real work for a feature that mostly matters in the dialect that already has it.
+
+## 5. CICD pipeline (Medium/Hard)
+- Enough said - the amxd devices should come from the upstream CICD pipeline.
+  - **Concrete Implementation**: Create a GitHub Actions workflow (`.github/workflows/build.yml`) that triggers on tag pushes or PRs to `main`.
+  - The workflow should run `pnpm install`, then `pnpm build` (which compiles the JS and uses `m4l-jweb build` to generate the `.amxd` files).
+  - Finally, use a release action (like `softprops/action-gh-release`) to attach the built `dist/m4l-strudel.zip` and the individual `.amxd` devices as artifacts to a GitHub Release.
+
+---
+
+# DONE: Refactor `ableton-midi` into two devices
+
+The current `ableton-midi` device is attempting to serve two conflicting use cases:
+1. Generating standard MIDI notes (e.g. `note("c3")`).
+2. Mapping drum words and sample commands (e.g. `s("bd")`) to Drum Rack pads via a custom UI.
+
+This makes the device overly complex and the UI cramped. The plan is to split it:
+- **`ableton-midi`**: A pure MIDI generator. It will be stripped of the drum map logic and the "Kit" UI. It will solely output standard notes and scale degrees.
+- **`ableton-midi-drums`**: A dedicated drum mapping device. It will do exactly one thing: map sound primitives (both bare mini-notation like `bd` and JavaScript `s("bd")`) to MIDI notes (e.g., C3/36) for Ableton Drum Racks. 
+
+*Note: The extended mapping UI for `ableton-midi-drums` is pending framework support for popups (see `FEAT-STRUDEL-001` in `m4l-jweb`).*
+
+---
+
+# DONE: the effects rack
 
 `.lpf()` and `.gain()` work. `.room()`, `.delay()`, `.crush()` and `.hpf()` are
 *named* by the device and honestly refused ("no Max chain yet") rather than
@@ -54,7 +106,7 @@ defensible rack. Convolution-based effects probably never qualify.
 `chains: ["lowpass", "gain"]` build a real series (it did not, which is why the
 bespoke chain exists). Once we move to 0.5.0, the hand-wired chain should go.
 
-# `s("bd sd")` should not be silence
+# DONE: `s("bd sd")` should not be silence
 
 The single most common idiom on strudel.cc produces **zero MIDI notes, no error,
 no sound** - `hapToNote()` reads `note ?? n`, and an `s()` pattern has neither. The
@@ -72,68 +124,3 @@ This is a change to note *generation*, not to the UI, and it deserves its own
 discussion: it makes the device honour a control it currently ignores, which is
 either the obvious kindness or a lie about what `s()` means, depending on your
 view. Worth deciding deliberately rather than drifting into.
-
-# Phase 7.2 - pattern-driven modulation
-
-`.lpf(sine.range(200, 2000))` describes continuous modulation: re-query the pattern
-on every transport tick and write a new value at 20 Hz - the same tick-driven
-machinery `useStrudel.ts` already has for notes, driving a continuous parameter
-instead of discrete ones. The parser refuses it today, loudly, which is the right
-failure until this exists.
-
-It is not free, and the cost is worth knowing before starting:
-
-- **Whose modulation is it?** A parameter written 20x a second from the app fights
-  Live's own automation lane for the same parameter, and Live has no concept of
-  "the app is driving this now". The MIDI-mapping and Push story for a parameter
-  under app control is genuinely unclear.
-- **20 Hz is not audio rate.** A `sine` sweeping a filter at 20 Hz will step
-  audibly. The honest version of fast modulation is a **Max-native LFO in the
-  chain, configured by the line** - which is a different design from "the app
-  writes values", and probably the right one.
-
----
-
-# Parked: waiting on `m4l-jweb`
-
-| Wanted | Needs |
-|---|---|
-| Sampler without `[node.script]` (which can crash Live) | fetch-to-disk, `m4l-jweb` Stage 3.1 |
-| `.room()`, `.delay()`, `.crush()` | a reverb/delay chain vocabulary |
-
-**Neither is a hard block.** A missing chain can be self-hosted here in
-`patcher/chains.mjs`, exactly as `sampler` and `strudelfx` already are. The cost
-is that *we* own the risk, instead of `m4l-jweb` carrying it once for every device
-that will ever want it. Do it there unless waiting is genuinely blocking a release.
-
----
-
-# Loose ends
-
-Small, real, none of them blocking:
-
-- **The playhead highlight only works for bare mini-notation.** It is computed
-  from our own AST, whose tokens carry source positions; full Strudel code has no
-  link back to the characters the user typed. Strudel's own editor solves this
-  with hap `context.locations` from the transpiler - wiring that up means mapping
-  locations in the *rewritten* string back to the user's text, which is real work
-  for a feature that mostly matters in the dialect that already has it.
-- **Full Strudel code does not see the Octave/Shift controls or the Live Scale
-  toggle.** It is passed through untouched - correct, since it is real Strudel
-  code and rewriting a user's JS would be worse - but it means `note("c5")` there
-  is MIDI **72** (Strudel's note names are scientific), while `c5` in bare
-  mini-notation is whatever the octave convention says. The UI warns in amber; it
-  cannot fix it.
-- **The drum map does not travel with the Live set.** It is in `localStorage`, so
-  it survives a device reload but not a move to another machine, and two instances
-  on two tracks share one map. Per-device persistence needs the wrapper to own it.
-- **From Clip flattens structure.** It reads MIDI back as a flat grid of notes, so
-  `<a b>` returns as its expanded note list. Inherent to reading MIDI - the
-  structure is not in the clip - but now that To Clip exports the *whole* loop, a
-  round trip produces a much longer flat pattern than it used to.
-- **`MAX_CYCLES` is 64.** A pathologically nested pattern is truncated rather than
-  exported. Nobody has hit it; it exists so a typo cannot ask for a
-  ten-thousand-bar clip.
-- **The Audio FX device has no Live-session persistence either.** Its line lives in
-  React state, so it is retyped on reload - the parameters it wrote survive (they
-  are real Live parameters), but the text that produced them does not.

@@ -113,22 +113,29 @@ Two consequences, and neither is a bug:
    recognised and honestly refused ("no Max chain yet") rather than ignored.
 2. **The order is fixed too.** `.lpf(800).gain(1.2)` and `.gain(1.2).lpf(800)`
    produce the *same* signal path, because there is only one path. The device
-   declares a canonical order and your line chooses amounts within it. Strudel on
-   the web has no such constraint; a Max device does.
+   declares a canonical order (e.g. lowpass → drive → delay → room → gain) and your line 
+   chooses amounts within it. 
+   
+   **This is an imperfect implementation.** As documented in `m4l-jweb`'s [LISTENING.md](https://github.com/alienmind/m4l-jweb/blob/main/doc/LISTENING.md), the order of effects drastically changes the audio result. A chain processing `gain -> drive` sounds quiet and clean because the level is cut before the distortion. A chain processing `drive -> gain` sounds loud and dirty because the distortion happens first. In Strudel on the web, you can sequence effects in any order to achieve both results. In a Max device, the order is locked at build time, so this shortcoming is an inescapable reality of the frozen graph.
 
 ### Supported today
 
 | | |
 |---|---|
 | `.lpf(hz)` / `.cutoff(hz)` | one-pole lowpass, 40 Hz - 18 kHz |
+| `.drive(x)` | distortion drive, 1x - 10x |
+| `.delay(x)` | delay mix, 0-1 |
+| `.delaytime(ms)` | delay time, 1-2000 ms |
+| `.delayfeedback(x)` | delay feedback loop gain, 0-1 |
+| `.room(x)` | reverb wet mix, 0-1 |
 | `.gain(x)` | output level, 1 = unity |
 
-Values are in **real units** - `.lpf(800)` is 800 Hz - and become real Live
+Values are in **real units** - `.lpf(800)` is 800 Hz, `.delaytime(250)` is 250 ms - and become real Live
 parameters: automatable, MIDI-mappable, visible on Push.
 
 ### Refused, and told to your face
 
-- **`.room()`, `.delay()`, `.crush()`, `.hpf()`, `.pan()`, `.distort()`** -
+- **`.crush()`, `.hpf()`, `.pan()`, `.distort()`** -
   recognised as real Strudel effects with no Max chain behind them yet. The
   device says so; it does not pretend.
 - **Modulated values** - `.lpf(sine.range(200, 2000))` describes continuous
