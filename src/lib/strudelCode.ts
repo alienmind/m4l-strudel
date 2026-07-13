@@ -15,11 +15,22 @@
 import { resolveMini } from "./mini/resolve";
 import type { NoteContext } from "./mini/notes";
 
-/** True when the text is bare mini-notation (the clip converter's dialect)
- *  rather than JavaScript. Any quote, call, arrow function or $: line means
- *  it is already code. */
+/**
+ * True when the text is bare mini-notation rather than JavaScript.
+ *
+ * PARENTHESES ARE NOT A TELL, and treating them as one was a real bug: `bd(3,8)`
+ * is a euclidean rhythm - the most idiomatic drum pattern Strudel has - and it was
+ * being read as a JavaScript call, passed to the engine unwrapped, and killed with
+ * a syntax error. Every euclid pattern in the editor was broken.
+ *
+ * What actually distinguishes the two dialects is that JavaScript needs a STRING
+ * (every Strudel pattern starts from `note("...")`, `s("...")`, `n("...")`), or a
+ * METHOD CALL, or `$:`, or an arrow. Mini-notation has none of those: its only
+ * punctuation is structure (`[] <> {} () * @ ! ~ ,`) and its numbers may carry a
+ * decimal point, which is why the method-call test requires a LETTER after the dot.
+ */
 export function isBareMini(text: string): boolean {
-	return !/["'`()]|\$:|=>/.test(text.trim());
+	return !/["'`]|\$:|=>|\.\s*[a-zA-Z]/.test(text.trim());
 }
 
 export function asStrudelCode(text: string, ctx: NoteContext): string {

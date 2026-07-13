@@ -8,19 +8,64 @@ transport.
 
 ## What's in the box
 
-**Strudel MIDI is the one that's ready to use.** Samples is **experimental**
-in this release - shipped so you can see where this is going, not for real
-sessions yet. A third device, a real Strudel audio-effects chain, is planned;
-see [doc/TODO.md](doc/TODO.md).
+**Strudel MIDI is the one that's ready to use.** Audio FX is new. Samples is
+**experimental** - shipped so you can see where this is going, not for real
+sessions yet.
 
 | Device | Type | What it does for you |
 |---|---|---|
-| **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
+| **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Scale-aware (it follows Live 12's key), Drum-Rack-aware, and it converts patterns **to and from MIDI clips** on the track. |
+| **Strudel Audio FX** (`alienmind-strudel-fx.amxd`) | Audio effect | Write **one line** of Strudel's effect vocabulary - `.lpf(800).gain(1.2)` - and it applies to whatever audio is already on the track. The values become real Live parameters: automatable, MIDI-mappable, and visible on Push. |
 | **Strudel Samples** (`alienmind-strudel-sampler.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. **Experimental - not recommended for real sessions yet.** |
 
 **New here? Start with the [user guide](doc/ABOUT.md)** - every control of
 every device explained (Bars, Grid, Octave conventions, Shift, Run/Hush,
 the sample catalog...), with screenshots and typical workflows.
+
+## Patterns that work today
+
+Every line below is verified against the real engine in this repo's tests.
+
+**Bare mini-notation** - type it straight in, no quotes, no `note(...)`:
+
+```
+0 2 4 <7 6>            scale degrees of Live's key; <> alternates per cycle
+0 [2 ~] -1 <4 [5 6]>   negative degrees, rests, nesting
+[0,2,4] ~ [3,5,7] ~    chords
+bd sd bd sd            drum words -> Drum Rack pads
+bd(3,8) ~ sd ~         euclidean rhythm: 3 kicks spread over 8 steps
+bd!3 sd                replication: three kicks, then a snare
+[bd hh]*2 sd hh        subdivision
+c5 [e5 g5]*2 ~ <a5 b5> absolute note names, if you prefer them
+{0 2 4, 7 9}%4         polymeter
+```
+
+**Full Strudel code** - anything the language can do, and all of it exports to a
+clip too:
+
+```js
+note("c3 e3 g3").fast(2)
+n("0 2 4 6").scale(liveScale)                       // liveScale = Live's own key
+note("c3 [e3 g3]").jux(x => x.rev())                // stereo-split via .midichan
+note("c3 e3 g3 b3").sometimesBy(.3, x => x.fast(2)) // a part that evolves
+note("c3(3,8)").off(1/8, x => x.add(note(7)))       // an echo a fifth up
+n("<[0,2,4] [3,5,7]>").scale(liveScale).slow(2)     // a two-bar chord progression
+$: note("c2*4")                                     // several parts at once
+$: note("<e4 g4>").midichan(2)
+```
+
+**Audio FX** - one line, applied to the audio already on the track:
+
+```js
+.lpf(800)              // one-pole lowpass at 800 Hz
+.lpf(2000).gain(1.2)   // ... and a little push
+.cutoff(440)           // `cutoff` and `lpf` are the same control
+```
+
+`.room()`, `.delay()` and `.crush()` are recognised but have no Max chain behind
+them yet - the device tells you so rather than pretending they worked. A modulated
+value (`.lpf(sine.range(200,2000))`) is refused for the same reason: see
+[doc/TODO.md](doc/TODO.md).
 
 ## Why a producer would care
 
@@ -48,7 +93,7 @@ User Library:
 pnpm install:device
 ```
 
-This finds your Ableton User Library from Live's own config and copies both
+This finds your Ableton User Library from Live's own config and copies the
 devices into `User Library/Max For Live/m4l-strudel/`. Each `.amxd` is fully
 **self-contained** - its own React UI bundle (the Strudel engine only travels
 inside the MIDI device, which is the only one that needs it) unpacks itself on
@@ -61,24 +106,26 @@ track (sampler) and go.
 pnpm install
 git submodule update --init   # strudel/ - the engine is bundled from here
 pnpm test          # vitest: mini-notation parser + headless engine tests
-pnpm build         # → dist/m4l-strudel/alienmind-strudel-{midi,sampler}.amxd
+pnpm build         # → dist/m4l-strudel/alienmind-strudel-{midi,sampler,fx}.amxd
                     #   + dist/m4l-strudel.zip (release archive incl. installers)
 pnpm dev:midi       # browser dev for the MIDI device, mocked Live beside it
 pnpm dev:sampler    # browser dev for the Samples device
+pnpm dev:fx         # browser dev for the Audio FX device
 ```
 
 ## Built on M4L-JWEB
 
-This is a **[M4L-JWEB](https://github.com/alienmind/m4l-jweb)** device repo,
-on the 0.2.0 multi-device shape: one `src/app/<device>/` folder per device
-(`App.tsx`, `protocol.ts`, `surface.ts`), each building into its own `.amxd`
-with its own UI bundle - a device ships what it is, not what its sibling is.
-`patcher/devices.mjs` is the manifest; `wrapper/device.ts` holds the shared
-`[js]` extensions. Everything else - the `.amxd` container writer, the
-generated patchers, the `[js]` lifecycle, the ES5 gate, the per-device build
-plumbing (`scripts/dev.mjs`, `scripts/build-ui.mjs`) - comes from the
-published `@m4l-jweb/bridge`, `@m4l-jweb/surface` and `@m4l-jweb/build`
-packages.
+This is a **[M4L-JWEB](https://github.com/alienmind/m4l-jweb)** device repo, on
+the 0.4.0 shape: one `src/app/<device>/` folder per device (`App.tsx`,
+`protocol.ts`, `surface.ts`), each building into its own `.amxd` with its own UI
+bundle - a device ships what it is, not what its sibling is. `patcher/devices.mjs`
+is the manifest; `wrapper/device.ts` holds the shared `[js]` extensions. A
+device's Live parameters are declared **once**, in its `surface.ts`, and the build
+generates the `live.*` objects, their wiring and their message selectors from that
+one declaration. Everything else - the `.amxd` container writer, the generated
+patchers, the `[js]` lifecycle, the ES5 gate, the per-device build plumbing
+(`scripts/dev.mjs`, `scripts/build-ui.mjs`) - comes from the published
+`@m4l-jweb/bridge`, `@m4l-jweb/surface` and `@m4l-jweb/build` packages.
 
 If you were setting this repo up from scratch today, this is the path:
 
@@ -95,12 +142,13 @@ If you were setting this repo up from scratch today, this is the path:
    at `strudel/`, and bundle `@strudel/core` + `mini` + `transpiler` + `tonal`
    from it via vite aliases (see `vite.config.ts` / `vitest.config.ts`).
 
-3. **Grow `patcher/devices.mjs` to two devices** (a third, a real audio-effects
-   device, is planned - see [doc/TODO.md](doc/TODO.md)). One manifest entry
-   per device (`alienmind-strudel-midi` as `type: "midi"`, `-sampler` as
-   `type: "audio"` with `mode: "sampler"`), each with a `ui` field naming its
-   `src/app/` folder, its `chains` (`midiout`, or the project's own `sampler`
-   chain registered via `patcher/chains.mjs`), and Push-visible `parameters`.
+3. **Grow `patcher/devices.mjs` to three devices.** One manifest entry per
+   device (`alienmind-strudel-midi` as `type: "midi"`; `-sampler` and `-fx` as
+   `type: "audio"`, the sampler with `mode: "sampler"`), each with a `ui` field
+   naming its `src/app/` folder and its `chains` - the packaged `midiout`, or
+   one of this project's own (`sampler`, `strudelfx`) registered via
+   `patcher/chains.mjs`. Push-visible parameters are NOT declared here: they
+   live in each device's `surface.ts`.
 
 4. **Add a folder per device.** `src/app/midi/App.tsx` becomes the pattern
    editor, `src/app/sampler/App.tsx` the sample browser - each with its own
@@ -125,7 +173,7 @@ If you were setting this repo up from scratch today, this is the path:
    containers generated entirely from Node scripts, no manual Max editing, on
    a machine that has never opened Max.
 
-Two devices, two independent UI bundles, one wrapper. Live's transport is fed
+Three devices, three independent UI bundles, one wrapper. Live's transport is fed
 in as messages via `[plugsync~]`, the engine queries pattern events ahead of
 time, and Max's `[pipe]`/`[makenote]` apply the precise timing.
 
@@ -138,37 +186,56 @@ the headless `.amxd` writer, `m4l-jweb init` - see
 [doc/ARCHITECTURE.md](https://github.com/alienmind/m4l-jweb/blob/main/doc/ARCHITECTURE.md)
 in that repo.
 
-## Supported mini-notation (clip converter)
+## Bare mini-notation
 
-The **To Clip / From Clip** feature uses a small built-in parser
-(`src/lib/mini/`), independent of the live engine:
+The editor takes two dialects. This is the shorthand one - no quotes, no
+`note(...)`. (The other is full Strudel code, which the real engine evaluates;
+both **play** and both **export to a clip**.)
 
 | Feature | Example | Meaning |
 |---|---|---|
 | Sequence | `c5 e5 g5` | equal division of one cycle |
 | Subdivision | `[e5 g5]` | nested equal division |
 | Rest | `~` | silence |
-| Repeat / speed | `[e5 g5]*2` | repeat the group twice in its slot |
+| Repeat / speed | `[e5 g5]*2` | play the group twice **inside its slot** |
+| Replication | `bd!3` | three **steps**, not a faster one |
 | Elongation | `c5@3 e5` | c5 takes 3x the weight |
 | Alternation | `<a5 b5>` | one element per cycle |
 | Stack (chord) | `[c5,e5,g5]` | parallel notes |
 | Polymeter | `{c5 e5, g5 b5 d6}%4` | 4 steps/cycle per layer |
 | Euclid | `c5(3,8)` | 3 pulses over 8 steps (Bjorklund) |
-| Raw MIDI | `60 64 67` | note numbers |
+| Scale degree | `0 2 4 -1` | degrees of **Live's own key** (see below) |
+| Drum word | `bd sd hh` | Drum Rack pads (`bd`=36, `sd`=38, `hh`=42...) |
+| Note name | `c5 eb4 f#2` | absolute pitch |
 
-Octave convention defaults to **Strudel** (`c5` = MIDI 60); switch to
-Scientific (`c4` = 60) or apply an octave shift in the UI. The **live Run
-mode is not limited to this table** - it evaluates full Strudel code in the
-real engine.
+**Numbers are scale degrees, not MIDI pitches.** With **Live Scale** on (the
+default), `0` is the root of the song's key, `2` is the second degree up, `-1` is
+the note below the root - so a pattern transposes with the track. Turn it off and
+a number is a raw MIDI pitch, which is Strudel's own reading. Either way, Live's
+key is available to code as `liveScale`: `n("0 2 4").scale(liveScale)`.
+
+**Drum words** map to Drum Rack pads and are editable in the **Kit** panel. A word
+only reaches the kit if it is not a valid note name, so `e` is always the note E.
+
+**Octave convention** defaults to Strudel (`c5` = MIDI 60); switch to Scientific
+(`c4` = 60) or apply an octave shift in the UI. Note that *full Strudel code* uses
+Strudel's own scientific naming, where `c5` is MIDI 72 - the UI warns about this.
+
+**Ctrl+Enter** re-evaluates without restarting the cycle, and the step that is
+sounding is highlighted as it plays.
 
 ## Clip I/O behaviour (To Clip / From Clip)
 
-- **To Clip** renders the pattern and creates a Session clip named "Strudel"
-  in the **first empty clip slot** of the track the device sits on.
+- **To Clip** renders the pattern **on the Strudel engine** - so every
+  transformation exports, including `.transpose()`, `.arp()`, `.jux()` and full JS
+  chains - and creates a Session clip named "Strudel" in the **first empty clip
+  slot** of the track. It measures the pattern's true loop length, so `<a b>`
+  writes both cycles rather than being truncated at the first.
 - **From Clip** reads notes back into mini-notation from, in order of
   preference: the **currently playing** clip on this track, else the **first
   clip** found. The button disables itself when the track has no clips
-  (polled once a second).
+  (polled once a second). It reads MIDI, so structure (`<>`, `*`) comes back
+  flattened into the notes it produced.
 
 ## License
 

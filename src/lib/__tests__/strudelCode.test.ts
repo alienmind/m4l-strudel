@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { asStrudelCode } from "../strudelCode";
+import { asStrudelCode, isBareMini } from "../strudelCode";
 import { DEFAULT_DRUM_MAP } from "../mini/drums";
 
 const cMajor = { conv: "strudel" as const, scale: { root: 0, name: "Major" } };
@@ -19,6 +19,21 @@ test("bare numbers are scale degrees, not raw MIDI pitches", () => {
 
 test("drum words are resolved through the drum map", () => {
 	expect(asStrudelCode("bd ~ sd", { ...cMajor, drumMap: DEFAULT_DRUM_MAP })).toBe('note("36 ~ 38")');
+});
+
+test("a euclidean rhythm is mini-notation, not a function call", () => {
+	// The bug: parentheses were read as JavaScript, so `bd(3,8)` - the most
+	// idiomatic drum pattern Strudel has - was passed to the engine unwrapped and
+	// died with a syntax error. Every euclid pattern in the editor was broken.
+	expect(isBareMini("bd(3,8)")).toBe(true);
+	expect(asStrudelCode("bd(3,8) ~ sd ~", { ...cMajor, drumMap: DEFAULT_DRUM_MAP })).toBe(
+		'note("36(3,8) ~ 38 ~")',
+	);
+	expect(asStrudelCode("c5(3,8,2)", cMajor)).toBe('note("60(3,8,2)")');
+});
+
+test("a decimal point is not a method call", () => {
+	expect(isBareMini("c5@1.5 e5")).toBe(true);
 });
 
 test("real code passes through untouched", () => {

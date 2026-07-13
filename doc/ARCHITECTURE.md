@@ -1,11 +1,11 @@
 # m4l-strudel - Architecture
 
-One repo → two self-contained Max for Live devices, each with its own React
+One repo → three self-contained Max for Live devices, each with its own React
 UI bundle, built on the [M4L-JWEB](https://github.com/alienmind/m4l-jweb)
 library. This document describes the build pipeline, the runtime message
 protocol, and exactly how (and how much) we depend on upstream Strudel. For
 the underlying M4L-JWEB approach itself (the `.amxd` container writer,
-generated patchers, the `[js]` lifecycle) see
+generated patchers, the `[js]` lifecycle, the Surface) see
 [m4l-jweb's own doc/ARCHITECTURE.md](https://github.com/alienmind/m4l-jweb/blob/main/doc/ARCHITECTURE.md) -
 this document only covers what is specific to *this* repo.
 
@@ -13,23 +13,23 @@ this document only covers what is specific to *this* repo.
 ┌──────────────────────────── one repo ────────────────────────────┐
 │  src/app/midi/       the MIDI device's UI + engine worker         │
 │  src/app/sampler/    the Samples device's UI                      │
+│  src/app/fx/         the Audio FX device's UI                     │
+│  src/lib/mini/       the mini-notation parser + resolver          │
+│  src/lib/fx.ts       the effects-line reader                      │
 │  src/max/shared/     engine.mjs, transport.mjs (used by midi only)│
 │  src/max/sampler/    the sampler's [node.script] entry            │
-│  wrapper/device.ts   [js] glue shared by both devices, ES5        │
+│  wrapper/device.ts   [js] glue shared by all devices, ES5         │
 │  patcher/devices.mjs the manifest; patcher/chains.mjs: the        │
-│                      sampler's node.script + sfplay~ chain        │
+│                      sampler and strudelfx chains                 │
 │  strudel/            upstream Strudel (git submodule)             │
 └──────────────────────────────┬────────────────────────────────────┘
                           pnpm build
                  (@m4l-jweb/build under the hood)
-        ┌─────────────────────┴─────────────────────┐
-        ▼                                            ▼
- alienmind-strudel-midi.amxd              alienmind-strudel-sampler.amxd
-   (MIDI effect, 'mmmm')                     (audio effect, 'aaaa')
+   ┌──────────────────────────┼──────────────────────────┐
+   ▼                          ▼                          ▼
+ -midi.amxd              -sampler.amxd               -fx.amxd
+ (MIDI effect,'mmmm')    (audio effect,'aaaa')    (audio effect,'aaaa')
 ```
-
-A third device is planned - a real Strudel audio-effects chain, not the
-instrument that used to occupy this slot. See [doc/TODO.md](TODO.md).
 
 ## 1. Runtime anatomy of a device
 
@@ -216,6 +216,101 @@ packaged wrapper has an ES5 `anything()` catch-all). In the MIDI device the
 `[route]` (inside the `midiout` chain) consumes note events and passes
 everything else to `[js]`.
 
+## 3a. One resolver: why Live Play and To Clip cannot disagree
+
+The MIDI device accepts **two dialects** in one editor: bare mini-notation
+(`0 [2 ~] bd*2`) and full Strudel code (`note("c3").fast(2)`). They used to be
+read by two different things - the live engine and a local parser - which meant
+two definitions of what a token meant, kept in step by hand. They drifted, and
+that drift *was* the bug list: a bare `2` played MIDI pitch 2 (a D-2) live, and
+something else in the clip.
+
+`src/lib/mini/resolve.ts` removes the possibility. It rewrites bare
+mini-notation so that every token is an absolute MIDI number, **in place**,
+leaving structure and spacing untouched:
+
+```
+"0 [2 ~] bd*2"   ->   "60 [64 ~] 36*2"      (C major, default kit)
+```
+
+Live Play and To Clip then compile the **same string**. Scale degrees, drum
+words, note names and the octave convention all resolve in exactly one place
+(`src/lib/mini/notes.ts`), so the two paths agree by construction rather than by
+review. A test asserts they produce identical pitches for degrees, negative
+degrees, note names, drum words, shifted octaves and other keys.
+
+**The scale table is ours, deliberately** (`src/lib/mini/scales.ts`, 30 of Live's
+scales). Strudel's own `.scale()` cannot be used for this: `.scale("C4:harmonic
+minor")` mis-parses, because Strudel reads that argument as *mini-notation* and
+the space splits the name in two - and it disagrees with Ableton on the
+pentatonics (it returns plain minor-scale pitches for a minor pentatonic). The
+seven-note modes, where tonal is authoritative, are pinned against Strudel's real
+output by a test; `strudelAgrees()` records exactly where the two can be trusted
+to match, and the UI warns in amber where they cannot. Live's scale is also
+published into the pattern scope as **`liveScale`** ("C4:major"), so code can opt
+into Strudel's implementation on purpose: `n("0 2 4").scale(liveScale)`.
+
+## 3b. To Clip runs on the engine, not on the parser
+
+**The clip exporter is the Strudel engine.** The UI sends
+`{t:"export", code, ctx, bars}` to the same Web Worker that runs Live Play; the
+worker compiles the pattern, measures its loop length, and queries the whole
+window at once (`exportNotes()` → `queryWindow(0, cycles)`). Strudel patterns are
+pure functions of time, so this is instant, needs no transport, and cannot
+disturb a pattern that is currently playing.
+
+The consequence is that **every Strudel transformation exports**: `.transpose()`,
+`.arp()`, `.jux()`, `.add()`, full JS chains. Reimplementing Strudel's function
+library inside `src/lib/mini` was never going to work, and was not attempted.
+
+**Loop length is measured, not assumed.** `<a b>` alternates per cycle, so
+exporting one cycle of it throws half the pattern away. `patternCycles()` in
+`engine.mjs` queries successive cycles and finds the shortest period they are
+consistent with - which works for full Strudel code too, whose loop length no
+parser of ours could compute. (`src/lib/mini/cycles.ts` computes the same thing
+from the AST, for the instant note-count readout while typing.)
+
+**The local parser survives as a preview**, not as an exporter: the note count, the
+parse errors, and the playhead. It is the only thing that can do the playhead,
+because its tokens carry source positions - which is also why full Strudel code
+gets no highlight (its events come out of the engine with no link back to the
+characters the user typed).
+
+## 3c. The Audio FX device: no parser, and no arithmetic in the chain
+
+`src/lib/fx.ts` reads a line like `.lpf(800).gain(1.2)` into parameter values.
+**There is no parser.** Method chaining is JavaScript, and JavaScript already has
+a parser, so the line is evaluated against a *recorder*: an object whose every
+method call appends `{ effect, args }` and returns itself. The recorder is the
+only name in scope, so a line reaching for anything else throws rather than
+quietly resolving to something.
+
+The values it produces are **real Live parameters**, declared once in
+`src/app/fx/surface.ts` and compiled by `@m4l-jweb`'s Surface into the `live.dial`
+objects, their wiring in both directions, and their selectors. The text line, the
+dial, the automation lane and Push are one control with several faces.
+
+**Parameters are declared in real units, and this is load-bearing.** The tempting
+shortcut is a normalised 0-1 dial with the frequency curve hidden in the Max
+chain, and it lies to everything that reads the parameter: the automation lane
+shows `0.6`, Push shows `1`, and the app needs the chain's private mapping to
+print Hz. So the cutoff is `range: [40, 18000], unit: "Hz", exponent: 4` -
+`exponent` bends the *knob's travel* (hearing is logarithmic) without touching the
+value - and `.lpf(800)` means 800 Hz to every reader, with the number dropping
+straight into `onepole~`.
+
+**A chain owns the whole signal path**, so `chains: ["lowpass", "gain"]` is not a
+composition: each canned chain builds its own `plugin~`/`plugout~`, and running
+two would duplicate boxes and sum the filtered signal with the unfiltered one.
+Hence `strudelfx` in `patcher/chains.mjs`: `plugin~ → onepole~ → *~ → plugout~`,
+one per channel.
+
+**The patcher is frozen at build time**, which is the hard constraint on this
+device's future. The user's line changes at *runtime*, so the DSP graph cannot
+change with it: every effect the device will ever apply must already exist in the
+patcher, and the line can only set values (including "off"). Growing the effect
+vocabulary means growing the built-in graph, not composing one on the fly.
+
 ## 4. Strudel: what we depend on, and on what terms
 
 **The engine is vendored, not fetched.** `@strudel/core`, `mini`,
@@ -236,10 +331,9 @@ everything else to `[js]`.
   Even though the engine runs in Chromium where `AudioContext` exists, audio
   must come out of the *device*, not the embedded browser view - there is no
   path from jweb's WebAudio graph into Live's signal chain. Sound output is
-  native: MIDI streaming for the MIDI device today; a planned third device
-  will apply Strudel's audio-effect vocabulary (`.lpf()`, `.room()`, etc.)
-  to real Max DSP objects rather than running superdough at all. See
-  [doc/TODO.md](TODO.md).
+  native: MIDI streaming for the MIDI device, and real Max DSP objects for the
+  Audio FX device, which maps Strudel's effect vocabulary (`.lpf()`, `.gain()`)
+  onto `onepole~`/`*~` rather than running superdough at all.
 
 **The one networked feature** is the sampler's catalog: sample maps and
 audio files are fetched at runtime from their canonical hosts
@@ -251,22 +345,34 @@ audio files are fetched at runtime from their canonical hosts
 
 ```
 src/app/midi/                  the MIDI device: App.tsx, protocol.ts,
-                                surface.ts, useStrudel.ts, engine.worker.js
+                                surface.ts, useStrudel.ts, engine.worker.js,
+                                PatternEditor.tsx (playhead), DrumMapPanel.tsx
 src/app/sampler/                the Samples device: App.tsx, protocol.ts,
                                 surface.ts
+src/app/fx/                     the Audio FX device: App.tsx, protocol.ts,
+                                surface.ts (cutoff/gain, in real units)
+src/lib/fx.ts                  the effects line -> parameter values (a recorder,
+                               not a parser)
+src/lib/strudelCode.ts         bare mini vs code; wraps mini in note(...)
+src/lib/mini/                  the mini-notation parser. resolve.ts (tokens ->
+                               absolute MIDI), notes.ts (the ONE place a token
+                               becomes a pitch), scales.ts (Live's 30 scales),
+                               drums.ts, cycles.ts (loop length), playhead.ts,
+                               schedule.ts, unparse.ts (From Clip)
 src/max/shared/engine.mjs      headless engine: evalScope boot, $: collector,
-                               compile(), queryWindow(), hapToNote()
+                               compile(), queryWindow(), hapToNote(),
+                               exportNotes(), patternCycles()
 src/max/shared/transport.mjs   LiveTransport: ticks → lookahead cycle windows
 src/max/sampler/main.mjs       the sampler's [node.script] entry
 wrapper/device.ts              [js] glue (ES5) specific to this repo: mode
                                dispatch, clip I/O, scale observers, node start -
                                concatenated after @m4l-jweb/wrapper's packaged
                                core.ts/liveapi.ts
-patcher/devices.mjs            the device manifest (name, type, mode, chains)
-patcher/chains.mjs             this repo's own chain: sampler (node.script +
-                               sfplay~ preview)
-src/lib/mini/                  standalone mini-notation parser - powers only
-                               the clip To/From converter, NOT live eval
+patcher/devices.mjs            the device manifest (name, type, mode, chains).
+                               No `parameters` field - that is surface.ts now
+patcher/chains.mjs             this repo's own chains: sampler (node.script +
+                               sfplay~ preview), strudelfx (plugin~ -> onepole~
+                               -> *~ -> plugout~)
 scripts/build-node-bundles.mjs esbuild bundling (sampler node entry)
 scripts/build-ui.mjs           one vite build per device -> dist/ui/<device>/
 scripts/dev.mjs                pnpm dev:<device> - one device in a browser
@@ -275,8 +381,27 @@ scripts/devices.mjs            reads patcher/devices.mjs, maps device -> UI fold
 strudel/                       upstream Strudel monorepo (git submodule, pinned)
 ```
 
-The `.amxd` container writer, the patcher generator, and the installers all
-now live in `@m4l-jweb/build` (published to npm), not in this repo.
+The `.amxd` container writer, the patcher generator, the parameter codegen and
+the installers all now live in `@m4l-jweb/build` (published to npm), not in this
+repo.
+
+## 5a. Rejected designs, so nobody re-proposes them
+
+**An "Instrument" device driving a `[poly~]` synth.** Built once, removed
+entirely. It reinvented a crude oscillator synth instead of using Strudel's real
+sound engine - `.s("bd")` sample references and most of the transformation chain
+did nothing - and it copied the MIDI device's note editor wholesale, which makes
+no sense for something meant to be an audio surface. Its voice patch was also
+never verified to make a sound. The Audio FX device replaces it, and it is a
+different *kind* of device: an effect applied to audio that already exists, not a
+synth.
+
+**A second parser for Strudel's function library.** See §3b: the engine exports
+clips now. Any proposal to teach `src/lib/mini` about `.transpose()` is a
+proposal to maintain a second, worse Strudel.
+
+**A normalised 0-1 parameter with the curve hidden in the Max chain.** See §3c.
+It lies to the automation lane, to Push, and to the app.
 
 ## 6. Known verification gates (need a real Live/Max session)
 
