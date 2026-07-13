@@ -14,9 +14,10 @@ import {
 import { isBareMini } from "@/lib/strudelCode";
 import { miniNoteTokens } from "@/lib/mini/resolve";
 import { activeSpans, parseForPlayhead, type Span } from "@/lib/mini/playhead";
-import { DEFAULT_DRUM_MAP, loadDrumMap, saveDrumMap, type DrumMap } from "@/lib/mini/drums";
-import EngineWorker from "./engine.worker.js?worker&inline";
-import { IN, OUT } from "./protocol";
+import { useParam } from "@m4l-jweb/surface/react";
+import surface from "../shared/surface";
+import EngineWorker from "../shared/engine.worker.js?worker&inline";
+import { IN, OUT } from "../shared/protocol";
 
 interface EngineNote {
 	pitch: number;
@@ -76,10 +77,6 @@ export interface StrudelState {
 	/** Source ranges of the step(s) sounding right now, for the editor highlight.
 	 *  Empty for full Strudel code, which has no link back to the typed text. */
 	playing: Span[];
-	/** Drum words ("bd", "hh") -> MIDI notes, for Drum Rack patterns. */
-	drumMap: DrumMap;
-	setDrumMap: (m: DrumMap) => void;
-	resetDrumMap: () => void;
 	/** Real Strudel engine, running live in a Web Worker. */
 	live: boolean;
 	evalError: string | null;
@@ -93,6 +90,7 @@ export interface StrudelState {
 }
 
 export function useStrudel(): StrudelState {
+	const [playParam, setPlayParam] = useParam(surface, "play");
 	const [text, setText] = useState("c5 [e5 g5]*2 ~ <a5 b5>");
 	const [bars, setBars] = useState(1);
 	const [grid, setGrid] = useState(16);
@@ -101,7 +99,6 @@ export function useStrudel(): StrudelState {
 	const [status, setStatus] = useState("Ready");
 	const [scale, setScale] = useState<Scale>(DEFAULT_SCALE);
 	const [liveScale, setLiveScaleState] = useState<boolean>(() => loadLiveScale());
-	const [drumMap, setDrumMapState] = useState<DrumMap>(() => loadDrumMap());
 	// Outside Max (browser dev) there is no wrapper to report availability, so
 	// default to enabled there and let the wrapper drive it inside Live.
 	const [clipAvailable, setClipAvailable] = useState(!inJweb);
@@ -116,8 +113,8 @@ export function useStrudel(): StrudelState {
 	 *
 	 *  `scale` is omitted entirely when the toggle is off: no scale, no degrees. */
 	const noteCtx = useMemo<NoteContext>(
-		() => ({ conv, octaveOffset, scale: liveScale ? scale : undefined, drumMap }),
-		[conv, octaveOffset, scale, liveScale, drumMap],
+		() => ({ conv, octaveOffset, scale: liveScale ? scale : undefined }),
+		[conv, octaveOffset, scale, liveScale],
 	);
 	/** Live's scale in Strudel's own spelling, published to the pattern scope as
 	 *  `liveScale` whether or not the toggle is on - code may want it either way. */
@@ -233,16 +230,6 @@ export function useStrudel(): StrudelState {
 		[playAst, phase],
 	);
 
-	const setDrumMap = useCallback((m: DrumMap) => {
-		setDrumMapState(m);
-		saveDrumMap(m);
-	}, []);
-
-	const resetDrumMap = useCallback(() => {
-		setDrumMapState({ ...DEFAULT_DRUM_MAP });
-		saveDrumMap({ ...DEFAULT_DRUM_MAP });
-	}, []);
-
 	const [live, setLive] = useState(false);
 	const [evalError, setEvalError] = useState<string | null>(null);
 	const [debug, setDebug] = useState("");
@@ -342,10 +329,11 @@ export function useStrudel(): StrudelState {
 		if (!isBareMini(text) || errors.length === 0) {
 			workerRef.current?.postMessage({ t: "code", code: text, ctx: noteCtx, liveScale: liveScaleName });
 			setLive(true);
+			setPlayParam(true);
 			return;
 		}
 		setStatus(`Parse error at ${errors[0].pos}: ${errors[0].msg}`);
-	}, [text, noteCtx, liveScaleName, errors]);
+	}, [text, noteCtx, liveScaleName, errors, setPlayParam]);
 
 	// Live 12's scale (and the octave/shift/kit controls) must reach a pattern that
 	// is ALREADY PLAYING. They are baked into the code the worker compiled, so a
@@ -375,7 +363,13 @@ export function useStrudel(): StrudelState {
 	const hush = useCallback(() => {
 		workerRef.current?.postMessage({ t: "hush" });
 		setLive(false);
-	}, []);
+		setPlayParam(false);
+	}, [setPlayParam]);
+
+	useEffect(() => {
+		if (playParam && !live) run();
+		else if (!playParam && live) hush();
+	}, [playParam, live, run, hush]);
 
 	return {
 		text,
@@ -399,9 +393,6 @@ export function useStrudel(): StrudelState {
 		setLiveScale,
 		warning,
 		playing,
-		drumMap,
-		setDrumMap,
-		resetDrumMap,
 		live,
 		evalError,
 		run,
