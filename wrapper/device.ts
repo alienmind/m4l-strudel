@@ -7,12 +7,12 @@
  * those, as one ES5 script, so it can see and extend them.
  *
  * What is genuinely ours:
- *   1. The device mode (midi | sampler), and the fan-out to outlet 1 that the
- *      sampler's [node.script] needs.
+ *   1. The device mode (midi | sampler-browser), and the fan-out to outlet 1 that the
+ *      strudel-sample-browser's [node.script] needs.
  *   2. clip_available: a poll, because LiveAPI has no observer for "any clip on
  *      this track", so the UI can disable From Clip when there is nothing to read.
  *   3. Live 12's global root_note/scale_name, forwarded to the UI and to node.
- *   4. The [node.script] bootstrap (sampler only).
+ *   4. The [node.script] bootstrap (strudel-sample-browser only).
  *
  * Everything here is ES5 and gated by acorn, same as the packaged sources.
  */
@@ -21,11 +21,11 @@
  * Device mode. Set from the object box by the manifest's `mode` field.
  *
  * TRAP: jsarguments[0] is the SCRIPT NAME, not the first argument. Reading index
- * 0 sets the mode to "wrapper.js", and every `MODE === "sampler"` test is then
+ * 0 sets the mode to "wrapper.js", and every `MODE === "sampler-browser"` test is then
  * silently false forever - which is exactly the bug this project shipped for
  * months. Scan for a known token rather than trusting an index.
  */
-var MODES = ["midi", "sampler"];
+var MODES = ["midi", "sampler-browser"];
 function resolveStrudelMode(): string {
 	for (var i = 0; i < jsarguments.length; i++) {
 		var a = String(jsarguments[i]);
@@ -39,23 +39,23 @@ function resolveStrudelMode(): string {
 
 /** The packaged core also computes a MODE; ours is the authoritative one. */
 var STRUDEL_MODE = resolveStrudelMode();
-var IS_SAMPLER = STRUDEL_MODE === "sampler";
+var IS_SAMPLER_BROWSER = STRUDEL_MODE === "sampler-browser";
 
 post("strudel: mode " + STRUDEL_MODE + "\n");
 
 /**
- * The sampler runs a [node.script] on outlet 1 that needs the same clock and
+ * The strudel-sample-browser runs a [node.script] on outlet 1 that needs the same clock and
  * tempo the UI gets. The packaged wrapper only sends them to jweb (outlet 0), so
  * mirror them here.
  *
  * onTick and onTempoChange are hooks the packaged wrapper calls; see max.d.ts.
  */
 function onTick(playing: number, beats: number): void {
-	if (IS_SAMPLER) outlet(1, "tick", playing, beats);
+	if (IS_SAMPLER_BROWSER) outlet(1, "tick", playing, beats);
 }
 
 function onTempoChange(bpm: number): void {
-	if (IS_SAMPLER) outlet(1, "tempo", bpm);
+	if (IS_SAMPLER_BROWSER) outlet(1, "tempo", bpm);
 }
 
 /* ------------------------------------------------------------------ *
@@ -70,8 +70,8 @@ var lastClipAvail = -1;
 var clipPoll = new Task(checkClipAvailable, this);
 
 function startClipPoll(): void {
-	// The sampler is an audio effect with no MIDI notes of its own.
-	if (IS_SAMPLER) return;
+	// The strudel-sample-browser is an audio effect with no MIDI notes of its own.
+	if (IS_SAMPLER_BROWSER) return;
 	lastClipAvail = -1;
 	clipPoll.cancel();
 	clipPoll.interval = 1000;
@@ -94,7 +94,7 @@ function checkClipAvailable(): void {
 /* ------------------------------------------------------------------ *
  * Live 12 global scale (BOTH modes)
  *
- * The sampler filters its catalog by key. The MIDI device needs it for a
+ * The strudel-sample-browser filters its catalog by key. The MIDI device needs it for a
  * different reason: a bare number in mini-notation is a SCALE DEGREE, and
  * without the song's root and scale it can only be read as a raw MIDI pitch -
  * which is why `2 3` used to come out as a pair of notes near the bottom of the
@@ -136,15 +136,15 @@ function onScale(a: unknown[]): void {
 
 function sendScale(): void {
 	outlet(0, "scale", liveRoot, liveScale); // -> jweb (scale degrees / catalog filter)
-	if (IS_SAMPLER) outlet(1, "scale", liveRoot, liveScale); // -> node
+	if (IS_SAMPLER_BROWSER) outlet(1, "scale", liveRoot, liveScale); // -> node
 }
 
 /* ------------------------------------------------------------------ *
- * [node.script] bootstrap (sampler only)
+ * [node.script] bootstrap (strudel-sample-browser only)
  *
  * The rest of this project deliberately avoids node.script - Node for Max is
  * unstable in Live, from silently ignoring `script start` to crashing the host,
- * which is why the engine lives in a Web Worker instead. The sampler is the one
+ * which is why the engine lives in a Web Worker instead. The strudel-sample-browser is the one
  * device that genuinely needs the OS (fetch + filesystem), so it pays that cost.
  *
  * The patcher creates it with @autostart 0 and [js] owns the start sequence.
@@ -159,7 +159,7 @@ var nodeStartTask = new Task(startNodeScript, this);
 var nodeProbeTask = new Task(probeNodeScript, this);
 
 function bootNodeScript(): void {
-	if (!IS_SAMPLER || nodeStarted) return;
+	if (!IS_SAMPLER_BROWSER || nodeStarted) return;
 	// The packaged core already extracted every manifest payload, including the
 	// .cjs bundle, so by here the file is on disk.
 	nodeStartTask.schedule(300);
@@ -201,5 +201,5 @@ function onUiReady(): void {
 	outlet(0, "mode", STRUDEL_MODE); // the real mode, not the packaged default
 	sendScale(); // the observers fired before this page existed
 	lastClipAvail = -1;
-	if (!IS_SAMPLER) checkClipAvailable();
+	if (!IS_SAMPLER_BROWSER) checkClipAvailable();
 }

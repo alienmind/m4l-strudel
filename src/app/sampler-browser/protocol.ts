@@ -1,12 +1,13 @@
 /**
- * protocol.ts (sampler) - every selector that crosses this device's bridge.
+ * protocol.ts (strudel-sample-browser) - every selector that crosses this device's bridge.
  *
- * An audio effect with no MIDI ports, so the MIDI chain contract (CHAIN_IN /
- * CHAIN_OUT) is deliberately NOT spread in here - a `midinote` sent from this
- * device would match nothing and be swallowed in silence.
+ * This device hosts a [node.script] on its outlet 1 to do the fetching work
+ * that jweb cannot (it has no fetch API that writes to Max's virtual
+ * filesystem).
  *
- * Everything below the DEVICE_IN spread is a reply from the [node.script] host
- * (see patcher/chains.mjs's `sampler` chain and src/max/sampler/main.mjs), not
+ * [js] fans out to it, so jweb's one outlet reaches both. The node process
+ * registers handlers only for what it needs and ignores the rest
+ * (see patcher/chains.mjs's `strudel-sample-browser` chain and src/max/sampler-browser/main.mjs), not
  * from the packaged wrapper - this device's own protocol, genuinely.
  */
 import { DEVICE_IN } from "@m4l-jweb/bridge";

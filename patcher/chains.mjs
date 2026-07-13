@@ -38,7 +38,7 @@ import { box, line, registerChain, removeBox } from "@m4l-jweb/build/chains";
  *   preview_go           -> 1
  *   preview_stop         -> 0
  */
-registerChain("sampler", (ctx) => {
+registerChain("strudel-sample-browser", (ctx) => {
 	const { boxes, lines, jwebId, unmatchedId } = ctx;
 
 	// @autostart 0: [js] owns the start sequence (see wrapper/device.ts), so the
@@ -46,7 +46,7 @@ registerChain("sampler", (ctx) => {
 	// @watch 0: no filesystem watching inside a shipped device.
 	const nodeId = "obj-node";
 	boxes.push(
-		box(nodeId, "node.script strudel-node-sampler.cjs @autostart 0 @watch 0", {
+		box(nodeId, "node.script strudel-node-sampler-browser.cjs @autostart 0 @watch 0", {
 			numinlets: 1,
 			numoutlets: 2,
 			outlettype: ["", ""],
