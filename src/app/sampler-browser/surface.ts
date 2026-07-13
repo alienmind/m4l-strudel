@@ -1,5 +1,5 @@
 /**
- * surface.ts (sampler) - the device's Live parameters, declared as code.
+ * surface.ts (strudel-sample-browser) - the device's Live parameters, declared as code.
  *
  * Empty: this device has no automatable controls (it is a browser/downloader,
  * not a performance surface). Kept as an empty declaration for the same reason

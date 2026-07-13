@@ -29,28 +29,16 @@ export default [
 		chains: ["midiout"],
 		unmatchedTo: "js",
 	},
-	/*
 	{
 		name: "alienmind-strudel-sampler-browser",
-		ui: "sampler",
-		type: "audio", // 'aaaa' audio effect. Deliberate: a MIDI-effect device has no
-		// audio output path, so its BPM-synced preview (sfplay~ -> plugout~) would
-		// be silent. It sits anywhere in an audio chain and passes input through,
-		// like Splice's Bridge.
-		mode: "sampler", // ... but the wrapper must know it is the sampler
-		chains: ["sampler"], // ours: node.script + sfplay~ preview + passthrough
-		// The .cjs is read by node.script, which is NOT a Max-native object, so it
-		// cannot see the frozen filesystem and needs a real file:
-		//   payloads   - embedded in wrapper.js, extracted on load (self-contained
-		//                .amxd, e.g. one copied on its own)
-		//   looseFiles - also shipped next to the .amxd, because node.script
-		//                resolves its script name when the OBJECT INSTANTIATES,
-		//                which is before the wrapper has run at all.
-		payloads: ["dist/node/strudel-node-sampler.cjs"],
-		looseFiles: ["dist/node/strudel-node-sampler.cjs"],
+		ui: "sampler-browser",
+		type: "audio",
+		mode: "sampler-browser",
+		chains: ["strudel-sample-browser"],
+		payloads: ["dist/node/strudel-node-sampler-browser.cjs"],
+		looseFiles: ["dist/node/strudel-node-sampler-browser.cjs"],
 		unmatchedTo: "js",
 	},
-	*/
 	{
 		/**
 		 * Strudel Audio FX - write one line of Strudel's effect vocabulary
