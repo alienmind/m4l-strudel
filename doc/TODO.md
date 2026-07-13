@@ -11,30 +11,67 @@ the designs that were tried and rejected, so nobody proposes them again.
 
 ---
 
-# NEXT: more effects in the Audio FX device
+# NEXT: the effects rack
 
-`.lpf()` and `.gain()` work. `.room()`, `.delay()`, `.crush()`, `.hpf()` and the
-rest are *named* by the device today, and honestly refused ("no Max chain yet -
-ignored") rather than silently doing nothing.
+`.lpf()` and `.gain()` work. `.room()`, `.delay()`, `.crush()` and `.hpf()` are
+*named* by the device and honestly refused ("no Max chain yet") rather than
+silently doing nothing.
 
-**The hard constraint, before any design:** the patcher is frozen at build time,
-and the user's line changes at runtime. The DSP graph therefore cannot be built
-from the line. Every effect the device will ever apply has to be **in the patcher
-already**, with the line only setting values - including the value that means
-"off" (a dry/wet at 0, a bypassed `*~`). Growing the vocabulary means growing the
-built-in graph and giving each effect a neutral setting, not composing a graph on
-the fly.
+**Read the frozen-graph law first** ([ARCHITECTURE.md](ARCHITECTURE.md) §3c): the
+DSP graph is written at build time and the line only chooses values. So this is
+not "add effects to a chain" - it is **building the rack the device will always
+have**, in a fixed order, with every stage able to be exactly neutral.
 
-That makes the real question **which effects earn a permanent place in the
-graph**, since each one costs DSP whether or not the line mentions it. A first
-answer: `hpf` (the sibling of a filter we already have), `room` (the one people
-reach for), `delay`. Convolution-based effects probably never qualify.
+Three pieces, in order:
 
-**What `m4l-jweb` can do for this:** a reverb/delay chain vocabulary, so the DSP
-does not have to be hand-wired here. Composable chains would let `strudelfx` be
-assembled from library pieces rather than one bespoke function - but note that
-this is a *build-time* composition, not a runtime one; it does not change the
-constraint above.
+1. **The neutral-value rule.** The constraint the frozen graph forces, and the one
+   we do not have yet. Every stage is always in the path, so every stage needs a
+   setting at which it is *bit-identical* to a wire. `gain: 1.0` and
+   `cutoff: 18 kHz` are naturally neutral; a reverb is **not** - it is wet-only and
+   needs an explicit dry/wet where 0 is genuinely dry. Six effects without this is
+   six colourations you cannot switch off. It wants to be a declared property of a
+   chain, and a test.
+
+2. **The reverb and delay chains.** `m4l-jweb`'s maintainers have checked Live's
+   own install rather than trusting memory:
+   - **`cverb~`** ships inside Live (`resources/externals/m4l/`) - a mono
+     reverberator, signal in, reverb time in ms on inlet 1. Mono, so one per
+     channel; wet-only, so it needs the dry/wet from (1).
+   - **`tapin~` / `tapout~`** for delay, with feedback via `*~` - the standard Max
+     delay line. `.delay()`, `.delaytime()`, `.delayfeedback()` map straight onto
+     it.
+
+3. **The canonical order.** Since it is frozen, it has to be chosen once:
+   filter → drive → delay → reverb → gain. `.lpf(800).room(0.5)` and
+   `.room(0.5).lpf(800)` will produce the same signal path, and the UI should say
+   so rather than let a user believe otherwise.
+
+**Which effects earn a permanent place** is the real question, since each one costs
+DSP whether or not the line mentions it. `hpf`, `room`, `delay` and a drive are a
+defensible rack. Convolution-based effects probably never qualify.
+
+**Also: drop `strudelfx` for library stages.** `@m4l-jweb` 0.5.0 makes
+`chains: ["lowpass", "gain"]` build a real series (it did not, which is why the
+bespoke chain exists). Once we move to 0.5.0, the hand-wired chain should go.
+
+# `s("bd sd")` should not be silence
+
+The single most common idiom on strudel.cc produces **zero MIDI notes, no error,
+no sound** - `hapToNote()` reads `note ?? n`, and an `s()` pattern has neither. The
+device looks broken; it is being asked for a sound it cannot make.
+[STRUDEL-SUPPORT.md](STRUDEL-SUPPORT.md) now says so loudly, but documentation is
+the consolation prize here.
+
+**The cheap fix, and it is nearly free:** when a hap has an `s` and no note, look
+the sample name up in the **drum map** - which already exists, already maps
+`bd`/`sd`/`hh` to Drum Rack pads, and is already user-editable. `s("bd sd")` then
+plays a Drum Rack exactly as `bd sd` does, and a rhythm copied off strudel.cc works
+unchanged. An `s()` name with no mapping stays silent, as it must.
+
+This is a change to note *generation*, not to the UI, and it deserves its own
+discussion: it makes the device honour a control it currently ignores, which is
+either the obvious kindness or a lie about what `s()` means, depending on your
+view. Worth deciding deliberately rather than drifting into.
 
 # Phase 7.2 - pattern-driven modulation
 
