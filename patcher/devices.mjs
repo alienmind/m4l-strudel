@@ -29,6 +29,7 @@ export default [
 		chains: ["midiout"],
 		unmatchedTo: "js",
 	},
+	/*
 	{
 		name: "alienmind-strudel-sampler",
 		ui: "sampler",
@@ -49,6 +50,7 @@ export default [
 		looseFiles: ["dist/node/strudel-node-sampler.cjs"],
 		unmatchedTo: "js",
 	},
+	*/
 	{
 		/**
 		 * Strudel Audio FX - write one line of Strudel's effect vocabulary
