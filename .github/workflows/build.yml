@@ -29,7 +29,9 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          pnpm install --frozen-lockfile
+          cd strudel && pnpm install --frozen-lockfile
 
       - name: Build
         run: pnpm build
