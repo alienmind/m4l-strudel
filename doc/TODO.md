@@ -19,7 +19,7 @@ These features are fundamentally gated by capabilities not yet present in the `m
 - **Pattern-driven modulation (Phase 7.2)**: `.lpf(sine.range(200, 2000))` describes continuous modulation at 20 Hz, which steps audibly and fights automation lanes. Waiting on a Max-native `LFO` chain stage in `m4l-jweb` to support fast parameter modulation.
 - **Device Persistence**: The drum map and the Audio FX text expression do not travel with the Live set. Per-device persistence needs the wrapper to own it. Waiting on `FEAT-STRUDEL-003` (`definePersistence`).
 - **Sample Browser (`ableton-sample-browser`)**: A generic browser for open-source samples without relying on `[node.script]`. Waiting on `m4l-jweb` Stage 3.1 (`fetch-to-disk` / `[maxurl]`). See [SAMPLE-BROWSER.md](SAMPLE-BROWSER.md) for the detailed design.
-- **`.room()`, `.delay()`, `.crush()`**: Waiting on a proper reverb/delay chain vocabulary natively in `m4l-jweb`. *(Note: This is not a hard block, we could self-host them in `chains.mjs` but upstreaming is preferred).*
+- **`.crush()`**: Waiting on a proper bitcrusher chain vocabulary natively in `m4l-jweb`. *(Note: This is not a hard block, we could self-host them in `chains.mjs` but upstreaming is preferred).*
 
 ---
 
