@@ -32,6 +32,37 @@ export default defineSurface({
 			format: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)} kHz` : `${Math.round(v)} Hz`),
 			short: "Cutoff",
 		}),
+		drive: dial({
+			range: [1, 10],
+			default: 1,
+			unit: "x",
+			short: "Drive",
+		}),
+		delay: dial({
+			range: [0, 1],
+			default: 0,
+			format: (v) => `${Math.round(v * 100)}%`,
+			short: "Delay",
+		}),
+		delaytime: dial({
+			range: [1, 2000],
+			default: 250,
+			unit: "ms",
+			format: (v) => `${Math.round(v)} ms`,
+			short: "Dly Time",
+		}),
+		delayfeedback: dial({
+			range: [0, 1],
+			default: 0,
+			format: (v) => `${Math.round(v * 100)}%`,
+			short: "Feedback",
+		}),
+		room: dial({
+			range: [0, 1],
+			default: 0,
+			format: (v) => `${Math.round(v * 100)}%`,
+			short: "Room",
+		}),
 		gain: dial({
 			// A linear multiplier, as in Strudel: .gain(1) is unity, .gain(2) is +6 dB.
 			// Not dB, because the number the user types in the line is this number.
@@ -42,5 +73,5 @@ export default defineSurface({
 		}),
 	},
 
-	banks: [{ name: "FX", params: ["cutoff", "gain"] }],
+	banks: [{ name: "FX", params: ["cutoff", "drive", "delay", "delaytime", "delayfeedback", "room", "gain"] }],
 });
