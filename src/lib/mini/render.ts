@@ -35,6 +35,7 @@ export interface RenderResult {
 	lengthBeats: number;
 	cycles: number;
 	errors: ParseError[];
+	capped: boolean;
 }
 
 export function renderPattern(src: string, opts: RenderOptions): RenderResult {
@@ -43,7 +44,7 @@ export function renderPattern(src: string, opts: RenderOptions): RenderResult {
 	const beatsPerCycle = opts.bars * beatsPerBar;
 
 	const { ast, errors } = parseMini(src);
-	const cycles = opts.cycles ?? astCycleLength(ast);
+	const { length: cycles, capped } = opts.cycles !== undefined ? { length: opts.cycles, capped: false } : astCycleLength(ast);
 	const notes: NoteEvent[] = [];
 
 	for (let c = 0; c < cycles; c++) {
@@ -60,7 +61,7 @@ export function renderPattern(src: string, opts: RenderOptions): RenderResult {
 		}
 	}
 
-	return { notes, lengthBeats: cycles * beatsPerCycle, cycles, errors };
+	return { notes, lengthBeats: cycles * beatsPerCycle, cycles, errors, capped };
 }
 
 /** [lengthBeats, n, p1,s1,d1,v1, ...] for the Max write_clip message. */
