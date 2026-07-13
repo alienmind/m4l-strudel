@@ -110,13 +110,26 @@ export function hapToClipNote(hap, ctx) {
 	};
 }
 
+/**
+ * The pitch of a hap, in three tiers.
+ *
+ * `note` first: `note("c3").s("bd")` names a pitch outright, and no drum map may
+ * overrule it.
+ *
+ * Then the drum map, on the sample name - BEFORE `n`. This ordering is the whole
+ * point: `s("bd:3")` picks the fourth bd sample and comes through as
+ * `{ s: "bd", n: 3 }`, so reading `n` first would sound a bd as MIDI note 3
+ * rather than as its Drum Rack pad. `n` is a sample INDEX whenever `s` carries a
+ * mapped name; it is a pitch only in the absence of one.
+ */
 function hapPitch(hap, ctx) {
 	const v = hap.value ?? {};
-	let note = v.note ?? v.n;
+	let note = v.note;
 	if (note === undefined && v.s && ctx?.drumMap) {
 		const mapped = ctx.drumMap[v.s];
 		if (mapped !== undefined) return mapped;
 	}
+	if (note === undefined) note = v.n;
 	if (typeof note === "string") note = noteToMidi(note);
 	if (typeof note !== "number" || Number.isNaN(note)) return null;
 	return Math.max(0, Math.min(127, Math.round(note)));
