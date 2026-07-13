@@ -22,6 +22,28 @@ sessions yet.
 every device explained (Bars, Grid, Octave conventions, Shift, Run/Hush,
 the sample catalog...), with screenshots and typical workflows.
 
+> ### Read this before you paste a pattern from strudel.cc
+>
+> **The pattern language is fully supported. Strudel's *sound engine* is not** -
+> and cannot be, inside a Max for Live device. The practical consequence:
+>
+> ```js
+> s("bd sd bd sd")   // silence. no notes, no error.
+> ```
+>
+> `s()` / `sound()` names a **sample** for Strudel's own audio engine, which does
+> not exist here (audio made in the device's browser view has no path into Live's
+> signal chain). A pattern with no *note* in it produces no MIDI, and the device
+> looks broken when it is simply being asked for a sound it cannot make. Write
+> `bd sd bd sd` instead - drum words map to Drum Rack pads.
+>
+> Likewise `.room()`, `.lpf()`, `.pan()` and friends attached to a *note* pattern
+> are silently dropped: there is no synth in a MIDI effect to hear them. Put the
+> reverb on the track, the Ableton way round.
+>
+> **[doc/STRUDEL-SUPPORT.md](doc/STRUDEL-SUPPORT.md) is the full map** - what
+> works, what is ignored, what is refused, and why.
+
 ## Patterns that work today
 
 Every line below is verified against the real engine in this repo's tests.
