@@ -18,29 +18,18 @@ These features are fundamentally gated by capabilities not yet present in the `m
 - **Strudel Audio Instrument (Phase 8)**: Producing a true Strudel INSTRUMENT that streams its own synthesized audio (e.g., from Strudel's WebAudio engine) directly into Max's MSP signal graph. Waiting on `FEAT-STRUDEL-002` (native C++ external shared-memory bridge).
 - **Pattern-driven modulation (Phase 7.2)**: `.lpf(sine.range(200, 2000))` describes continuous modulation at 20 Hz, which steps audibly and fights automation lanes. Waiting on a Max-native `LFO` chain stage in `m4l-jweb` to support fast parameter modulation.
 - **Device Persistence**: The drum map and the Audio FX text expression do not travel with the Live set. Per-device persistence needs the wrapper to own it. Waiting on `FEAT-STRUDEL-003` (`definePersistence`).
-- **Sampler without `[node.script]`**: Using `[node.script]` to fetch samples can crash Live. Waiting on `m4l-jweb` Stage 3.1 (`fetch-to-disk` / `[maxurl]`).
+- **Sample Browser (`ableton-sample-browser`)**: A generic browser for open-source samples without relying on `[node.script]`. Waiting on `m4l-jweb` Stage 3.1 (`fetch-to-disk` / `[maxurl]`). See [SAMPLE-BROWSER.md](SAMPLE-BROWSER.md) for the detailed design.
 - **`.room()`, `.delay()`, `.crush()`**: Waiting on a proper reverb/delay chain vocabulary natively in `m4l-jweb`. *(Note: This is not a hard block, we could self-host them in `chains.mjs` but upstreaming is preferred).*
 
 ---
 
 # Active Backlog (Prioritized Easy to Hard)
 
-## 1. Constants & Caveats (Trivial)
-- **`MAX_CYCLES` is 64.** A pathologically nested pattern is truncated rather than exported. Nobody has hit it; it exists so a typo cannot ask for a ten-thousand-bar clip.
-- **From Clip flattens structure.** It reads MIDI back as a flat grid of notes, so `<a b>` returns as its expanded note list. Inherent to reading MIDI - the structure is not in the clip - but now that To Clip exports the *whole* loop, a round trip produces a much longer flat pattern than it used to.
-
-
-## 3. Scale and Pitch matching in full Strudel code (Medium)
+## 2. Scale and Pitch matching in full Strudel code (Medium)
 - **Full Strudel code does not see the Octave/Shift controls or the Live Scale toggle.** It is passed through untouched - correct, since it is real Strudel code and rewriting a user's JS would be worse - but it means `note("c5")` there is MIDI **72** (Strudel's note names are scientific), while `c5` in bare mini-notation is whatever the octave convention says. The UI warns in amber; it cannot fix it.
 
-## 4. Playhead highlighting for full Strudel code (Medium)
+## 3. Playhead highlighting for full Strudel code (Medium)
 - **The playhead highlight only works for bare mini-notation.** It is computed from our own AST, whose tokens carry source positions; full Strudel code has no link back to the characters the user typed. Strudel's own editor solves this with hap `context.locations` from the transpiler - wiring that up means mapping locations in the *rewritten* string back to the user's text, which is real work for a feature that mostly matters in the dialect that already has it.
-
-## 5. CICD pipeline (Medium/Hard)
-- Enough said - the amxd devices should come from the upstream CICD pipeline.
-  - **Concrete Implementation**: Create a GitHub Actions workflow (`.github/workflows/build.yml`) that triggers on tag pushes or PRs to `main`.
-  - The workflow should run `pnpm install`, then `pnpm build` (which compiles the JS and uses `m4l-jweb build` to generate the `.amxd` files).
-  - Finally, use a release action (like `softprops/action-gh-release`) to attach the built `dist/m4l-strudel.zip` and the individual `.amxd` devices as artifacts to a GitHub Release.
 
 ---
 
@@ -125,3 +114,19 @@ view. Worth deciding deliberately rather than drifting into.
 # DONE: Themes
 
 Mapped Live's dynamically injected CSS variables (`--live-bg-color`, `--live-text-color`, etc.) to Tailwind tokens in `index.css`. The Strudel devices now automatically sync with the user's active Ableton theme natively.
+
+---
+
+# DONE: Constants & Caveats
+
+- **`MAX_CYCLES` is 64.** A pathologically nested pattern is truncated rather than exported. Nobody has hit it; it exists so a typo cannot ask for a ten-thousand-bar clip.
+- **From Clip flattens structure.** It reads MIDI back as a flat grid of notes, so `<a b>` returns as its expanded note list. Inherent to reading MIDI - the structure is not in the clip - but now that To Clip exports the *whole* loop, a round trip produces a much longer flat pattern than it used to.
+
+---
+
+# DONE: CICD pipeline
+
+- Enough said - the amxd devices should come from the upstream CICD pipeline.
+  - **Concrete Implementation**: Create a GitHub Actions workflow (`.github/workflows/build.yml`) that triggers on tag pushes or PRs to `main`.
+  - The workflow should run `pnpm install`, then `pnpm build` (which compiles the JS and uses `m4l-jweb build` to generate the `.amxd` files).
+  - Finally, use a release action (like `softprops/action-gh-release`) to attach the built `dist/m4l-strudel.zip` and the individual `.amxd` devices as artifacts to a GitHub Release.
