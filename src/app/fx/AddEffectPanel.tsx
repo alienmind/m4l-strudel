@@ -1,5 +1,5 @@
 import { ChevronLeft } from "lucide-react";
-import type { FxParams } from "@/lib/fx";
+import type { FxParam } from "@/lib/fx";
 import surface from "./surface";
 
 export function AddEffectPanel({
@@ -7,8 +7,8 @@ export function AddEffectPanel({
 	onSelect,
 	onClose,
 }: {
-	unused: (keyof FxParams)[];
-	onSelect: (param: keyof FxParams) => void;
+	unused: FxParam[];
+	onSelect: (param: FxParam) => void;
 	onClose: () => void;
 }) {
 	return (
