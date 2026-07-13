@@ -4,28 +4,28 @@
 	color-scheme: dark;
 	--radius: 0.5rem;
 
-	--background: oklch(0.16 0.012 264);
-	--foreground: oklch(0.96 0.006 264);
+	--background: var(--live-bg-color, oklch(0.16 0.012 264));
+	--foreground: var(--live-text-color, oklch(0.96 0.006 264));
 
-	--card: oklch(0.2 0.014 264);
-	--card-foreground: oklch(0.96 0.006 264);
+	--card: var(--live-surface-bg-color, oklch(0.2 0.014 264));
+	--card-foreground: var(--live-text-color, oklch(0.96 0.006 264));
 
-	--muted: oklch(0.27 0.012 264);
-	--muted-foreground: oklch(0.68 0.012 264);
+	--muted: var(--live-selection-color, oklch(0.27 0.012 264));
+	--muted-foreground: var(--live-text-color, oklch(0.68 0.012 264));
 
-	--border: oklch(1 0 0 / 10%);
-	--input: oklch(1 0 0 / 14%);
+	--border: var(--live-border-color, oklch(1 0 0 / 10%));
+	--input: var(--live-surface-bg-color, oklch(1 0 0 / 14%));
 
-	--primary: oklch(0.62 0.19 255);
-	--primary-foreground: oklch(0.98 0.004 264);
+	--primary: var(--live-control-color, oklch(0.62 0.19 255));
+	--primary-foreground: var(--live-control-text-color, oklch(0.98 0.004 264));
 
-	--accent: oklch(0.72 0.17 160);
-	--accent-foreground: oklch(0.18 0.03 160);
+	--accent: var(--live-control-color, oklch(0.72 0.17 160));
+	--accent-foreground: var(--live-control-text-color, oklch(0.18 0.03 160));
 
-	--destructive: oklch(0.62 0.23 25);
+	--destructive: var(--live-error-color, oklch(0.62 0.23 25));
 	--destructive-foreground: oklch(0.98 0.004 264);
 
-	--ring: oklch(0.62 0.19 255);
+	--ring: var(--live-control-color, oklch(0.62 0.19 255));
 }
 
 @theme inline {
