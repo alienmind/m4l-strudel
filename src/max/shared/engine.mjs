@@ -1,9 +1,11 @@
 /**
- * Headless Strudel engine for Node for Max.
+ * Headless Strudel engine.
  * - bootScope(): register @strudel/{core,mini,tonal} into globalThis (once).
  * - compile(code): code string -> Pattern ($:-aware, mirrors core/repl.mjs).
  * - queryWindow(pat, from, to, cps): onset haps in a cycle window.
- * - hapToNote(hap, cps): normalized MIDI-ish event or null.
+ * - hapToNote(hap, cps): normalized MIDI-ish event or null (live play).
+ * - hapToClipNote(hap): the same event in CYCLES, not ms (clip export).
+ * - patternCycles(pat, cps): how many cycles before the pattern repeats.
  */
 import { evalScope, evaluate, silence, stack, Pattern, isPattern, noteToMidi } from "@strudel/core";
 import { transpiler } from "@strudel/transpiler";
@@ -39,6 +41,22 @@ export function installDollarCollector() {
 	}
 }
 
+/**
+ * Publish Live's global scale into the pattern scope as `liveScale`, so code can
+ * opt into STRUDEL's own scale implementation explicitly:
+ *
+ *   n("0 2 4").scale(liveScale)
+ *
+ * Deliberately a global rather than an injected `.scale()` call: appending one
+ * would silently override a `.scale()` the user wrote, and could not be appended
+ * to a multi-line `$:` pattern at all. Note that Strudel's implementation does not
+ * always agree with Ableton's - see strudelAgrees() - which is what the UI warns
+ * about when a pattern reaches for this.
+ */
+export function setLiveScale(name) {
+	globalThis.liveScale = name;
+}
+
 let booted = false;
 export async function bootScope() {
 	if (booted) return;
@@ -62,17 +80,94 @@ export function queryWindow(pat, fromCycle, toCycle, cps) {
 }
 
 export function hapToNote(hap, cps) {
+	const p = hapPitch(hap);
+	if (p === null) return null;
 	const v = hap.value ?? {};
-	let note = v.note ?? v.n;
-	if (typeof note === "string") note = noteToMidi(note);
-	if (typeof note !== "number" || Number.isNaN(note)) return null;
 	const durCycles = hap.duration.valueOf(); // Fraction → number (cycles)
 	return {
-		pitch: Math.max(0, Math.min(127, Math.round(note))),
-		velocity: Math.max(1, Math.min(127, Math.round((v.velocity ?? v.gain ?? 0.75) * 127))),
+		pitch: p,
+		velocity: hapVelocity(hap),
 		durMs: Math.max(5, (durCycles / cps) * 1000),
 		chan: Math.max(1, Math.min(16, Math.round(v.midichan ?? 1))),
 		beginCycle: hap.whole.begin.valueOf(),
 		value: v, // raw params (audio device)
 	};
+}
+
+/**
+ * The clip exporter's view of a hap: times in CYCLES, because a clip is written
+ * in beats, not milliseconds - one cycle is however many bars the user picked,
+ * and nothing here needs to know the tempo.
+ */
+export function hapToClipNote(hap) {
+	const p = hapPitch(hap);
+	if (p === null) return null;
+	return {
+		pitch: p,
+		velocity: hapVelocity(hap),
+		start: hap.whole.begin.valueOf(),
+		duration: hap.duration.valueOf(),
+	};
+}
+
+function hapPitch(hap) {
+	const v = hap.value ?? {};
+	let note = v.note ?? v.n;
+	if (typeof note === "string") note = noteToMidi(note);
+	if (typeof note !== "number" || Number.isNaN(note)) return null;
+	return Math.max(0, Math.min(127, Math.round(note)));
+}
+
+function hapVelocity(hap) {
+	const v = hap.value ?? {};
+	return Math.max(1, Math.min(127, Math.round((v.velocity ?? v.gain ?? 0.75) * 127)));
+}
+
+/**
+ * How many cycles before the pattern repeats itself.
+ *
+ * `<a b>` alternates per cycle, so exporting one cycle of it - which is what To
+ * Clip did - threw half the pattern away. The length is measured, not derived:
+ * query the first `probe` cycles and find the shortest period they are consistent
+ * with. That works for full Strudel code too, whose loop length no parser of ours
+ * could compute, and it costs a handful of stateless queries.
+ *
+ * A period is only trusted if it survives the whole probe window, so a pattern
+ * that repeats every 3 cycles is not mistaken for one that repeats every 6.
+ */
+export function patternCycles(pat, cps, maxCycles = 16) {
+	const probe = maxCycles * 2;
+	const sigs = [];
+	for (let c = 0; c < probe; c++) {
+		const events = queryWindow(pat, c, c + 1, cps)
+			.map((h) => {
+				const n = hapToClipNote(h);
+				if (!n) return null;
+				// Relative to this cycle's start, so cycle k looks like cycle 0 when
+				// the pattern has come back around.
+				return `${n.pitch}@${(n.start - c).toFixed(6)}+${n.duration.toFixed(6)}v${n.velocity}`;
+			})
+			.filter(Boolean)
+			.sort();
+		sigs.push(events.join("|"));
+	}
+	for (let p = 1; p <= maxCycles; p++) {
+		let ok = true;
+		for (let c = 0; c < probe && ok; c++) {
+			if (sigs[c] !== sigs[c % p]) ok = false;
+		}
+		if (ok) return p;
+	}
+	return maxCycles;
+}
+
+/**
+ * Every note of `cycles` cycles, at once. Strudel patterns are pure functions of
+ * time, so the whole clip can be queried instantly - no transport, no real-time
+ * wait - and querying it does not disturb a pattern that is currently playing.
+ */
+export function exportNotes(pat, cycles, cps) {
+	return queryWindow(pat, 0, cycles, cps)
+		.map(hapToClipNote)
+		.filter(Boolean);
 }

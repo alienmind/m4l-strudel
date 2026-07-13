@@ -14,15 +14,35 @@
  * Protocol (postMessage, structured clone - no base64 needed):
  *   in:  {t:'tick', playing, beats}   (plugsync~ outlets 0 and 6)
  *        {t:'tempo', bpm}             (LiveAPI live_set tempo observer)
- *        {t:'code', code}   -> {t:'evalok'} | {t:'evalerr', message}
- *        {t:'hush'}         -> {t:'flush'}
+ *        {t:'code', code, ctx, liveScale}   -> {t:'evalok'} | {t:'evalerr', message}
+ *        {t:'export', code, ctx, bars, liveScale} -> {t:'clip'} | {t:'exporterr'}
+ *        {t:'hush'}              -> {t:'flush'}
  *   out: {t:'ready'} once the strudel scope is booted
  *        {t:'clock', free} when the clock source flips (free-run vs Live)
  *        {t:'notes', notes:[...]} per lookahead window, MIDI-shaped
  *          (pitch, velocity 1-127, durMs, chan, delayMs)
+ *        {t:'clip', notes:[...], cycles} the whole loop, times in CYCLES
+ *        {t:'phase', cycle} ~20 Hz playhead for the editor highlight (-1 = idle)
  *        {t:'flush'} on transport stop
+ *
+ * `ctx` is the NoteContext (octave convention, shift, Live's scale, drum map):
+ * bare mini-notation is resolved to absolute MIDI numbers before it is compiled,
+ * so the engine never has to know what a scale degree or a drum word is. Its
+ * `scale` is absent when the user has turned the Live Scale toggle off.
+ *
+ * `liveScale` is the same scale in STRUDEL's spelling ("C4:major"), published into
+ * the pattern scope regardless of the toggle, so code can ask for Strudel's own
+ * implementation on purpose: `n("0 2 4").scale(liveScale)`.
  */
-import { bootScope, compile, queryWindow, hapToNote } from "../../max/shared/engine.mjs";
+import {
+	bootScope,
+	compile,
+	queryWindow,
+	hapToNote,
+	exportNotes,
+	patternCycles,
+	setLiveScale,
+} from "../../max/shared/engine.mjs";
 import { LiveTransport } from "../../max/shared/transport.mjs";
 import { asStrudelCode } from "../../lib/strudelCode";
 
@@ -65,10 +85,30 @@ function syncClockMode() {
 	else stopFreeRun();
 }
 
+/**
+ * The playhead, for the editor's highlight. Posted from the transport rather than
+ * computed in React, because the free-run clock (Live stopped, pattern playing)
+ * only exists in here - the UI sees no ticks at all then.
+ *
+ * Throttled: the transport ticks at ~100 Hz and nothing is gained by re-rendering
+ * a text editor that fast.
+ */
+const PHASE_MS = 50;
+let lastPhasePost = 0;
+
+function postPhase(nowBeats) {
+	const now = Date.now();
+	if (now - lastPhasePost < PHASE_MS) return;
+	lastPhasePost = now;
+	// The transport's own convention: one cycle is one bar of four beats.
+	postMessage({ t: "phase", cycle: nowBeats / 4 });
+}
+
 const transport = new LiveTransport({
 	lookaheadMs: 150,
 	onWindow(from, to, cps, bpm, nowBeats) {
 		if (!pattern || !running) return;
+		postPhase(nowBeats);
 		let haps;
 		try {
 			haps = queryWindow(pattern, from, to, cps);
@@ -92,6 +132,7 @@ const transport = new LiveTransport({
 	},
 	onStop() {
 		postMessage({ t: "flush" });
+		postMessage({ t: "phase", cycle: -1 }); // nothing is sounding: clear the highlight
 	},
 });
 
@@ -107,17 +148,34 @@ onmessage = async (e) => {
 		if (m.bpm > 0) bpm = m.bpm;
 	} else if (m.t === "code") {
 		try {
-			pattern = await compile(asStrudelCode(m.code));
+			setLiveScale(m.liveScale);
+			pattern = await compile(asStrudelCode(m.code, m.ctx));
 			running = true;
 			syncClockMode();
 			postMessage({ t: "evalok" });
 		} catch (err) {
 			postMessage({ t: "evalerr", message: String((err && err.message) || err) });
 		}
+	} else if (m.t === "export") {
+		// A separate compile, deliberately: the export must not touch the pattern
+		// that may be playing right now. Querying is stateless, so this cannot
+		// disturb it either - the same pattern object answers both.
+		try {
+			setLiveScale(m.liveScale);
+			const pat = await compile(asStrudelCode(m.code, m.ctx));
+			// One cycle spans `bars` bars, so its rate follows the tempo. Only
+			// patterns that read _cps care, but they should read the right one.
+			const cps = bpm / 60 / (m.bars * 4);
+			const cycles = patternCycles(pat, cps);
+			postMessage({ t: "clip", notes: exportNotes(pat, cycles, cps), cycles });
+		} catch (err) {
+			postMessage({ t: "exporterr", message: String((err && err.message) || err) });
+		}
 	} else if (m.t === "hush") {
 		running = false;
 		syncClockMode();
 		postMessage({ t: "flush" });
+		postMessage({ t: "phase", cycle: -1 });
 	}
 };
 

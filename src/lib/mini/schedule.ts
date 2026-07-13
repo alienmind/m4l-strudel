@@ -11,6 +11,10 @@ export interface Ev {
 	note: string; // note token as written (resolved to MIDI later)
 	start: number; // cycle-relative
 	duration: number;
+	/** Where the token sits in the source text, so the editor can highlight the
+	 *  step that is sounding right now. */
+	pos: number;
+	len: number;
 }
 
 /** Schedule a node over the unit span [0,1) for the given cycle index. */
@@ -28,7 +32,7 @@ function scheduleSpan(
 		case "rest":
 			return [];
 		case "note":
-			return [{ note: node.name, start, duration: span }];
+			return [{ note: node.name, start, duration: span, pos: node.pos, len: node.len }];
 
 		case "seq": {
 			if (node.items.length === 0) return [];
@@ -52,9 +56,15 @@ function scheduleSpan(
 		}
 
 		case "alt": {
-			if (node.items.length === 0) return [];
-			const chosen = node.items[((cycle % node.items.length) + node.items.length) % node.items.length];
-			return scheduleSpan(chosen, cycle, start, span);
+			const m = node.items.length;
+			if (m === 0) return [];
+			const chosen = node.items[((cycle % m) + m) % m];
+			// The chosen item advances once per ROTATION, not once per cycle: it is
+			// only visited every m-th cycle. Handing it the raw cycle index would
+			// freeze any alternation nested inside it - `<<p q> y>` would play
+			// "p y p y" forever, because the inner <p q> only ever sees even cycles.
+			// Strudel's slowcat divides the same way, and it yields "p y q y".
+			return scheduleSpan(chosen, Math.floor(cycle / m), start, span);
 		}
 
 		case "repeat": {

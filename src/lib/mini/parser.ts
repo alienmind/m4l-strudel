@@ -29,12 +29,17 @@ type TokKind =
 	| "star"
 	| "at"
 	| "percent"
+	| "excl"
 	| "number";
 
 interface Tok {
 	kind: TokKind;
 	value: string;
 	pos: number;
+	/** Whitespace immediately before this token. It is the ONLY thing separating a
+	 *  modifier from a step: "bd!3" replicates bd three times, while "bd ! !" is
+	 *  three steps, the second and third repeating the first. */
+	sp: boolean;
 }
 
 const SINGLE: Record<string, TokKind> = {
@@ -50,6 +55,7 @@ const SINGLE: Record<string, TokKind> = {
 	"*": "star",
 	"@": "at",
 	"%": "percent",
+	"!": "excl",
 	"~": "rest",
 };
 
@@ -57,32 +63,42 @@ export function tokenize(src: string): { tokens: Tok[]; errors: ParseError[] } {
 	const tokens: Tok[] = [];
 	const errors: ParseError[] = [];
 	let i = 0;
+	let sp = true; // the first token counts as preceded by whitespace
+	const push = (kind: TokKind, value: string, pos: number) => {
+		tokens.push({ kind, value, pos, sp });
+		sp = false;
+	};
 	while (i < src.length) {
 		const ch = src[i];
 		if (/\s/.test(ch)) {
+			sp = true;
 			i++;
 			continue;
 		}
 		if (SINGLE[ch]) {
-			tokens.push({ kind: SINGLE[ch], value: ch, pos: i });
+			push(SINGLE[ch], ch, i);
 			i++;
 			continue;
 		}
-		// number (integer or decimal, possibly negative octave handled in note)
-		if (/[0-9]/.test(ch)) {
-			let j = i;
+		// Number (integer or decimal). A leading "-" is part of the number: bare
+		// mini-notation uses negative scale degrees ("[-1 ~] -1"), and rejecting
+		// them here is what forced users to write n("...") by hand.
+		if (/[0-9]/.test(ch) || (ch === "-" && /[0-9]/.test(src[i + 1] ?? ""))) {
+			let j = ch === "-" ? i + 1 : i;
 			while (j < src.length && /[0-9.]/.test(src[j])) j++;
-			tokens.push({ kind: "number", value: src.slice(i, j), pos: i });
+			push("number", src.slice(i, j), i);
 			i = j;
 			continue;
 		}
-		// note token: letter + accidentals + optional octave
-		if (/[a-gA-G]/.test(ch)) {
-			let j = i + 1;
-			while (j < src.length && /[#sb]/.test(src[j])) j++;
+		// Word token: a note name ("c", "eb4", "f#2") or a drum name ("bd", "hh").
+		// Deliberately greedy over letters - stopping at the first non-accidental
+		// would tokenize "bd" as the note B followed by the note D.
+		if (/[a-zA-Z]/.test(ch)) {
+			let j = i;
+			while (j < src.length && /[a-zA-Z#]/.test(src[j])) j++;
 			if (j < src.length && src[j] === "-") j++; // negative octave
 			while (j < src.length && /[0-9]/.test(src[j])) j++;
-			tokens.push({ kind: "note", value: src.slice(i, j), pos: i });
+			push("note", src.slice(i, j), i);
 			i = j;
 			continue;
 		}
@@ -138,8 +154,24 @@ class Parser {
 		const items: Weighted[] = [];
 		while (this.peek() && !this.atTerminator(terms)) {
 			const before = this.idx;
+
+			// A bare "!" repeats the previous step: "a ! !" is "a a a".
+			if (this.peek()!.kind === "excl") {
+				this.next();
+				const prev = items[items.length - 1];
+				if (prev) items.push(prev);
+				else this.errors.push({ pos: this.toks[this.idx - 1].pos, msg: '"!" with nothing to repeat' });
+				continue;
+			}
+
 			const term = this.parseTerm();
-			if (term) items.push(term);
+			if (term) {
+				// "a!3" occupies THREE steps of this sequence - unlike "a*3", which
+				// subdivides one. Pushing the same node repeatedly is what makes that
+				// true; resolve.ts dedupes by source position so the rewrite only
+				// touches each token once.
+				for (let i = 0; i < term.replicate; i++) items.push({ node: term.node, weight: term.weight });
+			}
 			if (this.idx === before) {
 				// no progress - avoid infinite loop
 				this.errors.push({ pos: this.peek()!.pos, msg: "parse stalled" });
@@ -149,10 +181,11 @@ class Parser {
 		return { kind: "seq", items };
 	}
 
-	private parseTerm(): Weighted | null {
+	private parseTerm(): (Weighted & { replicate: number }) | null {
 		let node = this.parseAtom();
 		if (!node) return null;
 		let weight = 1;
+		let replicate = 1;
 
 		// modifiers
 		for (;;) {
@@ -165,13 +198,18 @@ class Parser {
 			} else if (t.kind === "at") {
 				this.next();
 				weight = this.parseNumber() ?? 1;
+			} else if (t.kind === "excl" && !t.sp) {
+				// Attached: "a!3" is three copies, a bare "a!" is two. A SPACED "!" is a
+				// step of its own ("a ! !"), handled by parseSequence - so leave it.
+				this.next();
+				replicate = Math.max(1, Math.round(this.parseNumber() ?? 2));
 			} else if (t.kind === "lparen") {
 				node = this.parseEuclid(node);
 			} else {
 				break;
 			}
 		}
-		return { node, weight };
+		return { node, weight, replicate };
 	}
 
 	private parseAtom(): Node | null {
@@ -180,10 +218,12 @@ class Parser {
 		switch (t.kind) {
 			case "note":
 				this.next();
-				return { kind: "note", name: t.value };
+				return { kind: "note", name: t.value, pos: t.pos, len: t.value.length };
 			case "number":
 				this.next();
-				return { kind: "note", name: t.value }; // raw MIDI number
+				// A bare number is a scale degree, not a raw MIDI pitch - notes.ts
+				// resolves it against Live's global scale.
+				return { kind: "note", name: t.value, pos: t.pos, len: t.value.length };
 			case "rest":
 				this.next();
 				return { kind: "rest" };

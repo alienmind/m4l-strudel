@@ -17,22 +17,31 @@ describe("tokenize", () => {
 });
 
 describe("noteToMidi", () => {
+	const strudel = { conv: "strudel" } as const;
 	it("uses strudel convention c5=60 by default", () => {
-		expect(noteToMidi("c5", "strudel")).toBe(60);
-		expect(noteToMidi("c3", "strudel")).toBe(36);
-		expect(noteToMidi("a5", "strudel")).toBe(69);
+		expect(noteToMidi("c5", strudel)).toBe(60);
+		expect(noteToMidi("c3", strudel)).toBe(36);
+		expect(noteToMidi("a5", strudel)).toBe(69);
 	});
 	it("uses scientific convention c4=60", () => {
-		expect(noteToMidi("c4", "scientific")).toBe(60);
+		expect(noteToMidi("c4", { conv: "scientific" })).toBe(60);
 	});
-	it("parses accidentals and raw midi", () => {
-		expect(noteToMidi("f#5", "strudel")).toBe(66);
-		expect(noteToMidi("eb5", "strudel")).toBe(63);
-		expect(noteToMidi("60", "strudel")).toBe(60);
+	it("parses accidentals", () => {
+		expect(noteToMidi("f#5", strudel)).toBe(66);
+		expect(noteToMidi("eb5", strudel)).toBe(63);
+	});
+	it("reads a bare number as a scale degree when Live Scale is on", () => {
+		// The reported bug: "2" used to mean MIDI 2, a D-2, which is why the note
+		// stream came out below the bottom of the keyboard. With the toggle OFF that
+		// is still what it means - see scales.test.ts - but the toggle defaults on.
+		const cMajor = { ...strudel, scale: { root: 0, name: "Major" } };
+		expect(noteToMidi("0", cMajor)).toBe(60);
+		expect(noteToMidi("2", cMajor)).toBe(64); // C major, degree 2 = E
+		expect(noteToMidi("7", cMajor)).toBe(72); // an octave up
 	});
 	it("round-trips midiToNote", () => {
 		for (const midi of [36, 48, 60, 63, 72]) {
-			expect(noteToMidi(midiToNote(midi, "strudel"), "strudel")).toBe(midi);
+			expect(noteToMidi(midiToNote(midi, "strudel"), strudel)).toBe(midi);
 		}
 	});
 });
