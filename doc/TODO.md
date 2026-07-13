@@ -8,60 +8,36 @@ patcher codegen, the Surface, fetch-to-disk - lives in `m4l-jweb`'s own
 
 ---
 
-# NEXT: Phase 7 - Strudel Audio FX
+# NEXT: Phase 7.2 - pattern-driven modulation
 
-**Nothing in `m4l-jweb` blocks a v1 of this**, as long as v1 is scoped to `.lpf()`
-and `.gain()`. Both DSP chains already ship there (`lowpass` and `gain`, Stage 3.4,
-proven by its `hello-audio` example), and the one-line expression is parsed with
-`@strudel/transpiler`, which this repo already bundles. What is NOT available is a
-generated Push-visible parameter set (`m4l-jweb` Stage 2 has the declaration but
-not the codegen), so v1 hand-wires `writableParams()` and the manifest's
-`parameters` field, exactly as `hello-audio` does today.
+**Phase 7.1 has shipped** (see DONE): the Audio FX device exists, and a line of
+`.lpf(800).gain(1.2)` writes real, automatable, Push-visible Live parameters.
+Every value it writes is a CONSTANT.
 
-## The reframe
+`.lpf(sine.range(200, 2000))` is a different machine. It describes continuous
+modulation, which means re-querying the pattern on every transport tick and writing
+a new value at 20 Hz - the same tick-driven machinery `useStrudel.ts` already has
+for notes, repurposed to drive a continuous parameter instead of discrete ones.
 
-The third device should never have been an instrument. Strudel already has a real
-vocabulary of audio-effect primitives (`.lpf()`, `.hpf()`, `.room()`, `.gain()`,
-`.delay()`, `.crush()`, `.pan()`, ...) - the thing this device should do is let you
-write **one line** describing an effects chain and apply it to whatever audio is
-already coming into the track, the way a producer reaches for Auto Filter or a
-reverb send. Not a synth, not a sample player, not a note editor: an **audio
-effect** (`type: "audio"`, the same container tag as the Sampler), sitting anywhere
-in an audio chain.
+It is not free, and it is worth knowing what it costs before starting:
 
-**What it is not.** No pattern editor, no Bars/Grid/Octave/Shift, no To Clip/From
-Clip - none of the MIDI device's UI has any business here. The UI it wants is
-closer to `hello-audio` (a compact readout of the *live* effect parameters) than to
-anything in this repo.
+- **Whose modulation is it?** A parameter written 20x a second from the app fights
+  Live's own automation lane for the same parameter, and Live has no concept of
+  "the app is driving this now". The MIDI-mapping and Push story for a parameter
+  under app control is genuinely unclear.
+- **20 Hz is not audio rate.** A `sine` sweeping a filter at 20 Hz will step
+  audibly. The honest version of fast modulation is a Max-native LFO in the chain,
+  configured by the line - which is a different design from "the app writes values".
+- Today the parser REFUSES a modulated argument and says so, rather than silently
+  applying a wrong number. That is the right failure until this is built.
 
-## 7.1 v1: static values, `.lpf()` and `.gain()` only
+## Open questions, still not answered
 
-1.  **Parse the line with Strudel's own machinery, not a new parser.**
-    `.lpf(800).gain(1.2)` is JavaScript method chaining; the transpiler that
-    already backs Live Play can evaluate it. Walk the resulting pattern (or, for
-    constant arguments, the AST) to pull out `{ effect: "lpf", args: [800] }`.
-    Reuse `src/lib/strudelCode.ts`'s parse path rather than inventing a second one
-    - the same lesson Phase 5 learned about the mini-notation parser.
-2.  **Drive the real DSP chains** with `writableParams()`'s `set_<id>` pattern.
-    `lpf` maps onto the packaged `lowpass` chain (`plugin~ -> onepole~ ->
-    plugout~`), `gain` onto `gain` (`*~`).
-3.  **Static values are the honest v1.** The user edits the line, the app parses it
-    once and writes each value with `set_<param>` - `hello-audio`'s Cutoff slider,
-    driven by text instead of a drag.
-
-## 7.2 v2: pattern-driven modulation, and it is not free
-
-`.lpf(sine.range(200,2000))` describes continuous modulation: re-query the pattern
-on every transport tick and write new `set_<param>` values at 20 Hz - the same
-tick-driven machinery `useStrudel.ts` already has, driving continuous parameters
-instead of discrete notes. Only build this once static values work and are worth
-automating.
-
-## Open questions, not yet answered
-
-- Which Strudel effects get a real Max-native mapping first, and which never will
-  (heavily convolution-based ones may have no reasonable `plugin~`-chain
-  equivalent at all)?
+- Which Strudel effects get a real Max-native mapping next? `.room()`, `.delay()`
+  and `.crush()` have no chain in `m4l-jweb`'s vocabulary; a heavily
+  convolution-based effect may never have a reasonable `plugin~`-chain equivalent.
+  The device NAMES these today and says "no Max chain yet" rather than pretending
+  they worked.
 - Does one text line stay the whole interface, or does it need per-effect sliders
   once more than two or three effects are chained?
 - Is `.lpf(800)` legible to someone who does not already have strudel.cc's docs
@@ -69,23 +45,21 @@ automating.
 
 ---
 
-# Parked: waiting on `m4l-jweb`'s spikes
+# Parked: waiting on `m4l-jweb`
 
-Not blocked on design - blocked on a Max behaviour nobody has verified. `m4l-jweb`
-gates all three behind cheap spikes ([SPIKES.md](../../m4l-jweb/doc/SPIKES.md));
-**none have been run**, so everything here is still a drawing, not code.
+| Wanted | Needs |
+|---|---|
+| Sampler without `[node.script]` (which can crash Live) | fetch-to-disk, `m4l-jweb` Stage 3.1 |
+| `.room()`, `.delay()`, `.crush()` in the Audio FX device | a reverb/delay chain vocabulary `m4l-jweb` does not have |
 
-| Wanted | Needs | Spike |
-|---|---|---|
-| Sampler without `[node.script]` (which can crash Live) | fetch-to-disk, `m4l-jweb` Stage 3.1 | **1.3** - `[maxurl]` or `[jit.uldl]`? |
-| `.room()`, `.delay()`, `.crush()` in the Audio FX device | a reverb/delay chain vocabulary `m4l-jweb` does not have | - |
-| A Push-visible parameter set for Audio FX | Surface codegen, `m4l-jweb` Stage 2 | - |
+~~A Push-visible parameter set for Audio FX~~ - **done**: `m4l-jweb` 0.4.0 shipped
+the Surface, and Phase 7.1 uses it. The spikes it was gated on have been run.
 
-**We are not hard-blocked on any of them.** A missing chain can be self-hosted here
-in `patcher/chains.mjs`, exactly as the `sampler` chain already is. The cost of
-doing that is that *we* own running the `[maxurl]` spike and eating the risk,
-instead of `m4l-jweb` running it once for every device that will ever want it. Do
-it there unless waiting is genuinely blocking a release.
+**We are not hard-blocked on either.** A missing chain can be self-hosted here in
+`patcher/chains.mjs`, exactly as `sampler` and now `strudelfx` already are. The cost
+of doing that is that *we* own the risk, instead of `m4l-jweb` carrying it once for
+every device that will ever want it. Do it there unless waiting is genuinely
+blocking a release.
 
 ---
 
@@ -126,6 +100,55 @@ Small, real, and none of them blocking:
 ---
 
 # DONE
+
+## Phase 7.1 - Strudel Audio FX, v1 [FEAT-05]
+
+The third device, and it is an **audio effect** - not the instrument that was
+removed (Phase 6). You write one line of Strudel's effect vocabulary and it applies
+to whatever audio is already coming into the track, the way you would reach for
+Auto Filter:
+
+```
+.lpf(800).gain(1.2)
+```
+
+No pattern editor, no Bars/Grid/Octave/Shift, no To Clip. This device sequences
+nothing, so none of the MIDI device's UI belongs in it.
+
+**Parsing: there is no parser.** `.lpf(800).gain(1.2)` is not a new language - it is
+JavaScript method chaining, and JavaScript already has a parser. `src/lib/fx.ts`
+evaluates the line against a RECORDER (an object whose every method call appends
+`{ effect, args }` and returns itself), and what the chain leaves behind is the list
+of effects in order. The recorder is the only name in scope, so a line that reaches
+for anything else throws instead of quietly resolving to something. Same lesson as
+Phase 5: do not reimplement a language that already has an implementation.
+
+**The parameters are a `surface.ts` declaration** (`@m4l-jweb` 0.4.0's Surface), and
+the build generates the `live.dial` objects, the wiring in both directions and the
+selectors from it. They are real Live parameters: automatable, MIDI-mappable and
+visible on Push. The text line, the dial, the automation lane and the filter are one
+control with several faces.
+
+**Declared in REAL UNITS, and this is the part worth remembering.** The tempting
+shortcut is a normalised 0-1 dial with the frequency curve hidden in the Max chain.
+It lies to everything that reads the parameter: the automation lane shows `0.6`,
+Push shows `1`, and the app has to know the chain's private mapping to print Hz. So
+the cutoff is declared `range: [40, 18000], unit: "Hz", exponent: 4` - `exponent`
+bends the KNOB's travel (hearing is logarithmic) without touching the value, the DSP
+takes the number directly, and `.lpf(800)` means 800 Hz to every reader. The
+`[expr 40 * pow(450, x)]` that used to sit in the chain is gone.
+
+**Its own chain, `strudelfx`** (`plugin~ -> onepole~ -> *~ -> plugout~`, per
+channel), rather than `chains: ["lowpass", "gain"]`: each canned chain builds its
+own `plugin~`/`plugout~` and owns the whole path from input to output, so running
+two would produce duplicate boxes and sum the filtered signal with the unfiltered
+one. A chain owns the path; two cannot share it.
+
+**What it refuses to do.** `.room()`, `.delay()`, `.crush()` and friends are named
+explicitly as "no Max chain yet - ignored" rather than reported as unknown: the two
+are very different messages to the person typing. A modulated argument
+(`.lpf(sine.range(200,2000))`) fails loudly - that is Phase 7.2, and applying some
+wrong constant instead would be worse than refusing.
 
 ## Phase 1 - scale awareness [FEAT-01]
 

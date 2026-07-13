@@ -42,4 +42,25 @@ export default [
 		looseFiles: ["dist/node/strudel-node-sampler.cjs"],
 		unmatchedTo: "js",
 	},
+	{
+		/**
+		 * Strudel Audio FX - write one line of Strudel's effect vocabulary
+		 * (`.lpf(800).gain(1.2)`) and it applies to whatever audio is already coming
+		 * into the track, the way you would reach for Auto Filter.
+		 *
+		 * An audio EFFECT, not an instrument and not a sequencer: no pattern editor,
+		 * no To Clip, no notes. It replaces the removed "Strudel Audio" instrument,
+		 * which reinvented a crude oscillator synth and copied the MIDI device's note
+		 * editor wholesale - see doc/TODO.md for why that shape was wrong.
+		 *
+		 * Its parameters are declared in src/app/fx/surface.ts, and the build
+		 * generates the live.* objects and their wiring from that one declaration.
+		 * There is no `parameters` field here any more - @m4l-jweb 0.4.0 removed it.
+		 */
+		name: "alienmind-strudel-fx",
+		ui: "fx",
+		type: "audio", // 'aaaa' audio effect: it sits anywhere in an audio chain
+		chains: ["strudelfx"], // ours: plugin~ -> onepole~ -> *~ -> plugout~
+		unmatchedTo: "js",
+	},
 ];

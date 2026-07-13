@@ -95,3 +95,79 @@ registerChain("sampler", ({ boxes, lines, jwebId, unmatchedId }) => {
 	lines.push(line("obj-sf", 0, "obj-plugout", 0));
 	lines.push(line("obj-sf", 1, "obj-plugout", 1));
 });
+
+/**
+ * "strudelfx" - the Audio FX device's signal path:
+ *
+ *   plugin~ -> onepole~ (cutoff, Hz) -> *~ (gain) -> plugout~     ... per channel
+ *
+ * WHY NOT JUST `chains: ["lowpass", "gain"]`. Both canned chains build their own
+ * `plugin~` and `plugout~` and wire the input straight to their own DSP, so
+ * running them together would produce two boxes with the same ids and two parallel
+ * paths from input to output - the filtered signal AND the unfiltered one, summed.
+ * A chain owns the whole path from input to output; two of them cannot share it.
+ * So the composition happens here, once, in the order the effects apply.
+ *
+ * NO ARITHMETIC HAPPENS HERE, and that is the point of the 0.4.0 Surface: the
+ * cutoff parameter is declared in Hz with an `exponent` curve (see
+ * src/app/fx/surface.ts), so the value arriving is already the frequency the
+ * filter wants. The old shape - a 0-1 dial with `expr 40 * pow(450, x)` hidden in
+ * the chain - lied to the automation lane, to Push and to the app, all three of
+ * which then read a number that was not the cutoff.
+ */
+registerChain("strudelfx", (ctx) => {
+	const { boxes, lines } = ctx;
+	// An audio effect has no MIDI ports at all.
+	removeBox(boxes, lines, "obj-midiin");
+	removeBox(boxes, lines, "obj-midiout");
+
+	boxes.push(box("obj-plugin", "plugin~", { numinlets: 1, numoutlets: 2, outlettype: ["signal", "signal"] }));
+	boxes.push(box("obj-plugout", "plugout~", { numinlets: 2, numoutlets: 0 }));
+
+	// One filter and one multiplier PER CHANNEL: a signal object handles ONE
+	// signal, and plugin~ hands us a stereo pair. Both sides take the same cutoff
+	// and the same gain, so the stereo image does not shift.
+	//
+	// `18000.` and `1.` are floats, not ints, deliberately: an int right-inlet
+	// would quantise a smooth sweep into steps.
+	for (const [i, lpf, amp] of [
+		[0, "obj-fx-lpf-l", "obj-fx-gain-l"],
+		[1, "obj-fx-lpf-r", "obj-fx-gain-r"],
+	]) {
+		boxes.push(box(lpf, "onepole~ 18000.", { numinlets: 2, numoutlets: 1, outlettype: ["signal"] }));
+		boxes.push(box(amp, "*~ 1.", { numinlets: 2, numoutlets: 1, outlettype: ["signal"] }));
+		lines.push(line("obj-plugin", i, lpf, 0));
+		lines.push(line(lpf, 0, amp, 0));
+		lines.push(line(amp, 0, "obj-plugout", i));
+		fanParamInto(ctx, "cutoff", lpf, 1);
+		fanParamInto(ctx, "gain", amp, 1);
+	}
+});
+
+/**
+ * Wire a parameter into the thing it controls, from BOTH of its sources:
+ *
+ *   the OBJECT's outlet - a knob turn, an automation lane, a Push encoder.
+ *   the ROUTE's outlet  - the value the app wrote.
+ *
+ * The second is not redundant, and leaving it out is a bug that has already
+ * shipped once in this stack. The app's write reaches the live.* object as
+ * `set <value>`, which updates it WITHOUT producing outlet output - so the object
+ * never passes the app's value on, and the DSP sits where it was while the UI's
+ * control appears to do nothing.
+ *
+ * @m4l-jweb has this helper internally but does not export it; it is four lines,
+ * and duplicating them is cheaper than being unable to build a device-specific
+ * chain that touches a parameter. The boxes named here are created LATER, by the
+ * build's applySurface() - a patchline may name a box that appears further down
+ * the array, because a patcher is a graph, not a script.
+ */
+function fanParamInto(ctx, paramId, dstId, dstInlet) {
+	if (!ctx.surface?.params?.[paramId]) {
+		throw new Error(`chain "strudelfx" needs a parameter "${paramId}" in src/app/fx/surface.ts`);
+	}
+	const [objId, objOut] = ctx.paramObject(paramId);
+	const [routeId, routeOut] = ctx.paramValue(paramId);
+	ctx.lines.push(line(objId, objOut, dstId, dstInlet));
+	ctx.lines.push(line(routeId, routeOut, dstId, dstInlet));
+}
