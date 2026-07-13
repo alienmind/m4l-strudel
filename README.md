@@ -1,20 +1,23 @@
-# m4l-strudel - Strudel live coding inside Ableton Live
+# m4l-strudel - A Hybrid Live Coding Experiment
 
-**Max for Live devices** that bring [Strudel](https://strudel.cc) - the
+![Devices Overview](doc/screenshot-devices-1.png)
+
+This started as a fun experiment: *How cool is Strudel? Can I connect it to Ableton and control it from the Push to create the ultimate hybrid workflow?*
+
+The result is a set of **Max for Live devices** that bring [Strudel](https://strudel.cc) - the
 JavaScript port of TidalCycles' pattern language - natively into Ableton Live.
 No browser tab, no virtual MIDI cables, no sync hacks: the real
 `@strudel/core` engine runs headlessly inside each device, locked to Live's
-transport.
+transport, and fully mappable to Ableton Push for hands-on control!
 
 ## What's in the box
 
-**Strudel MIDI is the one that's ready to use.** Audio FX is new. Samples is
-**experimental** - shipped so you can see where this is going, not for real
-sessions yet.
+**Strudel MIDI**, **Strudel MIDI Drums**, and **Strudel Audio FX** are ready to use. Samples is **experimental** - shipped so you can see where this is going, not for real sessions yet.
 
 | Device | Type | What it does for you |
 |---|---|---|
-| **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Scale-aware (it follows Live 12's key), Drum-Rack-aware, and it converts patterns **to and from MIDI clips** on the track. |
+| **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Scale-aware (it follows Live 12's key). Converts patterns **to and from MIDI clips** on the track. |
+| **Strudel MIDI Drums** (`alienmind-strudel-midi-drums.amxd`) | MIDI effect | The exact same engine as Strudel MIDI, but purpose-built for driving Drum Racks. Features a dedicated mapping UI to route drum words (`bd`, `sd`, `hh`) directly to specific Drum Rack pads. |
 | **Strudel Audio FX** (`alienmind-strudel-fx.amxd`) | Audio effect | Write **one line** of Strudel's effect vocabulary - `.lpf(800).gain(1.2)` - and it applies to whatever audio is already on the track. The values become real Live parameters: automatable, MIDI-mappable, and visible on Push. |
 | **Strudel Samples** (`alienmind-strudel-sampler.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. **Experimental - not recommended for real sessions yet.** |
 
@@ -95,6 +98,7 @@ value (`.lpf(sine.range(200,2000))`) is refused for the same reason: see
   is a whole evolving part. Euclidean rhythms, polymeter, per-cycle
   alternation - things that are tedious to click into a piano roll are one
   expression in Strudel.
+- **The ultimate hybrid workflow.** By exposing Strudel's engine states (like the `play` parameter) directly to Live, you can map them to your **Ableton Push** or external MIDI controllers. Start and stop complex algorithmic sequences with physical hardware!
 - **It's really Live-native.** Patterns start on the bar, follow tempo
   automation, stop when you stop the transport, and notes land on the track
   the device sits on. Everything renders inside the device UI.
@@ -131,6 +135,7 @@ pnpm test          # vitest: mini-notation parser + headless engine tests
 pnpm build         # → dist/m4l-strudel/alienmind-strudel-{midi,sampler,fx}.amxd
                     #   + dist/m4l-strudel.zip (release archive incl. installers)
 pnpm dev:midi       # browser dev for the MIDI device, mocked Live beside it
+pnpm dev:midi-drums # browser dev for the MIDI Drums device
 pnpm dev:sampler    # browser dev for the Samples device
 pnpm dev:fx         # browser dev for the Audio FX device
 ```
