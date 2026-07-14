@@ -11,15 +11,46 @@ the designs that were tried and rejected, so nobody proposes them again.
 
 ---
 
-# Parked: waiting on `m4l-jweb`
+# UNBLOCKED by `m4l-jweb` 0.6.0 - ready to build
 
-These features are fundamentally gated by capabilities not yet present in the `m4l-jweb` framework. We must wait for them to be implemented upstream.
+Three of the five things this repo was parked on shipped upstream and are **verified in
+Live**. They are no longer waiting on anything; they are just work.
 
-- **Strudel Audio Instrument (Phase 8)**: Producing a true Strudel INSTRUMENT that streams its own synthesized audio (e.g., from Strudel's WebAudio engine) directly into Max's MSP signal graph. Waiting on `FEAT-STRUDEL-002` (native C++ external shared-memory bridge).
-- **Pattern-driven modulation (Phase 7.2)**: `.lpf(sine.range(200, 2000))` describes continuous modulation at 20 Hz, which steps audibly and fights automation lanes. Waiting on a Max-native `LFO` chain stage in `m4l-jweb` to support fast parameter modulation.
-- **Device Persistence**: The drum map and the Audio FX text expression do not travel with the Live set. Per-device persistence needs the wrapper to own it. Waiting on `FEAT-STRUDEL-003` (`definePersistence`).
-- **Sample Browser (`ableton-sample-browser`)**: A generic browser for open-source samples without relying on `[node.script]`. Waiting on `m4l-jweb` Stage 3.1 (`fetch-to-disk` / `[maxurl]`). See [SAMPLE-BROWSER.md](SAMPLE-BROWSER.md) for the detailed design.
-- **`.crush()`**: Waiting on a proper bitcrusher chain vocabulary natively in `m4l-jweb`. *(Note: This is not a hard block, we could self-host them in `chains.mjs` but upstreaming is preferred).*
+- **Device Persistence** - *was: waiting on `FEAT-STRUDEL-003` (`definePersistence`).*
+  Shipped as a **declaration**, not an API: `state: { drumMap: state({ default: {} }) }`
+  in `surface.ts`, and `const [map, setMap] = useStateSync(surface, "drumMap")` in the
+  app. The JSON is saved **inside the Live set**, per device instance, and restored with
+  it. The drum map and the Audio FX expression can travel with the set now.
+- **Floating windows** - *was: `FEAT-STRUDEL-001`, "popups".* `windows: { kit: window({
+  title, width, height, entry: "KitEditor" }) }` + `useWindow(surface, "kit")`. The
+  cramped drum-mapping UI in `ableton-midi-drums` gets a window of its own, and so does
+  the sample browser.
+- **Sample Browser: the download half** - `fetchToFile(url, path, onProgress)`, through
+  `[maxurl]`, no `[node.script]`. **But read [SAMPLE-BROWSER.md](SAMPLE-BROWSER.md) §2
+  before starting**: the design assumed audio from the floating `[jweb]` window comes out
+  of the track. It does not - `[jweb]` has no `~` outlets - so the *preview* still needs
+  the `samples` chain (below), and that is now the device's only real blocker.
+
+# Parked: still waiting on `m4l-jweb`
+
+- **Transport-synced sample preview** - `[buffer~]` + `[play~]` in the patcher. Waiting on
+  the **`samples` chain** (`m4l-jweb` Priority 1, item 2). The last blocker for the sample
+  browser.
+- **`.room()`, `.delay()`, `.hpf()`, `.crush()`** - waiting on the **rack** (`m4l-jweb`
+  Priority 1, item 3), which is four chains *and one rule*: because the DSP graph is
+  frozen at build time, every stage is always in the signal path, so each one must declare
+  the setting at which it is bit-identical to a wire. `cverb~` is wet-only and has no such
+  setting without an explicit dry/wet - which is why "just add a reverb" is not the whole
+  job. *(Not a hard block: these could be self-hosted in `patcher/chains.mjs`, but the
+  neutrality rule belongs upstream, so upstreaming is preferred.)*
+- **Pattern-driven modulation (Phase 7.2)** - `.lpf(sine.range(200, 2000))` is a *signal*,
+  not a parameter: as 20 Hz of parameter writes it steps audibly and fights the automation
+  lane. Waiting on the **modulation seam** (`m4l-jweb` Priority 1, item 4).
+- **Strudel Audio Instrument (Phase 8)** - Strudel's own WebAudio synthesis reaching the
+  track. `FEAT-STRUDEL-002`. **But do not wait for the C++ external**: see
+  [../../m4l-jweb/doc/ENHANCEMENTS.md](../../m4l-jweb/doc/ENHANCEMENTS.md), which argues
+  that a native bridge is the *least* promising of four routes, and that offline rendering
+  to disk - or porting Strudel's audio backend to Max objects - gets there without one.
 
 ---
 
