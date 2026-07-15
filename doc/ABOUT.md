@@ -10,7 +10,7 @@ Live. No browser tab, no virtual MIDI cables, no sync hacks: the real
 `@strudel/core` engine runs headlessly inside the MIDI device, locked to
 Live's transport.
 
-[Get it on Gumroad](https://alienmindzzz.gumroad.com/l/m4l-strudel)
+[Download Latest Release](https://github.com/alienmind/m4l-strudel/releases/latest) | [Get it on Gumroad](https://alienmindzzz.gumroad.com/l/m4l-strudel)
 
 ---
 
