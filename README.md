@@ -34,14 +34,14 @@ transport, and fully mappable to Ableton Push for hands-on control!
 
 ## What's in the box
 
-**Strudel MIDI**, **Strudel MIDI Drums**, and **Strudel Audio FX** are ready to use. Samples is **experimental** - shipped so you can see where this is going, not for real sessions yet.
+All four devices are ready to use.
 
 | Device | Type | What it does for you |
 |---|---|---|
 | **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Scale-aware (it follows Live 12's key). Converts patterns **to and from MIDI clips** on the track. |
-| **Strudel MIDI Drums** (`alienmind-strudel-midi-drums.amxd`) | MIDI effect | The exact same engine as Strudel MIDI, but purpose-built for driving Drum Racks. Features a dedicated mapping UI to route drum words (`bd`, `sd`, `hh`) directly to specific Drum Rack pads. |
+| **Strudel MIDI Drums** (`alienmind-strudel-midi-drums.amxd`) | MIDI effect | The exact same engine as Strudel MIDI, but purpose-built for driving Drum Racks. A dedicated mapping UI routes drum words (`bd`, `sd`, `hh`) to specific Drum Rack pads, and **the map travels with your set**. |
 | **Strudel Audio FX** (`alienmind-strudel-fx.amxd`) | Audio effect | Write **one line** of Strudel's effect vocabulary - `.lpf(800).gain(1.2)` - and it applies to whatever audio is already on the track. The values become real Live parameters: automatable, MIDI-mappable, and visible on Push. |
-| **Strudel Samples** (`alienmind-strudel-sampler-browser.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. **Experimental - not recommended for real sessions yet.** |
+| **Strudel Samples** (`alienmind-strudel-sampler-browser.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo) and **audition samples through the track** - beat-synced to your project's launch quantization, looped in time, and heard through the track's own fader and effects. Auditioning downloads the file next to the device; drag it out into a Simpler, a Drum Rack or a track. |
 
 **New here? Start with the [user guide](doc/ABOUT.md)** - every control of
 every device explained (Bars, Grid, Octave conventions, Shift, Run/Hush,
@@ -124,7 +124,7 @@ You can download the pre-built `.amxd` devices ready for Ableton Live from:
 
 Once downloaded, simply extract the ZIP file and copy the `.amxd` devices into your Ableton **User Library** (e.g. `User Library/Max For Live/m4l-strudel/`).
 
-Each `.amxd` is fully **self-contained** - its own React UI bundle (the Strudel engine only travels inside the MIDI device, which is the only one that needs it) unpacks itself on first load. Drag from Live's browser onto a MIDI track (midi) or an audio track (sampler) and go.
+Each `.amxd` is fully **self-contained** - its own React UI bundle (the Strudel engine only travels inside the MIDI devices, the only ones that need it) unpacks itself on first load. Drag from Live's browser onto a MIDI track (midi, midi-drums) or an audio track (sampler-browser, fx) and go. Nothing ships loose beside the devices, and nothing runs a Node process.
 
 *(For developers building from source, you can use `pnpm install:device` to automatically copy the compiled devices to your local Ableton User Library).*
 
@@ -138,7 +138,7 @@ pnpm build         # → dist/m4l-strudel/alienmind-strudel-{midi,sampler-browse
                     #   + dist/m4l-strudel.zip (release archive incl. installers)
 pnpm dev:midi       # browser dev for the MIDI device, mocked Live beside it
 pnpm dev:midi-drums # browser dev for the MIDI Drums device
-pnpm dev:sampler    # browser dev for the Samples device
+pnpm dev:sampler-browser # browser dev for the sample browser
 pnpm dev:fx         # browser dev for the Audio FX device
 ```
 
@@ -171,31 +171,32 @@ If you were setting this repo up from scratch today, this is the path:
    at `strudel/`, and bundle `@strudel/core` + `mini` + `transpiler` + `tonal`
    from it via vite aliases (see `vite.config.ts` / `vitest.config.ts`).
 
-3. **Grow `patcher/devices.mjs` to three devices.** One manifest entry per
-   device (`alienmind-strudel-midi` as `type: "midi"`; `-sampler` and `-fx` as
-   `type: "audio"`, the sampler with `mode: "sampler"`), each with a `ui` field
-   naming its `src/app/` folder and its `chains` - the packaged `midiout`, or
-   one of this project's own (`sampler`, `strudelfx`) registered via
-   `patcher/chains.mjs`. Push-visible parameters are NOT declared here: they
-   live in each device's `surface.ts`.
+3. **Grow `patcher/devices.mjs` to four devices.** One manifest entry per
+   device (the two MIDI devices as `type: "midi"`; `-sampler-browser` and `-fx`
+   as `type: "audio"`, the browser with `mode: "sampler-browser"`), each with a
+   `ui` field naming its `src/app/` folder and its `chains` - the packaged
+   `midiout`, `samples` and `download`, or one of this project's own
+   (`strudel-delay`, `strudel-room`) registered via `patcher/chains.mjs`.
+   Push-visible parameters are NOT declared here: they live in each device's
+   `surface.ts`.
 
 4. **Add a folder per device.** `src/app/midi/App.tsx` becomes the pattern
-   editor, `src/app/sampler/App.tsx` the sample browser - each with its own
-   `protocol.ts` (spreading `DEVICE_IN`/`CHAIN_OUT` from `@m4l-jweb/bridge`
+   editor, `src/app/sampler-browser/App.tsx` the sample browser - each with its
+   own `protocol.ts` (spreading `DEVICE_IN`/`CHAIN_OUT` from `@m4l-jweb/bridge`
    rather than retyping them) and `surface.ts`. The engine itself runs in a Web
-   Worker (`src/app/midi/engine.worker.js`, MIDI-only - the sampler never
+   Worker (`src/app/shared/engine.worker.js`, MIDI-only - the browser never
    needed it), so pattern evaluation never blocks the UI thread.
 
 5. **Extend the wrapper.** `wrapper/device.ts` adds everything genuinely
    device-specific on top of `@m4l-jweb/wrapper`'s packaged lifecycle: mode
-   resolution from `jsarguments`, Live 12 scale observers, clip-availability
-   polling, and the sampler's `[node.script]` bootstrap - hooking into
-   `onDeviceReady`/`onUiReady`/`onTick`/`onTempoChange`. One wrapper file for
+   resolution from `jsarguments`, Live 12 scale observers and clip-availability
+   polling - hooking into `onDeviceReady`/`onUiReady`. One wrapper file for
    the whole repo, shared by every device's `[js]` glue.
 
-6. **Add the sampler's node host as an extra payload.** The manifest's
-   `payloads`/`looseFiles` fields ship `strudel-node-sampler.cjs` alongside
-   the `.amxd`, extracted by the packaged wrapper on load.
+6. **Declare what must survive the set.** A `state` slot in `surface.ts` (the
+   drums device's map, the FX device's line) compiles to a `[dict]` + `[pattr]`
+   Live saves with the SET, bound two-way with `useStateSync()`. Live parameters
+   carry numbers; a slot carries the things a number cannot be.
 
 7. **Build.** `pnpm build` runs `scripts/build-ui.mjs` (one Vite build per
    device, `dist/ui/<device>/index.html`) then `m4l-jweb build` - `.amxd`

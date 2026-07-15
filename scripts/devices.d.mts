@@ -13,10 +13,9 @@ export interface DeviceManifestEntry {
 	/** The folder under src/app/ holding this device's UI. Defaults to `name`. */
 	ui?: string;
 	chains?: string[];
-	parameters?: { id: string; object: string; range?: [number, number]; default?: number }[];
+	/** The `samples` chain's [buffer~] slots. One per sample that can be loaded at once. */
+	slots?: string[];
 	unmatchedTo?: string;
-	payloads?: string[];
-	looseFiles?: string[];
 	extraFiles?: string[];
 }
 

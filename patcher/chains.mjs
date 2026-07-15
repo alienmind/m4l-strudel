@@ -1,92 +1,33 @@
 /**
  * chains.mjs - the chains that are specific to THIS project.
  *
- * @m4l-jweb/build ships a canned vocabulary (midiin, midiout, passthrough,
- * gain, lowpass) that covers the common shapes. Anything device-specific
- * belongs here, and importing this file is all it takes: the build loads
- * patcher/chains.mjs if it exists, and registerChain() mutates the shared
+ * @m4l-jweb/build ships a canned vocabulary (midiin, midiout, passthrough, gain,
+ * lowpass, drive, download, samples) that covers the common shapes. Anything
+ * device-specific belongs here, and importing this file is all it takes: the build
+ * loads patcher/chains.mjs if it exists, and registerChain() mutates the shared
  * vocabulary before any device is generated.
  *
- * One chain lives here today:
+ * Two chains live here, both for the FX device: "strudel-delay" and "strudel-room",
+ * which are Strudel's .delay() and .room(). They are local because the library's
+ * vocabulary has no reverb or delay yet, and upstreaming them is gated behind a
+ * question about whether .room() should populate a REAL Ableton Reverb instead -
+ * see doc/TODO.md.
  *
- *   sampler  - [node.script] + an sfplay~ preview (the Samples device).
+ * WHAT USED TO BE HERE is the point of the current release: a
+ * "strudel-sample-browser" chain built around [node.script], because in m4l-jweb
+ * 0.5.0 nothing else in the stack could reach the network or the disk. It is gone.
+ * The catalog is now a fetch() in the app ([jweb] is Chromium and always had one),
+ * the download is the library's `download` chain ([maxurl] writes the file), and the
+ * preview is its `samples` chain ([buffer~] -> [groove~], summed into the track).
+ * Node for Max is unstable inside Live - from silently ignoring `script start` to
+ * crashing the host, which is why the Strudel engine runs in a Web Worker - and the
+ * library forbids it outright. This project was the last thing still using it.
  *
- * This is the ONLY place in this project that uses node.script, and the
- * library deliberately does not support it: Node for Max is unstable inside Live
- * (silently ignoring `script start`, and at worst crashing the host), which is
- * why the Strudel engine itself runs in a Web Worker instead. The sampler pays
- * that cost because it genuinely needs the OS - HTTP fetch and a filesystem -
- * and a Web Worker has neither. Keeping it here keeps the risk where it is
- * understood.
- *
- * There used to be a second chain, "poly": a hand-rolled poly~ oscillator
- * synth for an "Audio" instrument device. It was removed - see doc/TODO.md for
- * why and what replaces it. The synth patch it depended on
- * (ableton-amxd/voice.maxpat) is gone too.
+ * There used to be a "poly" chain too: a hand-rolled poly~ oscillator synth for an
+ * "Audio" instrument device. It was removed - see doc/TODO.md for why and what
+ * replaces it. The synth patch it depended on (ableton-amxd/voice.maxpat) is gone.
  */
-import { box, line, registerChain, removeBox } from "@m4l-jweb/build/chains";
-
-/**
- * "sampler" - the sample-fetcher device (an audio effect).
- *
- * node.script does the work jweb cannot: HTTP fetch and filesystem. It also does
- * the preview QUANTIZATION (setTimeout to the next beat, see
- * src/max/sampler/main.mjs) and emits a bare `preview_go` at the right moment -
- * 5-10 ms of jitter is fine for auditioning. So the Max side stays trivial:
- *
- *   preview_open <path>  -> sfplay~ open
- *   preview_go           -> 1
- *   preview_stop         -> 0
- */
-registerChain("strudel-sample-browser", (ctx) => {
-	const { boxes, lines, jwebId, unmatchedId } = ctx;
-
-	// @autostart 0: [js] owns the start sequence (see wrapper/device.ts), so the
-	// script is only started once the payload is known to be extracted.
-	// @watch 0: no filesystem watching inside a shipped device.
-	const nodeId = "obj-node";
-	boxes.push(
-		box(nodeId, "node.script strudel-node-sampler-browser.cjs @autostart 0 @watch 0", {
-			numinlets: 1,
-			numoutlets: 2,
-			outlettype: ["", ""],
-		}),
-	);
-	// node.script's RIGHT outlet is lifecycle/status. Keep it in the Max console:
-	// it is the only way to tell "the script never started" from "the message
-	// never arrived".
-	boxes.push(box("obj-nodeprint", "print n4m"));
-	lines.push(line(nodeId, 1, "obj-nodeprint", 0));
-
-	// jweb -> node (load_map / preview / download). node ignores what is not its.
-	lines.push(line(jwebId, 0, nodeId, 0));
-	// js -> node (ticks, tempo, scale, and the "script start" bootstrap).
-	lines.push(line(unmatchedId, 1, nodeId, 0));
-
-	boxes.push(box("obj-openmsg", "prepend open"));
-	boxes.push(box("obj-gomsg", "t 1"), box("obj-stopmsg", "t 0"));
-
-	lines.push(line(nodeId, 0, "obj-routes", 0));
-	lines.push(line("obj-routes", 0, "obj-openmsg", 0));
-	lines.push(line("obj-openmsg", 0, "obj-sf", 0));
-	lines.push(line("obj-routes", 1, "obj-gomsg", 0));
-	lines.push(line("obj-gomsg", 0, "obj-sf", 0)); // 1 = start playback
-	lines.push(line("obj-routes", 2, "obj-stopmsg", 0));
-	lines.push(line("obj-stopmsg", 0, "obj-sf", 0)); // 0 = stop
-	// Unmatched node replies (catalog / downloaded / progress / fetcherr /
-	// engine_ready) go on to the UI.
-	lines.push(line("obj-routes", 3, jwebId, 0));
-
-	// Passthrough + preview mix. Multiple signal cords into one inlet SUM in MSP.
-	for (const ch of [0, 1]) {
-		const [srcId, srcOut] = ctx.audioIn(ch);
-		const mixId = `obj-mix-${ch}`;
-		boxes.push(box(mixId, "+~", { numinlets: 2, numoutlets: 1, outlettype: ["signal"] }));
-		lines.push(line(srcId, srcOut, mixId, 0));
-		lines.push(line("obj-sf", ch, mixId, 1));
-		ctx.setAudioOut(ch, mixId, 0);
-	}
-});
+import { box, line, registerChain } from "@m4l-jweb/build/chains";
 
 registerChain("strudel-delay", (ctx) => {
 	const { boxes, lines } = ctx;
@@ -184,15 +125,17 @@ registerChain("strudel-room", (ctx) => {
  * never passes the app's value on, and the DSP sits where it was while the UI's
  * control appears to do nothing.
  *
- * @m4l-jweb has this helper internally but does not export it; it is four lines,
- * and duplicating them is cheaper than being unable to build a device-specific
- * chain that touches a parameter. The boxes named here are created LATER, by the
- * build's applySurface() - a patchline may name a box that appears further down
- * the array, because a patcher is a graph, not a script.
+ * @m4l-jweb has this helper internally and STILL does not export it as of 0.6.0
+ * (checked: chains.mjs declares it, the package does not re-export it), so the copy
+ * stays - it is four lines, and duplicating them is cheaper than being unable to
+ * build a device-specific chain that touches a parameter. Delete it the day the
+ * library exports its own. The boxes named here are created LATER, by the build's
+ * applySurface() - a patchline may name a box that appears further down the array,
+ * because a patcher is a graph, not a script.
  */
 function fanParamInto(ctx, paramId, dstId, dstInlet) {
 	if (!ctx.surface?.params?.[paramId]) {
-		throw new Error(`chain "strudelfx" needs a parameter "${paramId}" in src/app/fx/surface.ts`);
+		throw new Error(`the FX chains need a parameter "${paramId}" in src/app/fx/surface.ts`);
 	}
 	const [objId, objOut] = ctx.paramObject(paramId);
 	const [routeId, routeOut] = ctx.paramValue(paramId);

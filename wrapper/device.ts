@@ -7,12 +7,17 @@
  * those, as one ES5 script, so it can see and extend them.
  *
  * What is genuinely ours:
- *   1. The device mode (midi | sampler-browser), and the fan-out to outlet 1 that the
- *      strudel-sample-browser's [node.script] needs.
+ *   1. The device mode (midi | sampler-browser), which gates the two below.
  *   2. clip_available: a poll, because LiveAPI has no observer for "any clip on
  *      this track", so the UI can disable From Clip when there is nothing to read.
- *   3. Live 12's global root_note/scale_name, forwarded to the UI and to node.
- *   4. The [node.script] bootstrap (strudel-sample-browser only).
+ *   3. Live 12's global root_note/scale_name, forwarded to the UI.
+ *
+ * WHAT IS NO LONGER OURS: the [node.script] bootstrap, and the fan-out of tick and
+ * tempo to outlet 1 that fed it. The sample browser has no process of its own since
+ * m4l-jweb 0.6.0 - it fetches its catalog in the page, downloads through the
+ * `download` chain and previews through the `samples` chain - and outlet 1 now
+ * belongs to the packaged wrapper, which answers `buffer_load` and `fetch_to_file`
+ * on it. Writing to it by hand from here would be talking over the library.
  *
  * Everything here is ES5 and gated by acorn, same as the packaged sources.
  */
@@ -42,21 +47,6 @@ var STRUDEL_MODE = resolveStrudelMode();
 var IS_SAMPLER_BROWSER = STRUDEL_MODE === "sampler-browser";
 
 post("strudel: mode " + STRUDEL_MODE + "\n");
-
-/**
- * The strudel-sample-browser runs a [node.script] on outlet 1 that needs the same clock and
- * tempo the UI gets. The packaged wrapper only sends them to jweb (outlet 0), so
- * mirror them here.
- *
- * onTick and onTempoChange are hooks the packaged wrapper calls; see max.d.ts.
- */
-function onTick(playing: number, beats: number): void {
-	if (IS_SAMPLER_BROWSER) outlet(1, "tick", playing, beats);
-}
-
-function onTempoChange(bpm: number): void {
-	if (IS_SAMPLER_BROWSER) outlet(1, "tempo", bpm);
-}
 
 /* ------------------------------------------------------------------ *
  * Clip availability
@@ -135,54 +125,95 @@ function onScale(a: unknown[]): void {
 }
 
 function sendScale(): void {
-	outlet(0, "scale", liveRoot, liveScale); // -> jweb (scale degrees / catalog filter)
-	if (IS_SAMPLER_BROWSER) outlet(1, "scale", liveRoot, liveScale); // -> node
+	outlet(0, "scale", liveRoot, liveScale); // -> jweb (scale degrees)
 }
 
 /* ------------------------------------------------------------------ *
- * [node.script] bootstrap (strudel-sample-browser only)
+ * The sample browser's two facts about the world
  *
- * The rest of this project deliberately avoids node.script - Node for Max is
- * unstable in Live, from silently ignoring `script start` to crashing the host,
- * which is why the engine lives in a Web Worker instead. The strudel-sample-browser is the one
- * device that genuinely needs the OS (fetch + filesystem), so it pays that cost.
+ * 1. WHERE THE DEVICE LIVES. The browser downloads a sample to a path RELATIVE to
+ *    the device's folder, and that is the right thing for Max - `fetchToFile` and
+ *    `[buffer~]` both resolve it the same way, and a relative path cannot be split
+ *    into atoms by the spaces in "Ableton Library". But the USER has to be able to
+ *    get at the file: to drag it into a Simpler, to find it in Places. A page cannot
+ *    know its own device's folder, so the wrapper tells it - once, at ui_ready.
  *
- * The patcher creates it with @autostart 0 and [js] owns the start sequence.
- * node.script resolves its script filename when the OBJECT INSTANTIATES, before
- * this script could have extracted anything - which is why the .cjs also ships
- * loose next to the .amxd (manifest `looseFiles`). The embedded payload
- * (manifest `payloads`) is the fallback for a bare .amxd copied on its own.
+ *    deviceFolder() is the packaged core's, and it is the SAME resolution the
+ *    download used, which is what makes the path we hand the page the real one.
+ *
+ * 2. LIVE'S GLOBAL QUANTIZATION. The preview starts on a beat, and WHICH beat is not
+ *    ours to decide - the user already told Live, in the transport bar. `1 Bar` means
+ *    a preview waits for the downbeat; `None` means it plays now. Anything else is a
+ *    device inventing its own timing rules next to the ones the set already has.
  * ------------------------------------------------------------------ */
 
-var nodeStarted = false;
-var nodeStartTask = new Task(startNodeScript, this);
-var nodeProbeTask = new Task(probeNodeScript, this);
+var quantObs: LiveAPI | null = null;
+var liveQuant: unknown = 4; // Live's default: 1 Bar
 
-function bootNodeScript(): void {
-	if (!IS_SAMPLER_BROWSER || nodeStarted) return;
-	// The packaged core already extracted every manifest payload, including the
-	// .cjs bundle, so by here the file is on disk.
-	nodeStartTask.schedule(300);
+function setupBrowserObservers(): void {
+	if (!IS_SAMPLER_BROWSER) return;
+	try {
+		quantObs = new LiveAPI(onQuant, "live_set");
+		quantObs.property = "clip_trigger_quantization";
+		post("strudel: quantization observer ready\n");
+	} catch (e) {
+		post("strudel: quantization observer unavailable " + (e as Error).message + "\n");
+	}
 }
 
-function startNodeScript(): void {
-	if (nodeStarted) return;
-	nodeStarted = true;
-	outlet(1, "script", "start");
-	post("strudel: node.script start requested\n");
-	nodeProbeTask.schedule(2000);
+function onQuant(a: unknown[]): void {
+	if (a && a[0] == "clip_trigger_quantization") {
+		liveQuant = a[1];
+		sendQuant();
+	}
+}
+
+function sendQuant(): void {
+	if (IS_SAMPLER_BROWSER) outlet(0, "quantization", liveQuant);
 }
 
 /**
- * Status probe, 2s after start. node.script answers "script running" on its right
- * (dump) outlet, which the patcher wires to [print n4m]. If the console shows NO
- * n4m line after this post, the js -> node.script message path is dead (object
- * missing or patchline dropped). If it shows "running 0", node got the message
- * but the script did not start.
+ * The device's own folder, as an absolute path.
+ *
+ * It goes out as ONE symbol. A real install has spaces in this path ("Ableton
+ * Library"), and a path that travels through a patcher as message text would split
+ * there into atoms - which is exactly why the download itself never sends one. Out
+ * of [js] it stays whole.
  */
-function probeNodeScript(): void {
-	outlet(1, "script", "running");
-	post("strudel: node.script status probe sent (expect an 'n4m:' console line)\n");
+function sendFolder(): void {
+	if (!IS_SAMPLER_BROWSER) return;
+	var folder = deviceFolder(); // the packaged core's - the same resolution the download used
+	if (folder) outlet(0, "device_folder", folder);
+	else post("strudel: no device folder yet (unsaved patcher?) - the sample links will be off\n");
+}
+
+/**
+ * Reveal the samples folder in the OS file manager - the app cannot, and this is the
+ * stopgap until the drag-to-clip spike settles (doc/SPIKE-DRAG-TO-CLIP.md).
+ *
+ * `messnamed("max", ...)` is the JS equivalent of a `; max ...` message box: it addresses
+ * the Max APPLICATION. `launchbrowser` hands a URL to the OS default handler, and the
+ * default handler for a `file://` DIRECTORY is the native file manager - Finder on macOS,
+ * Explorer on Windows - not a web browser, despite the message name. UNVERIFIED in Live;
+ * if it opens a browser listing instead, that is the finding, and the fallback is to
+ * reveal via a different Max object.
+ *
+ * The samples folder only exists once something has been downloaded (fetchToFile creates
+ * it); before then this opens nothing. The app only offers the button once a sample is on
+ * disk, so by the time it is clicked the folder is there.
+ */
+function reveal_folder(): void {
+	if (!IS_SAMPLER_BROWSER) return;
+	var folder = deviceFolder();
+	if (!folder) {
+		post("strudel: cannot reveal folder - the patcher is unsaved, so it has no path yet\n");
+		return;
+	}
+	// file:///<path>/samples/ - encodeURI so the spaces in "Ableton Library" survive, and
+	// strip a leading slash so a POSIX "/Users/x" becomes "file:///Users/x" not "////".
+	var url = encodeURI("file:///" + (folder + "/samples/").replace(/^\/+/, ""));
+	messnamed("max", "launchbrowser", url);
+	post("strudel: reveal " + url + "\n");
 }
 
 /* ------------------------------------------------------------------ *
@@ -191,15 +222,17 @@ function probeNodeScript(): void {
 
 /** live.thisdevice bang, after the packaged core has done its own work. */
 function onDeviceReady(): void {
-	bootNodeScript();
 	startClipPoll();
 	setupScaleObservers();
+	setupBrowserObservers();
 }
 
 /** The UI announced itself; the packaged core has already sent mode/build/tempo. */
 function onUiReady(): void {
 	outlet(0, "mode", STRUDEL_MODE); // the real mode, not the packaged default
 	sendScale(); // the observers fired before this page existed
+	sendQuant(); // ...same: the page cannot have heard the first one
+	sendFolder();
 	lastClipAvail = -1;
 	if (!IS_SAMPLER_BROWSER) checkClipAvailable();
 }

@@ -30,13 +30,30 @@ export default [
 		unmatchedTo: "js",
 	},
 	{
+		/**
+		 * The sample browser - an audio effect that browses Strudel's sample-map
+		 * universe, downloads what you pick, and previews it THROUGH THE TRACK.
+		 *
+		 * Two library chains and no process of our own. It used to host a
+		 * [node.script] for the three things jweb could not do; every one of them has
+		 * a first-class answer since m4l-jweb 0.6.0:
+		 *
+		 *   the catalog     fetch() in the app. [jweb] is Chromium; it always had it.
+		 *   the download    `download` - [maxurl] writes the file, and the bytes never
+		 *                   cross the bridge.
+		 *   the preview     `samples` - [buffer~] + [groove~], SUMMED into the track's
+		 *                   signal path. A page that plays audio itself is heard past
+		 *                   the fader and the monitor cue: [jweb] has no signal outlets.
+		 *
+		 * `slots` names the [buffer~]s. One is right for a preview - it is one voice,
+		 * auditioning one sample at a time. A drum rack is what would want eight.
+		 */
 		name: "alienmind-strudel-sampler-browser",
 		ui: "sampler-browser",
 		type: "audio",
 		mode: "sampler-browser",
-		chains: ["strudel-sample-browser"],
-		payloads: ["dist/node/strudel-node-sampler-browser.cjs"],
-		looseFiles: ["dist/node/strudel-node-sampler-browser.cjs"],
+		chains: ["samples", "download"],
+		slots: ["preview"],
 		unmatchedTo: "js",
 	},
 	{
