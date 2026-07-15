@@ -12,6 +12,51 @@ including every transformation, and all of it exports to a MIDI clip. What is
 and the audio effects attached to a pattern. Those are Ableton's job here, and
 you reach them through an instrument on the track or the Audio FX device.
 
+## Patterns that work today
+
+Every line below is verified against the real engine in this repo's tests.
+
+**Bare mini-notation** - type it straight in, no quotes, no `note(...)`:
+
+```
+0 2 4 <7 6>            scale degrees of Live's key; <> alternates per cycle
+0 [2 ~] -1 <4 [5 6]>   negative degrees, rests, nesting
+[0,2,4] ~ [3,5,7] ~    chords
+bd sd bd sd            drum words -> Drum Rack pads
+bd(3,8) ~ sd ~         euclidean rhythm: 3 kicks spread over 8 steps
+bd!3 sd                replication: three kicks, then a snare
+[bd hh]*2 sd hh        subdivision
+c5 [e5 g5]*2 ~ <a5 b5> absolute note names, if you prefer them
+{0 2 4, 7 9}%4         polymeter
+```
+
+**Full Strudel code** - anything the language can do, and all of it exports to a
+clip too:
+
+```js
+note("c3 e3 g3").fast(2)
+n("0 2 4 6").scale(liveScale)                       // liveScale = Live's own key
+note("c3 [e3 g3]").jux(x => x.rev())                // stereo-split via .midichan
+note("c3 e3 g3 b3").sometimesBy(.3, x => x.fast(2)) // a part that evolves
+note("c3(3,8)").off(1/8, x => x.add(note(7)))       // an echo a fifth up
+n("<[0,2,4] [3,5,7]>").scale(liveScale).slow(2)     // a two-bar chord progression
+$: note("c2*4")                                     // several parts at once
+$: note("<e4 g4>").midichan(2)
+```
+
+**Audio FX** - one line, applied to the audio already on the track:
+
+```js
+.lpf(800)              // one-pole lowpass at 800 Hz
+.lpf(2000).gain(1.2)   // ... and a little push
+.cutoff(440)           // `cutoff` and `lpf` are the same control
+```
+
+`.room()`, `.delay()` and `.crush()` are recognised but have no Max chain behind
+them yet - the device tells you so rather than pretending they worked. A modulated
+value (`.lpf(sine.range(200,2000))`) is refused for the same reason: see
+[doc/TODO.md](doc/TODO.md).
+
 ---
 
 ## The one that catches everyone
