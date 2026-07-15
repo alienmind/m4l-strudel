@@ -12,6 +12,7 @@ import { isBareMini } from "@/lib/strudelCode";
 import { miniNoteTokens } from "@/lib/mini/resolve";
 import { useStrudelEngine, type EngineState } from "../shared/useStrudelEngine";
 import { IN } from "../shared/protocol";
+import surface from "./surface";
 
 /**
  * The MIDI device: a pure note generator. What it adds to the shared engine (see
@@ -54,7 +55,8 @@ export function useStrudel(): StrudelState {
 	const liveScaleName = useMemo(() => strudelScaleName(scale), [scale]);
 
 	const engine = useStrudelEngine({
-		initialText: "c5 [e5 g5]*2 ~ <a5 b5>",
+		surface,
+		initialText: "<c1 c1 <c2 c#2>>*16",
 		ctx,
 		liveScale: liveScaleName,
 	});

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { uiReady } from "@m4l-jweb/bridge";
-import { useParam } from "@m4l-jweb/surface/react";
+import { useParam, useStateSync } from "@m4l-jweb/surface/react";
 import { cn } from "@/lib/utils";
 import {
 	formatFxChain,
@@ -71,8 +71,12 @@ export default function App() {
 	};
 
 	/** The stages on screen: the ones the committed line named, plus any a knob or
-	 *  an automation lane has moved off neutral - those are audible, so they show. */
-	const [named, setNamed] = useState<FxParam[]>([]);
+	 *  an automation lane has moved off neutral - those are audible, so they show.
+	 *
+	 *  Persisted in the Live set (surface.ts), because it is the only part of the line
+	 *  the parameters cannot reconstruct: a stage sitting at its neutral value was
+	 *  either typed on purpose or never touched, and Live has no way to tell. */
+	const [named, setNamed] = useStateSync(surface, "named");
 	const shown = useMemo(
 		() => RACK.map((s) => s.param).filter((p) => named.includes(p) || params[p] !== NEUTRAL[p]),
 		[named, params],
@@ -107,7 +111,7 @@ export default function App() {
 					setShowAdd(false);
 					// Added at its neutral value: putting a stage on screen must not change
 					// the sound until its slider is moved.
-					setNamed((prev) => [...prev, param]);
+					setNamed([...named, param]);
 					setDraft(null);
 				}}
 			/>

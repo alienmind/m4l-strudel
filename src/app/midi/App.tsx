@@ -34,7 +34,9 @@ export default function App() {
 	if (showClip) {
 		return (
 			<ClipPanel
-				bars={s.bars} setBars={s.setBars}
+				beatsPerCycle={s.beatsPerCycle} setBeatsPerCycle={s.setBeatsPerCycle}
+				bpcAuto={s.bpcAuto} resetBeatsPerCycle={s.resetBeatsPerCycle}
+				beatsPerBar={s.beatsPerBar} setBeatsPerBar={s.setBeatsPerBar}
 				grid={s.grid} setGrid={s.setGrid}
 				toMidi={s.toMidi} fromMidi={s.fromMidi}
 				clipAvailable={s.clipAvailable}
