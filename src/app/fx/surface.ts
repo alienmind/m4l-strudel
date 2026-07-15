@@ -77,6 +77,20 @@ export default defineSurface({
 	banks: [{ name: "FX", params: ["cutoff", "drive", "delay", "delaytime", "delayfeedback", "room", "gain"] }],
 
 	/**
+	 * SHED THE HTML SLIDERS. Every fx parameter renders as a NATIVE live.dial in the
+	 * device view, laid out by the compiler in three columns (seven dials at rows: 3),
+	 * with [jweb] shifted right to sit beside them. They are the same parameters with
+	 * the same fan-out graph - a dial turn still reaches the app, so the line still
+	 * redraws from it - now drawn by Max instead of React. App.tsx keeps only the
+	 * Strudel line; the bottom slider grid is gone.
+	 *
+	 * The rack is frozen anyway (ARCHITECTURE.md, the frozen-graph law), so every
+	 * stage being permanently visible is honest here rather than a limitation: there
+	 * is no stage to hide, only a value to leave neutral.
+	 */
+	layout: { native: { params: ["cutoff", "drive", "delay", "delaytime", "delayfeedback", "room", "gain"], rows: 3 } },
+
+	/**
 	 * WHICH STAGES THE USER NAMED - the line, in the only form worth saving.
 	 *
 	 * The VALUES need nothing here: they are Live parameters, and Live has been saving

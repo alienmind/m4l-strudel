@@ -7,7 +7,6 @@ import {
 	formatFxChain,
 	NEUTRAL,
 	parseFxChain,
-	quantize,
 	RACK,
 	unsupportedMessage,
 	type FxParam,
@@ -180,62 +179,16 @@ export default function App() {
 				</span>
 			)}
 
-			{/* The live parameters, as Live sees them. Not a copy of the text above:
-			    these follow automation and Push too. */}
-			<div className="mt-auto grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] leading-none">
-				{shown.length === 0 ? (
-					<div className="col-span-2 text-center text-muted-foreground py-2 text-xs">
-						Type an effect or use (+) to add one.
-					</div>
-				) : (
-					shown.map((param) => (
-						<ParamSlider key={param} param={param} value={params[param]} setter={setters[param]} />
-					))
-				)}
-			</div>
-		</div>
-	);
-}
-
-function ParamSlider({
-	param,
-	value,
-	setter,
-}: {
-	param: FxParam;
-	value: number;
-	setter: (v: number) => void;
-}) {
-	const def = surface.params[param];
-	const [min, max] = def.range;
-	const exp = def.exponent ?? 1;
-
-	// The dial's travel is not its value: `exponent` bends where the range sits
-	// under the finger (see surface.ts) without touching the number underneath.
-	const normValue = Math.max(0, Math.min(1, (value - min) / (max - min)));
-	const sliderVal = Math.round(Math.pow(normValue, 1 / exp) * 1000);
-
-	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const pos = Number(e.target.value) / 1000;
-		// Quantized on the way in: a slider must land on a value the line can write,
-		// or the two faces of this control would disagree in the last decimal.
-		setter(quantize(param, min + Math.pow(pos, exp) * (max - min)));
-	};
-
-	return (
-		<div className="flex flex-col gap-1 rounded bg-input/40 px-1.5 py-1">
-			<div className="flex items-center justify-between">
-				<span className="text-muted-foreground">{def.short ?? param}</span>
-				<span className="font-mono">{def.format ? def.format(value) : value.toFixed(2)}</span>
-			</div>
-			<input
-				type="range"
-				min="0"
-				max="1000"
-				value={sliderVal}
-				onChange={handleChange}
-				className="w-full accent-primary h-1 bg-background/50 rounded-lg appearance-none cursor-pointer"
-			/>
+			{/* No HTML sliders here any more: the seven parameters render as native
+			    live.dial objects in the device view (surface.ts `layout.native`),
+			    beside this [jweb]. They follow automation and Push, and a dial turn
+			    still reaches the app - so the line above redraws from them, for free.
+			    An empty line is the only hint the user needs. */}
+			{shown.length === 0 && (
+				<div className="mt-auto text-center text-muted-foreground py-2 text-xs">
+					Turn a dial, type an effect, or use (+) to add one.
+				</div>
+			)}
 		</div>
 	);
 }

@@ -4,120 +4,142 @@ The backlog for the devices themselves. Anything that belongs to the *library* -
 patcher codegen, the Surface, fetch-to-disk, the chain vocabulary - lives in
 `m4l-jweb`'s own [doc/TODO.md](../../m4l-jweb/doc/TODO.md), not here.
 
-**This file is what is still ahead.** What has shipped is described where it
-belongs: [README.md](../README.md) for what a device does, and
+**The strategic roadmap is [PLAN.md](PLAN.md)** - native declarative UI, dynamic
+chains, and the m4l-strudel Rack - and this file is sequenced against it. **This
+file is what is still ahead.** What has shipped is described where it belongs:
+[README.md](../README.md) for what a device does, and
 [ARCHITECTURE.md](ARCHITECTURE.md) for how and why it does it - including §5a,
 the designs that were tried and rejected, so nobody proposes them again.
 
 ---
 
-# Unblocked by `m4l-jweb` 0.6.5 - the priority now
+# The roadmap, sequenced against PLAN.md
 
-*(The 0.6.0 migration that used to head this file has shipped - see the DONE section at
-the bottom. It came back with three upstream gaps attached. **0.6.5 has closed all
-three**, plus shipped two capabilities we were parked on. What was "still waiting" is now
-"ready to build", in the order below. The one prerequisite for every item is bumping the
-`@m4l-jweb/*` dependencies from `^0.6.0` to `^0.6.5` and reinstalling - the tree still has
-0.6.0 pinned.)*
+*(The 0.6.5 adoption that used to head this file has shipped - deps bumped, the FX
+device on the library's `delay`/`reverb` chains, `patcher/chains.mjs` deleted, and the
+drum-rack window verified. See the DONE sections at the bottom. What heads the file now
+is the PLAN.md sequence.)*
 
-## P1 - the quick wins (one build, three problems gone) - SHIPPED 2026-07-15
+## R1 - Native dials for the FX device (PLAN.md Part 1) - SHIPPED, awaiting a Live check
 
-*Deps bumped to `^0.6.5`, the FX device swapped onto the library's `delay`/`reverb` chains,
-`patcher/chains.mjs` deleted (custom chains and the `fanParamInto()` copy with it), and the
-build + 157 tests are green. Owed: a Live listening A/B on the FX chains, since the
-library's neutrality null-test is structural, not audible.*
+The fx device sheds its HTML sliders: `src/app/fx/surface.ts` declares
+`layout: { native: { params: [...seven...], rows: 3 } }`, the build lays the seven dials
+out natively (three columns) next to a `[jweb]` shifted to x=164, and `App.tsx` keeps
+only the Strudel line. The draft/commit model and the `named` state slot stay - the slot
+kept its round-trip role (which stages the line prints) even though its display role
+(which HTML sliders to show) is gone. Only the slider grid and the `ParamSlider`
+component were deleted; the `+`/AddEffectPanel machinery stays, and a dial turn still
+reaches the app so the line redraws from it.
 
-These were deletions and a version bump. No new UI, low risk, and they closed three of the
-long-standing gaps at once.
+- **Upstream:** `m4l-jweb` item 7 (`layout.native` codegen) - **SHIPPED 0.7.0**.
+- **Done here:** `@m4l-jweb/*` pointed at local 0.7.0 (via `link:` for now, until the
+  library is published; version intent is `^0.7.0`), the `layout` block added, the slider
+  UI deleted, the line kept. Typecheck + build + 157 tests green; the generated fx
+  patcher was inspected (seven dials at the expected rects, all fit the 169 px height).
+- **Still owed:** a new fx screenshot; a Live check that the device view widens and the
+  dials automate/map/Push exactly like any factory device. **Note the state-default
+  seeding fix did NOT ride this release** (it needs a Max dict-embed spike upstream); the
+  fx `named` slot's app-side default handling is unaffected.
 
-- **[P1-a] Bump to 0.6.5 - and the mono preview fixes itself.** `#4` shipped *inside* the
-  library's `samples` chain: a runtime `[selector~ 2]`, gated by the slot's measured
-  channel count, folds a mono `groove~` outlet to both ears. We had filed this as
-  unfixable from here, and it was - so the fix arrives with the version, no code change.
-  A tidal-drum-machines preview (mostly mono) now plays centred instead of in one ear.
-- **[P1-b] Swap the FX device onto the library's `delay`/`reverb` chains, and delete
-  `patcher/chains.mjs`.** `2A` shipped `delay` and `reverb` as first-class chains, and
-  their param ids are **exactly** the ones `src/app/fx/surface.ts` already declares
-  (`delay`, `delaytime`, `delayfeedback`, `room`) - checked against the library source.
-  So the manifest line becomes `["lowpass","drive","delay","reverb","gain"]`, our local
-  `strudel-delay`/`strudel-room` go away, and with them the whole of `patcher/chains.mjs`.
-  The library's chains carry the **neutrality contract** (null-tested at their neutral
-  setting), which our hand-rolled ones never proved. Owed: a Live listening A/B, because
-  the library's null-test is structural, not audible.
-- **[P1-c] Delete our copy of `fanParamInto()`.** `#5` exported it from
-  `@m4l-jweb/build/chains`. P1-b already deletes the file it lives in, so this is subsumed
-  the moment P1-b lands - noted separately only because if P1-b is deferred, this is still
-  a standalone four-line cleanup (import it, drop the copy).
+## R2 - Spike R1: can a device populate the user's rack? (PLAN.md Part 2 gate)
 
-## P2 - the floating-window editors (the big UX win `#6` bought us)
+One afternoon, falsifiable, runnable HERE in a throwaway `wrapper/device.ts` handler
+on any existing device. The five questions, in order, are specified in `m4l-jweb`
+TODO item 2B (stop at the first NO: browser reachable? `load_item` callable? landing
+site steerable? clicks during playback? sane undo?).
 
-`#6` shipped and is verified in Live: a window's `[jweb]` is now routed back to `[js]`,
-and a window's page reads and writes the device's shared `state()`, with edits broadcast
-to every view. `m4l-jweb`'s `hello-window` is the worked reference, including the silent
-`reply()` trap (fixed `(selector, value)`, never `.apply`).
+- **If it passes:** Translate mode (R4) gets its reconciler - consumer-side code in
+  `wrapper/device.ts`, diff rules per PLAN.md Part 2 (only touch what you own; never
+  persist raw LOM ids; idempotent).
+- **If it fails:** the documented fallback - ADOPT, don't create. The user drops an
+  Auto Filter in the rack once; the device binds `.lpf()` to it and the UI says what
+  to add. Most of the value survives.
 
-- **[P2-a] The drum map, redrawn as an Ableton DRUM RACK** (`alienmind-strudel-midi-drums`)
-  - **SHIPPED 2026-07-15.** The list editor is gone; the map is now a `DrumRack.tsx` - a
-  4-wide pad grid, chromatic and bottom-up (C1 = MIDI 36 at bottom-left, Live's own
-  layout). A pad is a note; you map a word onto it three ways: **type it into the pad, or
-  drag one of the abbreviations from the palette on the right onto it**. The mini device
-  view shows a 16-pad window with a **scroll stripe** down the left (a compact mini-map of
-  the range; click to scroll octaves). The **"Expand" button** opens the SAME component in
-  a floating window (`Window.tsx`, `entry: "Window"`) showing the whole **C1..C6** range at
-  once, no stripe. Both bind the one `drumMap` `state()` slot with `useStateSync()`, so the
-  mini rack and the window are one write to one persisted `[dict]`, kept in sync by the
-  library. The window-aware build harness was ported to make this work
-  (`scripts/build-ui.mjs` per-window loop, `vite.config.ts` `@device/App`/`WINDOW_ENTRY`);
-  the `.amxd` embeds `editor.html` alongside the device view. **Note:** pad LABELS use
-  Live's drum-rack convention (36 = C1), independent of the pattern note-name toggle -
-  pads are triggered by drum words, not by typing note names. Owed: a Live check that the
-  window opens, drag-and-drop works inside `[jweb]`, and the two views stay in sync.
-- **[P2-b] The sample browser in a window** (`alienmind-strudel-sampler-browser`) - not yet
-  done. Same shape as P2-a: the catalog/list/audition UI moves to a window, the device view
-  keeps the small transport. Reuses the drag-source and reveal-in-folder work already
-  there, and the build harness is now in place for it.
+## R3 - Pattern-driven modulation (Phase 7.2) - WAITING on `m4l-jweb` item 3
 
-## P3 - the polyphonic Strudel sampler (a genuine new device) - PARKED on an upstream fix
+`.lpf(sine.range(200, 2000))` is a *signal*, not 20 Hz of parameter writes that step
+audibly and fight the automation lane. The design is now concrete upstream: the
+`remote` chain (`live.remote~` per declared slot, values ramped by `[line~ 20]`,
+bound by LOM id, automation writing suppressed by design). When it ships:
 
-`m4l-jweb` item 1, the `instrument` chain, is built and its polyphony is confirmed in Live
-(multi-sample keymap, `[poly~]` voices around `groove~`, a `playVoice()` bridge API) - the
-whole substrate for a Strudel **drum rack**. We checked the 0.6.5 source before building on
-it, and **the buffer-name collision is still open**: `instrumentChain()` names buffers
-`buf-<device>-<slot>`, global to Max and fixed at BUILD time, so two copies of the drum
-rack on two tracks would name their buffers alike and corrupt each other's samples,
-silently. A drum rack is exactly the multi-instance case, so this is not a corner we can
-ship past.
+- declare `remotes: <n>` in the manifest, stream values from the engine on the
+  transport tick, and route patterned fx args to `writeRemote()` instead of refusing
+  them in `parseFxChain()`.
+- **This modulates REAL Live devices too** - including ones the user placed by hand -
+  so it is valuable with or without R2 passing.
 
-**Decision (2026-07-15): defer the device, file the fix upstream first.** The requirement
-- N instances of one instrument device, each with its own buffers, no shared global name -
-is written up in [m4l-jweb TODO](../../m4l-jweb/doc/TODO.md) under item 1, with two
-candidate routes (`#0` instance argument vs. a wrapper-minted id) to be settled by a spike
-there. It is a library change: the name cannot vary per instance from where it is set
-today. **P3 resumes the day `m4l-jweb` ships instance-scoped buffer names.**
+## R4 - The m4l-strudel Rack (PLAN.md Part 3) - can start ANY TIME
+
+**What we deliver is a rack, not a super-device**: an Ableton Instrument Rack preset
+(`presets/m4l-strudel Rack.adg`, hand-saved in Live, committed) with every required
+device pre-added, each with its proper type - Sequencer (MIDI effect) -> Instrument
+(instrument) -> FX (audio effect) - hand-composable, macros mappable, one drag from
+the library. A single toggling device is impossible (container types are build-time;
+Live enforces placement) and the rack is better anyway: users can swap, remove and
+reorder the parts.
+
+Steps, none of which wait on R1-R3:
+
+- **R4-a: the unified app.** Merge the midi and fx apps into `src/app/unified/`,
+  shipped into the existing containers via manifest `ui:` sharing, branched by the
+  `mode` the wrapper already sends. KEEP THE SHIPPED DEVICE NAMES - renaming breaks
+  user sets and the preset. Mind the Push bank budget when the surfaces merge.
+- **R4-b: the Full Studio window.** `windows: { studio: ... }` +
+  `StudioWindow.tsx` - an EDITOR, not an engine: it binds the code through a shared
+  `state()` slot and the device-view engine (which alone receives `tick`) does all
+  scheduling, so Live's quantization and scale are enforced for free. The window
+  makes no sound, ever ([jweb] audio cannot reach the track - measured).
+- **R4-c: the preset.** Compose the rack in Live with a native Ableton instrument in
+  the middle slot (honest and useful until ours exists), save the .adg, commit under
+  `presets/`. **Upstream:** `m4l-jweb` item 8 (installers copy `presets/` next to
+  the devices, one install step so they cannot skew).
+- **R4-d: Translate mode.** The FX device's toggle, only rendered when the wrapper
+  reports `in_rack` - lands with R2's outcome (reconciler or adopt-fallback).
+- **Later, the instrument slot:** replaced by the Strudel instrument when Phase 8
+  Route B ships AND `m4l-jweb` ships instance-scoped buffer names (see P3 below).
+
+## P2-b - The sample browser in a window - still pending, unchanged
+
+Same shape as the shipped drum-rack window: the catalog/list/audition UI moves to a
+floating window, the device view keeps the small transport. Reuses the drag-source
+and reveal-in-folder work already there; the build harness is in place. Independent
+of the roadmap above - do it whenever it is the most valuable next thing.
+
+## P3 - the polyphonic Strudel sampler - PARKED on an upstream fix (unchanged)
+
+The `instrument` chain substrate is built and its polyphony confirmed in Live, but
+**the buffer-name collision is still open**: `instrumentChain()` names buffers
+`buf-<device>-<slot>`, global to Max and fixed at BUILD time, so two copies of the
+drum rack on two tracks would corrupt each other's samples, silently. A drum rack is
+exactly the multi-instance case - and the Rack (R4) makes multi-instance the NORMAL
+case, so this now gates two things, not one.
+
+**Decision (2026-07-15): defer the device, the fix is filed upstream** in
+[m4l-jweb TODO](../../m4l-jweb/doc/TODO.md) item 1, with two candidate routes (`#0`
+instance argument vs. a wrapper-minted id) to be settled by a spike there. **P3
+resumes the day `m4l-jweb` ships instance-scoped buffer names.**
+
+## Phase 8 - Strudel's own audio in the track - Route B first (unchanged decision)
+
+`FEAT-STRUDEL-002`. **Do not wait for the C++ external**: the standing analysis
+([../../m4l-jweb/doc/ENHANCEMENTS.md](../../m4l-jweb/doc/ENHANCEMENTS.md)) ranks
+offline rendering first - `OfflineAudioContext` renders cycle N+1 with the real
+superdough (bit-identical sound), `saveToFile()` (to be built upstream) writes the
+WAV, `[buffer~]`/`[play~]` locked to `current_song_time` plays it double-buffered.
+One cycle of edit latency; random/stateful patterns fall back with a visible notice.
+See [SPIKE-OFFLINE.md](SPIKE-OFFLINE.md). This is what eventually fills the Rack's
+instrument slot (R4).
 
 ---
 
-# Still blocked on `m4l-jweb` (do not start)
-
-- **Pattern-driven modulation (Phase 7.2)** - `.lpf(sine.range(200, 2000))` is a *signal*,
-  not a parameter: as 20 Hz of parameter writes it steps audibly and fights the automation
-  lane. Waiting on the **modulation seam** (`m4l-jweb` item 3, still open). `live.remote~`
-  may make this modulate *Ableton's own* devices, which is a bigger feature than an LFO on
-  our filter.
-- **Strudel Audio Instrument (Phase 8)** - Strudel's own WebAudio synthesis reaching the
-  track. `FEAT-STRUDEL-002`; `m4l-jweb` Priority 2, "hard, and possibly never". **Do not
-  wait for the C++ external**: see
-  [../../m4l-jweb/doc/ENHANCEMENTS.md](../../m4l-jweb/doc/ENHANCEMENTS.md), which argues a
-  native bridge is the *least* promising of four routes, and that offline rendering to
-  disk - now that fetch-to-disk and `[buffer~]` both work - gets there without one.
-
 # A cheap upstream ask, not a block
 
-- **`.hpf()` and `.crush()` as library chains.** `m4l-jweb`'s 2A deliberately stopped at
-  `delay`/`reverb` because those are the two our `fx` surface declares; it says `hpf` (the
-  cheap sibling of `lowpass`) and `crush` (`degrade~`/`downsamp~`) are "easy follow-ons,
-  add them when `m4l-strudel` asks". So the unblock is: declare the two params in
-  `fx/surface.ts` and ask. Until then the FX device honestly refuses them, which is fine.
+- **`.hpf()` and `.crush()` as library chains.** `m4l-jweb` says they are easy
+  follow-ons to `delay`/`reverb` ("add them when `m4l-strudel` asks"). The unblock
+  is: declare the two params in `fx/surface.ts` and ask. Until then the FX device
+  honestly refuses them. Note R2 may make this moot for Live-native effects (Redux
+  IS `.crush()` in Translate mode); the static chains remain the answer outside a
+  rack.
 
 ---
 
@@ -148,12 +170,35 @@ already on disk at a known path either way.
 # Active Backlog (Prioritized Easy to Hard)
 
 ## 1. Scale and Pitch matching in full Strudel code (Medium)
-- **Full Strudel code does not see the Octave/Shift controls or the Live Scale toggle.** It is passed through untouched - correct, since it is real Strudel code and rewriting a user's JS would be worse - but it means `note("c5")` there is MIDI **72** (Strudel's note names are scientific), while `c5` in bare mini-notation is whatever the octave convention says. The UI warns in amber; it cannot fix it.
+- **Full Strudel code does not see the Octave/Shift controls or the Live Scale toggle.** It is passed through untouched - correct, since it is real Strudel code and rewriting a user's JS would be worse - but it means `note("c5")` there is MIDI **72** (Strudel's note names are scientific), while `c5` in bare mini-notation is whatever the octave convention says. The UI warns in amber; it cannot fix it. Note R4-b raises the stakes: the Full Studio window invites more full-code use.
 
 ## 2. Playhead highlighting for full Strudel code (Medium)
 - **The playhead highlight only works for bare mini-notation.** It is computed from our own AST, whose tokens carry source positions; full Strudel code has no link back to the characters the user typed. Strudel's own editor solves this with hap `context.locations` from the transpiler - wiring that up means mapping locations in the *rewritten* string back to the user's text, which is real work for a feature that mostly matters in the dialect that already has it.
 
 ---
+
+# DONE: the 0.6.5 adoption (P1) and the floating-window editors (P2-a)
+
+**P1 - SHIPPED 2026-07-15.** Deps bumped to `^0.6.5`, the FX device swapped onto the
+library's `delay`/`reverb` chains, `patcher/chains.mjs` deleted (custom chains and the
+`fanParamInto()` copy with it), and the build + 157 tests are green. The mono preview
+fixed itself with the version (the fold shipped inside the library's `samples` chain).
+Owed: a Live listening A/B on the FX chains, since the library's neutrality null-test
+is structural, not audible.
+
+**P2-a - the drum map, redrawn as an Ableton DRUM RACK - SHIPPED 2026-07-15.** The
+list editor is gone; the map is a `DrumRack.tsx` - a 4-wide pad grid, chromatic and
+bottom-up (C1 = MIDI 36 at bottom-left, Live's own layout). A pad is a note; map a
+word onto it by typing into the pad or dragging an abbreviation from the palette. The
+mini device view shows a 16-pad window with a scroll stripe; the **"Expand" button**
+opens the SAME component in a floating window (`Window.tsx`, `entry: "Window"`)
+showing C1..C6 at once. Both bind the one `drumMap` `state()` slot with
+`useStateSync()`, kept in sync by the library. The window-aware build harness was
+ported for it (`scripts/build-ui.mjs` per-window loop, `vite.config.ts`
+`@device/App`/`WINDOW_ENTRY`); the `.amxd` embeds `editor.html` alongside the device
+view. **Note:** pad LABELS use Live's drum-rack convention (36 = C1), independent of
+the pattern note-name toggle. Owed: a Live check that drag-and-drop works inside
+`[jweb]` and the two views stay in sync.
 
 # DONE: the move to `m4l-jweb` 0.6.0, and the death of `[node.script]`
 
@@ -186,27 +231,22 @@ with the set rather than with a patcher it never saves. The drum map used to liv
 page's localStorage: one map per machine, shared by every copy of the device, left behind
 when the set travelled. It is now per instance, and it goes with the music.
 
-*What did NOT ship in 0.6.0: the floating-window editors, dropping our `fanParamInto()`,
-and the mono-preview fold. All three hit upstream gaps - and all three were closed by
-0.6.5. See the "Unblocked" section at the top of this file.*
-
 # DONE: Refactor `ableton-midi` into two devices
 
 The old `ableton-midi` served two conflicting use cases - generating standard MIDI notes,
 and mapping drum words to Drum Rack pads - which made it complex and its UI cramped. Split
 into `ableton-midi` (a pure MIDI generator) and `ableton-midi-drums` (drum mapping only).
 
-*The drum map now travels with the Live set (see the 0.6.0 section below). The cramped
-mapping UI is still cramped: it was to get a floating window of its own, and that is the
-one thing 0.6.0 could not give it - a window cannot send a message back to Max, so it
-cannot host an editor. See the top of this file.*
+*Note for R4-a: the unified app is NOT a reversal of this split. The split separated
+UIs that served different USERS of one container type; the unified app shares CODE
+across container types while each shipped device keeps its own identity.*
 
 ---
 
 # DONE: the effects rack
 
-`.lpf()`, `.gain()`, `.delay()` and `.room()` work (the last two via our own
-`strudel-delay` / `strudel-room` chains). `.crush()` and `.hpf()` are *named* by the
+`.lpf()`, `.gain()`, `.delay()` and `.room()` work (the last two via the library's
+`delay` / `reverb` chains since P1). `.crush()` and `.hpf()` are *named* by the
 device and honestly refused ("no Max chain yet") rather than silently doing nothing.
 
 **The frozen-graph law** ([ARCHITECTURE.md](ARCHITECTURE.md) §3c) is why: the DSP graph is
