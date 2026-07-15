@@ -24,7 +24,19 @@ export interface StrudelState extends EngineState {
 }
 
 export function useStrudel(): StrudelState {
-	const [drumMap, setDrumMap] = useStateSync(surface, "drumMap");
+	const [savedMap, setDrumMap] = useStateSync(surface, "drumMap");
+
+	// An unconfigured instance persists an EMPTY [dict] on the Max side, and the
+	// library seeds no default into it - so on load Max hands back `{}`, which the
+	// state store parses and uses to overwrite the app's declared default. The result
+	// is a device whose pads are all empty and whose `s("bd sd")` resolves to nothing.
+	// Treat an empty map as "not configured yet" and fall back to the standard kit, so
+	// a fresh device shows AND plays the defaults. The first edit (or Reset) writes the
+	// whole map back through setDrumMap, which persists it and ends the fallback.
+	const drumMap = useMemo(
+		() => (Object.keys(savedMap).length > 0 ? savedMap : DEFAULT_DRUM_MAP),
+		[savedMap],
+	);
 
 	const ctx = useMemo(() => ({ drumMap }), [drumMap]);
 

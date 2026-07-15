@@ -30,11 +30,19 @@ const strudelPkg = (p: string) => fileURLToPath(new URL(`./strudel/packages/${p}
 export default defineConfig(() => {
 	const DEVICE = process.env.DEVICE ?? uiDir(devices[0]);
 
+	// A device can declare floating WINDOWS, each a separate page bundled from the
+	// same device folder. build-ui.mjs sets WINDOW_ENTRY (the component name from
+	// surface.ts, e.g. "Window") so `@device/App` resolves to that file instead of
+	// App.tsx - and main.tsx, which imports `@device/App`, renders the window's
+	// page with no branch of its own. Absent WINDOW_ENTRY this is the device view.
+	const WINDOW_ENTRY = process.env.WINDOW_ENTRY;
+
 	const config: UserConfig = {
 		base: "./",
 		plugins: [react(), tailwindcss(), viteSingleFile()],
 		resolve: {
 			alias: [
+				{ find: "@device/App", replacement: fileURLToPath(new URL(`./src/app/${DEVICE}/${WINDOW_ENTRY ?? "App"}`, import.meta.url)) },
 				{ find: "@device", replacement: fileURLToPath(new URL(`./src/app/${DEVICE}`, import.meta.url)) },
 				{ find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
 				// @strudel/* resolve into the git submodule (same aliases as
@@ -63,8 +71,10 @@ export default defineConfig(() => {
 		},
 		build: {
 			// dist/ui/<device>/index.html - one per device, picked up by `m4l-jweb build`.
+			// A WINDOW build lands in the same folder and must NOT empty it, or it would
+			// wipe the device view built just before it (build-ui.mjs renames around this).
 			outDir: `dist/ui/${DEVICE}`,
-			emptyOutDir: true,
+			emptyOutDir: !process.env.WINDOW,
 		},
 	};
 	return config;

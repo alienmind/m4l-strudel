@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Drum, FolderOpen, Play, Square, ChevronLeft } from "lucide-react";
+import { Drum, FolderOpen, Play, Square, ChevronLeft, Maximize2, RotateCcw } from "lucide-react";
+import { useWindow } from "@m4l-jweb/surface/react";
 import { isBareMini } from "@/lib/strudelCode";
-import { DrumMapPanel } from "./DrumMapPanel";
+import surface from "./surface";
+import { DrumRack } from "./DrumRack";
 import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
 import { ClipPanel } from "../shared/ClipPanel";
@@ -18,7 +20,10 @@ import { useStrudel } from "./useStrudel";
  */
 export default function App() {
 	const s = useStrudel();
+	const editorWindow = useWindow(surface, "editor");
 	const [showDrums, setShowDrums] = useState(false);
+	// The bottom-left note of the mini rack's 16-pad window (C1 = 36, like Live).
+	const [drumBase, setDrumBase] = useState(36);
 	const [showAbout, setShowAbout] = useState(false);
 	const [showClip, setShowClip] = useState(false);
 	
@@ -56,13 +61,32 @@ export default function App() {
 					>
 						<ChevronLeft className="size-4" />
 					</button>
-					<span className="text-xs font-semibold tracking-tight">Drum Map Configuration</span>
+					<span className="text-xs font-semibold tracking-tight">Drum Rack</span>
+					<div className="ml-auto flex items-center gap-1">
+						<button
+							onClick={s.resetDrumMap}
+							className="flex items-center gap-1 rounded p-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
+							title="Back to the General MIDI defaults"
+						>
+							<RotateCcw className="size-3" />
+							Reset
+						</button>
+						<button
+							onClick={() => editorWindow.open()}
+							className="flex items-center gap-1 rounded p-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
+							title="Open the drum rack in a larger floating window (C1 to C6)"
+						>
+							<Maximize2 className="size-3" />
+							Expand
+						</button>
+					</div>
 				</div>
-				<DrumMapPanel
+				<DrumRack
 					map={s.drumMap}
 					onChange={s.setDrumMap}
-					onReset={s.resetDrumMap}
-					onClose={() => setShowDrums(false)}
+					lowNote={drumBase}
+					highNote={drumBase + 15}
+					stripe={{ base: drumBase, setBase: setDrumBase, pageSize: 16 }}
 				/>
 			</div>
 		);
