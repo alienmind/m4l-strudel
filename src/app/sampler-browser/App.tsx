@@ -1,216 +1,463 @@
-import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, FolderOpen, Play, Square } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, FolderOpen, GripVertical, Search, Square } from "lucide-react";
+import {
+	bindInlet,
+	fetchToFile,
+	loadSample,
+	outlet,
+	playSample,
+	stopSample,
+	uiReady,
+} from "@m4l-jweb/bridge";
 import { cn } from "@/lib/utils";
-import { bindInlet, outlet, uiReady } from "@m4l-jweb/bridge";
+import {
+	DEFAULT_QUANT,
+	isPlayable,
+	loadSampleMap,
+	localPath,
+	msUntilNextBoundary,
+	variationUrl,
+	withDeadline,
+	type Sound,
+} from "@/lib/samples";
 import { IN, OUT } from "./protocol";
 import { AboutPanel } from "../shared/AboutPanel";
+import { CustomMapPanel } from "./CustomMapPanel";
+import { PRESET_MAPS } from "./banks";
 
-const PITCH_CLASS_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+/** The value the dropdown carries for its last entry, "Custom...". Not a URL - picking it
+ *  opens the custom-map screen rather than loading anything. */
+const CUSTOM = "__custom__";
 
-const PRESET_MAPS = [
-	{ label: "dirt-samples (Tidal default)", url: "github:tidalcycles/dirt-samples" },
-	{ label: "dough-samples (Strudel default)", url: "github:felixroos/dough-samples" },
-];
+/** The one [buffer~] the manifest declares. A preview is one voice, auditioning one
+ *  sample at a time; the name has to match `slots` in patcher/devices.mjs. */
+const SLOT = "preview";
 
-interface CatalogEntry {
-	name: string;
-	count: number;
-	pitched: boolean;
-}
+/** 4/4, as everything else in this repo assumes. A "bar" for the loop below. */
+const BEATS_PER_BAR = 4;
 
 interface RowState {
+	/** Which variation - `bd:3`. */
 	n: number;
-	progress: string | null;
-	downloadedPath: string | null;
+	/** Relative path, once this variation is on disk. */
+	path: string | null;
+	/** What [info~] measured, once it has been loaded. Null until then - and that is
+	 *  honest: a duration cannot be known without fetching the file. */
+	durationMs: number | null;
+	channels: number | null;
 }
 
 /**
- * Strudel Samples - an audio effect. Sits anywhere on an audio track (audio
- * passes through untouched) and browses/downloads Strudel's sample-map
- * universe via the [node.script] host.
+ * Strudel Samples - browse Strudel's sample maps, hear them, drag them out.
+ *
+ * THE PREVIEW IS THE WHOLE DESIGN OF THIS DEVICE, and it is not what it looks like.
+ * The obvious implementation - `new Audio(url).play()`, right here in the page - is
+ * wrong in a way that is easy to miss: [jweb] has no signal outlets, so audio a page
+ * plays goes straight to the OS output device, PAST the track, the fader and the
+ * monitor cue. It would be the only sound in the set that Live could not touch.
+ *
+ * So the file has to be on DISK, and Max has to be the one to play it:
+ *
+ *   1. fetchToFile()  - [maxurl] writes it next to the device.
+ *   2. loadSample()   - [buffer~] reads it, and resolves with what [info~] MEASURED.
+ *   3. playSample()   - [groove~], summed into the track, on the user's grid.
+ *
+ * WHICH IS WHY THERE IS NO "DOWNLOAD" BUTTON. There used to be one, next to a play
+ * button, and the pair was a lie: previewing a sample downloads it, permanently, to
+ * the same folder - there is no other way to hear it. Two buttons implied two
+ * outcomes. So auditioning IS acquiring, a row is a single click (or an arrow key),
+ * and what you get afterwards is a HANDLE ON THE FILE: drag it into a Simpler, a Drum
+ * Rack, or a track.
  */
 export default function App() {
 	const [mapUrl, setMapUrl] = useState(PRESET_MAPS[0].url);
 	const [loading, setLoading] = useState(false);
-	const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
+	const [sounds, setSounds] = useState<Sound[]>([]);
+	const [query, setQuery] = useState("");
 	const [rows, setRows] = useState<Record<string, RowState>>({});
+	/** The row the keyboard is on, and the row that is sounding: the same row. Moving
+	 *  the cursor auditions - that is the whole interaction. */
+	const [cursor, setCursor] = useState(0);
 	const [playing, setPlaying] = useState<string | null>(null);
-	const [status, setStatus] = useState("Pick a sample map and Load.");
-	const [liveRoot, setLiveRoot] = useState(0);
-	const [liveScaleName, setLiveScaleName] = useState<string | null>(null);
+	const [status, setStatus] = useState("Loading...");
+	const [folder, setFolder] = useState<string | null>(null);
+	/** Whether anything has been fetched this session - the "Show folder" button has
+	 *  nothing to reveal until then, and the folder itself does not exist yet. */
+	const [downloaded, setDownloaded] = useState(false);
 	const [showAbout, setShowAbout] = useState(false);
+	/** The custom-map secondary screen. Picking "Custom..." opens it; Cancel/back close it. */
+	const [showCustom, setShowCustom] = useState(false);
 
-	useEffect(() => {
-		bindInlet(IN.catalog, (b64) => {
-			const entries = JSON.parse(atob(String(b64))) as CatalogEntry[];
-			setCatalog(entries);
-			setRows(Object.fromEntries(entries.map((e) => [e.name, { n: 0, progress: null, downloadedPath: null }])));
-			setLoading(false);
-			setStatus(`Loaded ${entries.length} sound(s)`);
-		});
-		bindInlet(IN.downloaded, (b64) => {
-			const file = atob(String(b64));
-			setStatus(`Downloaded → ${file}`);
-		});
-		bindInlet(IN.progress, (name, done, total) => {
-			setRows((r) => ({
-				...r,
-				[String(name)]: { ...(r[String(name)] ?? { n: 0, downloadedPath: null }), progress: `${done}/${total}` },
-			}));
-		});
-		bindInlet(IN.fetcherr, (b64) => {
-			setLoading(false);
-			setStatus(`Error: ${atob(String(b64))}`);
-		});
-		// v1: informational only - Live's global key/scale, not used to filter yet.
-		bindInlet(IN.scale, (root, ...nameParts) => {
-			setLiveRoot(Number(root));
-			setLiveScaleName(nameParts.join(" "));
-		});
-		uiReady();
+	const transport = useTransport();
+	/** Paths already fetched in this session, so re-auditioning does not re-download.
+	 *  The file outlives the session; this only remembers what we know is there. */
+	const onDisk = useRef(new Set<string>());
+	/** The pending "play on the grid" timer, so moving the cursor twice quickly plays
+	 *  the second sample, not both. */
+	const armed = useRef<ReturnType<typeof setTimeout> | null>(null);
+	/** The loop: once the first hit lands on the grid, re-fire every whole number of
+	 *  bars that contains the sample, so the preview repeats IN TIME with the track. */
+	const looper = useRef<ReturnType<typeof setInterval> | null>(null);
+	const listRef = useRef<HTMLDivElement>(null);
+
+	/** Silence and unschedule whatever is playing. Both timers, always together: a
+	 *  stray interval is a preview that will not stop. */
+	const clearPreview = useCallback(() => {
+		if (armed.current) clearTimeout(armed.current);
+		if (looper.current) clearInterval(looper.current);
+		armed.current = null;
+		looper.current = null;
 	}, []);
 
-	const load = () => {
-		setLoading(true);
-		setStatus(`Loading ${mapUrl}…`);
-		outlet(OUT.load_map, mapUrl);
+	useEffect(() => {
+		bindInlet(IN.device_folder, (path) => setFolder(String(path)));
+		uiReady();
+		return clearPreview; // a device view that goes away must not leave a loop running
+	}, [clearPreview]);
+
+	/** The list actually on screen. The cursor indexes THIS, not the catalog: a
+	 *  filtered list whose arrow keys walked the unfiltered one would be unusable. */
+	const shown = useMemo(() => {
+		const q = query.trim().toLowerCase();
+		return q ? sounds.filter((s) => s.name.toLowerCase().includes(q)) : sounds;
+	}, [sounds, query]);
+
+	/**
+	 * Fetch a map and show its sounds. There is no Load BUTTON any more - picking a map
+	 * from the dropdown (or committing one on the custom screen) loads it at once, which
+	 * is what "load" always meant. A button that only repeated the dropdown's own choice
+	 * was a step with nothing behind it.
+	 */
+	const load = useCallback(
+		async (url: string) => {
+			clearPreview();
+			setPlaying(null);
+			setMapUrl(url);
+			setLoading(true);
+			setSounds([]);
+			setQuery("");
+			setStatus(`Loading ${url}...`);
+			try {
+				const found = await loadSampleMap(url);
+				setSounds(found);
+				setRows(
+					Object.fromEntries(
+						found.map((s) => [s.name, { n: 0, path: null, durationMs: null, channels: null }]),
+					),
+				);
+				setCursor(0);
+				const playable = found.filter((s) => s.urls.some(isPlayable)).length;
+				setStatus(
+					playable === found.length
+						? `${found.length} sounds. Click a row (or use the arrow keys) to hear it.`
+						: `${found.length} sounds - ${found.length - playable} cannot be previewed (not WAV/AIFF)`,
+				);
+			} catch (err) {
+				setStatus(`Error: ${message(err)}`);
+			} finally {
+				setLoading(false);
+			}
+		},
+		[clearPreview],
+	);
+
+	// Load the default map on open, so the device shows something to click rather than an
+	// empty list and an instruction. Once - the ref guards React 18's double-mount in dev.
+	const booted = useRef(false);
+	useEffect(() => {
+		if (booted.current) return;
+		booted.current = true;
+		void load(PRESET_MAPS[0].url);
+	}, [load]);
+
+	/**
+	 * Hear a sound: fetch it if it is not already here, read it into the buffer, start it
+	 * on the user's grid, and LOOP it in time with the track.
+	 *
+	 * This is also the download. There is no separate one, and there is no undoing it -
+	 * which is fine, because a sample you listened to is a sample you were considering.
+	 *
+	 * THE LOOP is what makes this a preview "in the context of a track" rather than a
+	 * one-shot audition: it repeats every whole number of bars that CONTAINS the sample.
+	 * A 1 s hit at a 0.6 s/bar tempo loops every 2 bars (1.2 s), so it always restarts on
+	 * a downbeat and never chops itself off mid-tail. `groove~` itself is a one-shot
+	 * (`@loop 0` in the library chain), so the repeat is ours: the first hit lands on the
+	 * grid, and an interval re-fires it from there.
+	 */
+	const audition = useCallback(
+		async (sound: Sound, n: number) => {
+			const url = variationUrl(sound, n);
+			// Say so BEFORE fetching a file that will never become audio: [buffer~] reads
+			// WAV/AIFF and not MP3, and what it cannot decode produces no event at all -
+			// just a line in the Max console, and then a ten-second timeout.
+			if (!isPlayable(url)) {
+				setStatus(`Cannot preview ${sound.name}: [buffer~] reads WAV/AIFF, not ${extLabel(url)}`);
+				return;
+			}
+			clearPreview();
+			setPlaying(sound.name);
+			const path = localPath(sound, n, mapUrl);
+			try {
+				if (!onDisk.current.has(path)) {
+					setStatus(`Fetching ${sound.name}:${n}...`);
+					// Deadlined: [maxurl] cannot be cancelled, so with no network this promise
+					// would hang and the row would read "Fetching..." forever. The wait is
+					// bounded instead; onDisk is only marked on a real success below it.
+					await withDeadline(
+						fetchToFile(url, path, (done, total) =>
+							// Not every server sends a content length, so `total` can legitimately
+							// be 0. Never divide by it to make a percentage.
+							setStatus(
+								total > 0
+									? `Fetching ${sound.name}:${n} - ${Math.round((done / total) * 100)}%`
+									: `Fetching ${sound.name}:${n} - ${Math.round(done / 1024)} kB`,
+							),
+						),
+						30_000,
+						`Download of ${sound.name}:${n}`,
+					);
+					onDisk.current.add(path);
+					setDownloaded(true);
+				}
+				const s = await loadSample(SLOT, path);
+				setRows((r) => ({
+					...r,
+					[sound.name]: { ...r[sound.name], n, path, durationMs: s.durationMs, channels: s.channels },
+				}));
+
+				// Round the sample up to whole bars, so the loop restarts on a downbeat.
+				const barMs = transport.barMs();
+				const loopBars = Math.max(1, Math.ceil(s.durationMs / barMs));
+				const periodMs = loopBars * barMs;
+				const wait = transport.msUntilGrid();
+
+				setStatus(
+					`${sound.name}:${n} - ${fmtMs(s.durationMs)}, ` +
+						`${s.channels === 1 ? "mono" : `${s.channels} ch`} - loop ${loopBars} bar${loopBars === 1 ? "" : "s"}`,
+				);
+				// First hit on the grid; the loop is anchored to it, so every repeat lands on
+				// a bar line too. setInterval drifts over minutes, which no audition lasts.
+				armed.current = setTimeout(() => {
+					playSample(SLOT);
+					looper.current = setInterval(() => playSample(SLOT), periodMs);
+				}, wait);
+			} catch (err) {
+				setPlaying(null);
+				setStatus(`Error: ${message(err)}`);
+			}
+		},
+		[mapUrl, transport, clearPreview],
+	);
+
+	/** Move the cursor, and audition what it lands on. The cursor IS the preview. */
+	const moveCursor = useCallback(
+		(to: number) => {
+			if (!shown.length) return;
+			const i = Math.max(0, Math.min(shown.length - 1, to));
+			setCursor(i);
+			const sound = shown[i];
+			void audition(sound, rows[sound.name]?.n ?? 0);
+			listRef.current?.querySelectorAll("tr")[i]?.scrollIntoView({ block: "nearest" });
+		},
+		[shown, rows, audition],
+	);
+
+	/** The variation arrows: change WHICH take, and audition it - same interaction. */
+	const stepVariation = (sound: Sound, delta: number) => {
+		const n = ((rows[sound.name]?.n ?? 0) + delta + sound.urls.length) % sound.urls.length;
+		setRows((r) => ({
+			...r,
+			[sound.name]: { ...r[sound.name], n, path: null, durationMs: null, channels: null },
+		}));
+		void audition(sound, n);
 	};
 
-	const setRowN = (name: string, n: number) => {
-		setRows((r) => ({ ...r, [name]: { ...(r[name] ?? { progress: null, downloadedPath: null }), n } }));
-	};
-
-	const preview = (name: string, n: number) => {
-		outlet(OUT.preview, name, n);
-		setPlaying(name);
-	};
-	const stopPreview = () => {
-		outlet(OUT.preview_stop);
+	const stop = useCallback(() => {
+		clearPreview();
+		stopSample();
 		setPlaying(null);
-	};
+	}, [clearPreview]);
+
+	/**
+	 * The arrow keys, from ANYWHERE in the device - not only the search box.
+	 *
+	 * A window listener, because the list rows are not focusable and Live's device view
+	 * has nowhere natural for keyboard focus to sit. A <select> is left alone (its own
+	 * arrows change the option), and so is a secondary screen (there is no list to walk).
+	 * The search box is deliberately NOT excluded - typing two letters and then arrowing
+	 * through the matches is the whole point of it.
+	 */
+	useEffect(() => {
+		if (showCustom || showAbout) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+			if (document.activeElement?.tagName === "SELECT") return;
+			e.preventDefault();
+			moveCursor(cursor + (e.key === "ArrowDown" ? 1 : -1));
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [moveCursor, cursor, showCustom, showAbout]);
 
 	if (showAbout) {
 		return <AboutPanel amxdBuild={__APP_VERSION__} onClose={() => setShowAbout(false)} />;
 	}
 
+	if (showCustom) {
+		return (
+			<CustomMapPanel
+				initial={PRESET_MAPS.some((p) => p.url === mapUrl) ? "" : mapUrl}
+				onLoad={(url) => {
+					setShowCustom(false);
+					void load(url);
+				}}
+				onClose={() => setShowCustom(false)}
+			/>
+		);
+	}
+
 	return (
-		<div className="device flex h-full w-full flex-col gap-2 bg-background p-2 text-foreground">
-			<div className="flex items-center justify-between">
-				<button 
+		<div className="device flex h-full w-full flex-col gap-1.5 bg-background p-2 text-foreground">
+			<div className="flex items-center gap-1 text-[11px]">
+				<button
 					onClick={() => setShowAbout(true)}
-					className="text-xs font-semibold tracking-tight hover:text-primary transition-colors cursor-pointer text-left"
+					className="shrink-0 text-xs font-semibold tracking-tight hover:text-primary transition-colors cursor-pointer"
 				>
 					Strudel Samples
 				</button>
-				{liveScaleName && (
-					<span className="rounded bg-input/50 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-						Live scale: {PITCH_CLASS_NAMES[liveRoot % 12]} {liveScaleName}
-					</span>
-				)}
-			</div>
-
-			<div className="flex items-center gap-1 text-[11px]">
+				{/* Picking a map loads it - there is no Load button. "Custom..." is not a URL;
+				    it opens a screen of its own, because a free-text field wedged in next to
+				    two presets never made it clear which one was live. The `value` shows the
+				    custom entry whenever the active map is not one of the presets. */}
 				<select
-					value={PRESET_MAPS.some((p) => p.url === mapUrl) ? mapUrl : ""}
+					value={PRESET_MAPS.some((p) => p.url === mapUrl) ? mapUrl : CUSTOM}
 					onChange={(e) => {
-						if (e.target.value) setMapUrl(e.target.value);
+						if (e.target.value === CUSTOM) setShowCustom(true);
+						else void load(e.target.value);
 					}}
-					className="rounded bg-input/50 px-1 py-0.5"
+					disabled={loading}
+					className="ml-auto flex-1 rounded bg-input/50 px-1 py-0.5 disabled:opacity-60"
 				>
 					{PRESET_MAPS.map((p) => (
 						<option key={p.url} value={p.url}>
 							{p.label}
 						</option>
 					))}
-					<option value="">Custom…</option>
+					<option value={CUSTOM}>
+						{PRESET_MAPS.some((p) => p.url === mapUrl) ? "Custom..." : `Custom: ${mapUrl}`}
+					</option>
 				</select>
-				<input
-					value={mapUrl}
-					onChange={(e) => setMapUrl(e.target.value)}
-					placeholder="ie: github:user/repo or shabda:query"
-					className="flex-1 rounded bg-input/40 px-1.5 py-0.5 font-mono"
-				/>
-				<button
-					onClick={load}
-					disabled={loading}
-					className="rounded-md bg-primary px-2 py-1 font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-40"
-				>
-					{loading ? "Loading…" : "Load"}
-				</button>
 			</div>
 
-			<div className="min-h-16 flex-1 overflow-y-auto rounded-md bg-input/20">
-				{catalog.length === 0 ? (
-					<div className="p-2 text-[11px] text-muted-foreground">No sample map loaded yet.</div>
+			{/* Search. A sample map is 100+ sounds and the device view is ~169 px: without
+			    this, finding "cp" means scrolling past everything that is not "cp". */}
+			<div className="flex items-center gap-1 text-[11px]">
+				<div className="flex flex-1 items-center gap-1 rounded bg-input/40 px-1.5">
+					<Search className="size-3 shrink-0 text-muted-foreground" />
+					<input
+						value={query}
+						onChange={(e) => {
+							setQuery(e.target.value);
+							setCursor(0);
+						}}
+						placeholder="Search sounds - arrow keys to audition"
+						className="w-full bg-transparent py-0.5 outline-none"
+					/>
+				</div>
+				{playing && (
+					<button
+						onClick={stop}
+						className="flex shrink-0 items-center gap-1 rounded bg-input/50 px-1.5 py-0.5 hover:brightness-110"
+						title="Stop the preview"
+					>
+						<Square className="size-3" />
+					</button>
+				)}
+			</div>
+
+			<div ref={listRef} className="min-h-12 flex-1 overflow-y-auto rounded-md bg-input/20">
+				{sounds.length === 0 ? (
+					<div className="p-2 text-[11px] text-muted-foreground">
+						{loading ? "Loading..." : "No sounds in this map."}
+					</div>
+				) : shown.length === 0 ? (
+					<div className="p-2 text-[11px] text-muted-foreground">Nothing matches "{query}".</div>
 				) : (
 					<table className="w-full text-[11px]">
 						<tbody>
-							{catalog.map((e) => {
-								const row = rows[e.name] ?? { n: 0, progress: null, downloadedPath: null };
+							{shown.map((sound, i) => {
+								const row = rows[sound.name] ?? { n: 0, path: null, durationMs: null, channels: null };
+								const playable = isPlayable(variationUrl(sound, row.n));
+								const draggable = Boolean(row.path && folder);
 								return (
-									<tr key={e.name} className="border-b border-input/30 last:border-0">
+									<tr
+										key={sound.name}
+										onClick={() => moveCursor(i)}
+										// The WHOLE ROW is the drag source once the sample is on disk - not a
+										// tiny handle you have to aim for. A click still auditions; the browser
+										// tells a click from a drag by whether the pointer moved.
+										draggable={draggable}
+										onDragStart={draggable ? (e) => startFileDrag(e, folder!, row.path!) : undefined}
+										className={cn(
+											"cursor-pointer border-b border-input/30 last:border-0 hover:bg-input/40",
+											i === cursor && "bg-input/60",
+											playing === sound.name && "text-primary",
+											!playable && "opacity-40",
+										)}
+										title={
+											playable
+												? "Click to hear it. Once loaded, drag the row out to a track."
+												: "[buffer~] reads WAV/AIFF only"
+										}
+									>
 										<td className="px-1.5 py-1 font-mono">
-											{e.name}
-											{e.pitched && (
+											{sound.name}
+											{sound.pitched && (
 												<span className="ml-1 rounded bg-accent/40 px-1 text-[9px] text-accent-foreground">
 													pitched
 												</span>
 											)}
 										</td>
-										<td className="px-1 py-1 text-muted-foreground">
+
+										{/* The duration, once we know it - and we only know it by fetching the
+										    file and asking [info~]. There is NO one-shot/loop flag in a sample
+										    map, so length is the only honest signal, and it is shown as one. */}
+										<td className="px-1 py-1 text-right font-mono text-muted-foreground">
+											{row.durationMs !== null ? fmtMs(row.durationMs) : ""}
+											{row.channels === 1 && <span className="ml-1 text-[9px]">mono</span>}
+										</td>
+
+										<td className="whitespace-nowrap px-1 py-1 text-right text-muted-foreground">
 											<button
-												onClick={() => setRowN(e.name, (row.n - 1 + e.count) % e.count)}
+												onClick={(e) => {
+													e.stopPropagation();
+													stepVariation(sound, -1);
+												}}
 												className="rounded px-0.5 hover:bg-input/50"
 												title="Previous variation"
 											>
 												<ChevronLeft className="size-3" />
 											</button>
-											{row.n + 1}/{e.count}
+											{row.n + 1}/{sound.urls.length}
 											<button
-												onClick={() => setRowN(e.name, (row.n + 1) % e.count)}
+												onClick={(e) => {
+													e.stopPropagation();
+													stepVariation(sound, 1);
+												}}
 												className="rounded px-0.5 hover:bg-input/50"
 												title="Next variation"
 											>
 												<ChevronRight className="size-3" />
 											</button>
 										</td>
-										<td className="px-1 py-1 text-right">
-											<div className="flex items-center justify-end gap-1">
-												{playing === e.name ? (
-													<button
-														onClick={stopPreview}
-														className="rounded p-1 hover:bg-input/50"
-														title="Stop preview"
-													>
-														<Square className="size-3" />
-													</button>
-												) : (
-													<button
-														onClick={() => preview(e.name, row.n)}
-														className="rounded p-1 hover:bg-input/50"
-														title="Preview (synced to next beat)"
-													>
-														<Play className="size-3" />
-													</button>
-												)}
-												<button
-													onClick={() => outlet(OUT.download, e.name, row.n)}
-													className="rounded p-1 hover:bg-input/50"
-													title="Download this variation"
-												>
-													<Download className="size-3" />
-												</button>
-												<button
-													onClick={() => outlet(OUT.download_all, e.name)}
-													className={cn(
-														"rounded px-1 py-0.5 hover:bg-input/50",
-														row.progress && "text-accent-foreground",
-													)}
-													title="Download all variations"
-												>
-													{row.progress ?? "all"}
-												</button>
-											</div>
+
+										{/* A grip, purely as an affordance: it says "this row can be dragged". It
+										    is NOT a link - an <a href="file://..."> here navigated the whole jweb
+										    view to the file (a browser file page, with its own transport), and the
+										    only way back was a right-click menu. The row's own draggable does the
+										    work; this just shows where. */}
+										<td className="w-5 px-1 py-1 text-muted-foreground">
+											{draggable && <GripVertical className="size-3 cursor-grab" />}
 										</td>
 									</tr>
 								);
@@ -220,17 +467,109 @@ export default function App() {
 				)}
 			</div>
 
-			<div className="flex items-center justify-between gap-2">
-				<span className="truncate text-[10px] text-muted-foreground">{status}</span>
+			<div className="flex items-center gap-2">
+				<span className="flex-1 truncate text-[10px] text-muted-foreground" title={status}>
+					{status}
+				</span>
+				{/* The stopgap for "where did my sample go": the page cannot open a file
+				    manager, so it asks the wrapper to. Enabled once a sample is on disk -
+				    before that the folder does not exist. Replaced, eventually, by dragging
+				    the row straight into Live (doc/SPIKE-DRAG-TO-CLIP.md). */}
 				<button
-					onClick={() => outlet(OUT.open_folder)}
-					className="flex shrink-0 items-center gap-1 rounded-md bg-input/50 px-2 py-1 text-[11px] hover:brightness-110"
-					title="Open the local samples folder"
+					onClick={() => outlet(OUT.reveal_folder)}
+					disabled={!downloaded || !folder}
+					className="flex shrink-0 items-center gap-1 rounded bg-input/50 px-1.5 py-0.5 text-[10px] hover:brightness-110 disabled:opacity-40"
+					title={
+						downloaded
+							? "Show the samples folder in Finder/Explorer"
+							: "Audition a sample first - the folder appears once something is downloaded"
+					}
 				>
 					<FolderOpen className="size-3" />
-					Folder
+					Show folder
 				</button>
 			</div>
 		</div>
 	);
+}
+
+/**
+ * Live's transport and its grid: when a preview is allowed to start.
+ *
+ * `tick` arrives ~20x a second, which is not often enough to schedule against on its
+ * own - so it is a FIX, not a clock: the last known beat position and when it was
+ * heard, extrapolated forward with the tempo. That is what the deleted node process
+ * did with the same two messages, and it is the same 5-10 ms of jitter, which is fine
+ * for auditioning; it just no longer needs a process to live in.
+ *
+ * The GRID is Live's own `clip_trigger_quantization`, forwarded by the wrapper. The
+ * user already answered "when should things start?" in the transport bar, and a device
+ * that invents a second answer to that question is a device fighting the set.
+ */
+function useTransport() {
+	const fix = useRef({ beats: 0, at: Date.now(), playing: false, bpm: 120, quant: DEFAULT_QUANT });
+
+	useEffect(() => {
+		bindInlet(IN.tick, (playing, beats) => {
+			fix.current = { ...fix.current, beats: Number(beats), playing: Number(playing) >= 0.5, at: Date.now() };
+		});
+		bindInlet(IN.tempo, (bpm) => {
+			if (Number(bpm) > 0) fix.current.bpm = Number(bpm);
+		});
+		bindInlet(IN.quantization, (q) => {
+			fix.current.quant = Number(q);
+		});
+	}, []);
+
+	const msUntilGrid = useCallback(() => {
+		const t = fix.current;
+		const elapsedBeats = ((Date.now() - t.at) / 1000) * (t.bpm / 60);
+		return msUntilNextBoundary({ beats: t.beats + elapsedBeats, playing: t.playing, bpm: t.bpm }, t.quant);
+	}, []);
+
+	/** One bar in milliseconds, at the current tempo. The loop rounds to a whole of it. */
+	const barMs = useCallback(() => (BEATS_PER_BAR * 60000) / fix.current.bpm, []);
+
+	return useMemo(() => ({ msUntilGrid, barMs }), [msUntilGrid, barMs]);
+}
+
+/**
+ * Put a downloaded sample onto a drag, in every shape a drop target might read.
+ *
+ * WHICH shape Live's audio track wants is the open question - see doc/SPIKE-DRAG-TO-CLIP.md
+ * - and it is quite possible [jweb]'s embedded Chromium does not hand an HTML5 drag to the
+ * host OS at all, in which case none of these arrive. So this is the app's honest best
+ * effort, pending the spike: the canonical file URL, the raw path, and a `DownloadURL`
+ * (the Chromium convention, `mime:name:url`). The spike decides whether any of it lands.
+ */
+function startFileDrag(e: React.DragEvent, folder: string, relPath: string): void {
+	const url = fileUrl(folder, relPath);
+	const abs = absPath(folder, relPath);
+	const name = relPath.split("/").pop() || "sample.wav";
+	e.dataTransfer.setData("text/uri-list", url);
+	e.dataTransfer.setData("text/plain", abs);
+	e.dataTransfer.setData("DownloadURL", `audio/wav:${name}:${url}`);
+	e.dataTransfer.effectAllowed = "copy";
+}
+
+/** The device's folder is absolute and may contain spaces; a URL must encode them. */
+function fileUrl(folder: string, relPath: string): string {
+	return encodeURI("file:///" + absPath(folder, relPath).replace(/^\/+/, ""));
+}
+
+function absPath(folder: string, relPath: string): string {
+	return folder + "/" + relPath;
+}
+
+function fmtMs(ms: number): string {
+	return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+}
+
+function extLabel(url: string): string {
+	const dot = url.split(/[?#]/)[0].lastIndexOf(".");
+	return dot < 0 ? "that format" : url.slice(dot).split(/[?#]/)[0];
+}
+
+function message(err: unknown): string {
+	return err instanceof Error ? err.message : String(err);
 }

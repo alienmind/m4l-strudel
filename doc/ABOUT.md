@@ -14,10 +14,10 @@ Live's transport.
 
 ---
 
-**Strudel MIDI is the one that's ready to use.** Samples is **experimental**
-in this release - not for real sessions yet, a fix is planned for an upcoming
-release. A third device, a real Strudel audio-effects chain, is planned too;
-see [doc/TODO.md](TODO.md).
+**All four devices are ready to use.** The one thing still being verified in the
+sample browser is whether Live accepts a sample dragged straight out of it - the
+file is always on disk regardless (see that device's section). What is next is a
+richer effects rack; see [doc/TODO.md](TODO.md).
 
 ## What's in the box
 
@@ -26,7 +26,7 @@ see [doc/TODO.md](TODO.md).
 | **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect, a **MIDI track**, before an instrument | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
 | **Strudel MIDI Drums** (`alienmind-strudel-midi-drums.amxd`) | MIDI effect, a **MIDI track**, before a Drum Rack | The same generative power as Strudel MIDI, but focused purely on drums. It provides a visual **Kit** mapper to route drum words (`bd`, `sd`, `hh`) directly to specific Drum Rack pads. |
 | **Strudel Audio FX** (`alienmind-strudel-fx.amxd`) | Audio effect, any **audio track** | Type a single line of Strudel's DSP effect vocabulary (e.g., `.lpf(800).gain(1.2)`) and it generates a real Max signal chain on the track. Effects become native, automatable Live parameters. |
-| **Strudel Samples** (`alienmind-strudel-sampler-browser.amxd`) | Audio effect, any **audio track** (audio passes through) | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo), **preview samples beat-synced** to your project tempo, and download them to `~/Music/StrudelSamples` for native drag-and-drop from Live's browser. **Experimental - not recommended for real sessions yet.** |
+| **Strudel Samples** (`alienmind-strudel-sampler-browser.amxd`) | Audio effect, any **audio track** (audio passes through) | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo) and **audition samples through the track** - beat-synced to your project's launch quantization and looped in time. Auditioning downloads the file next to the device; drag the row out into a Simpler or Drum Rack. |
 
 Press **Run** and patterns play immediately on a free-running clock at the
 project tempo; start **Live's transport** and they lock to the playhead,
@@ -143,25 +143,23 @@ Clicking the **Kit** button opens a dedicated visual mapper. This lets you route
 
 ## Strudel Samples (`alienmind-strudel-sampler-browser.amxd`)
 
-A browser/downloader for the community sample maps behind strudel.cc. It is
-an **audio effect**: put it anywhere on an audio track; incoming audio passes
-through untouched and previews are mixed in.
+A browser for the community sample maps behind strudel.cc. It is an **audio
+effect**: put it anywhere on an audio track; incoming audio passes through
+untouched and previews are mixed in, **through the track** - the fader, the
+monitor cue and any effect after it all apply.
 
 | Control | What it does |
 |---|---|
-| **Map dropdown** | Presets: `dirt-samples` (the TidalCycles classics) and `dough-samples` (Strudel's defaults). Pick *Custom...* to type your own. |
-| **URL field** | Any source Strudel understands: `github:user/repo` (a repo with a `strudel.json`), a direct URL, or `shabda:query` for generated maps. |
-| **Load** | Fetches the map and lists every sound with its variation count. A *pitched* badge marks multisampled instruments (per-note files). |
-| **◀ n/N ▶** | Steps through a sound's variations (like `bd:3` in Strudel). |
-| **▶ (row)** | Preview the selected variation. With the transport running, playback is **quantized to the next beat** so you can audition against your groove; press **■** to stop. |
-| **⬇** | Download this variation to `~/Music/StrudelSamples/<map>/<sound>/`. |
-| **all** | Download every variation of the sound (shows `done/total` progress). |
-| **Folder** | Opens the local samples folder in Explorer/Finder. |
-| **Live scale badge** | On Live 12, shows the set's global root & scale (informational for now). |
+| **Map dropdown** | A curated list of community sample maps (dough-samples, Dirt-Samples, clean-breaks, and ~30 more from strudel.cc's universe). Picking one **loads it at once** - there is no separate Load button. Choose *Custom...* to open a screen where you paste your own `github:user/repo`, a direct URL, or a `shabda:query`. |
+| **Search** | Filters the list as you type. A sample map is 100+ sounds; the arrow keys walk the matches and audition as they go. |
+| **A row** | **Click it (or arrow onto it) to hear it.** That also downloads it - reading a sample requires putting it on disk, so auditioning *is* acquiring; there is no separate download. A *pitched* badge marks multisampled instruments; the duration and a *mono* tag show once it has loaded. |
+| **◀ n/N ▶** | Steps through a sound's variations (like `bd:3` in Strudel), auditioning each. |
+| **Preview timing** | The audition starts on Live's **launch quantization** (the transport-bar setting) and **loops in time** - the loop is the sample rounded up to whole bars, so it restarts on a downbeat. Press **■** to stop. |
+| **Drag handle (⋮⋮)** | Once a row has been auditioned, **drag the row** into a Simpler, a Drum Rack or a track. (Whether Live accepts the drag out of the embedded browser is still being verified - the file is on disk regardless, in `samples/` next to the device.) |
+| **Show folder** | Opens the `samples/` folder in Finder/Explorer, so you can drag files in from there. Enabled once you have auditioned at least one sound (before that, the folder does not exist yet). |
 
-**Flow:** Load a map → preview until something fits → download → add
-`~/Music/StrudelSamples` to Live's browser as a **Place** (once) → drag
-samples into Simpler/Drum Racks natively.
+**Flow:** pick a map → search and arrow through it until something fits → the
+file is already on disk in `samples/` beside the device → drag the row out.
 
 ---
 
@@ -192,11 +190,15 @@ Type a chain of Strudel effects, such as `.lpf(800).room(0.3).gain(1.2)`, and hi
   console (device Edit button) logs every boot step (`strudel: ...`).
 - **Red outline** → the message under the editor names the parse/eval error.
 - **Load from Clip greyed out** → the track has no clips yet; Save to Clip makes one.
-- **Sampler shows nothing after Load** → check the status line for a fetch
-  error (the maps come from the network).
-- **Live crashes with Strudel Samples loaded** → known issue, it hosts
-  `[node.script]` for downloads and that is the one unstable piece in this
-  project. Remove it if it happens repeatedly.
+- **The sample list is empty after picking a map** → check the status line for a
+  fetch error (the maps come from the network).
+- **A sample downloads but will not preview** → it is probably not a WAV. The
+  preview reads the file into Max's `[buffer~]`, which takes WAV and AIFF and
+  **not MP3**; the browser greys out what it knows it cannot play, and the Max
+  console (device Edit button) has the rest.
+- **Preview plays but the track's fader does not move it** → that is a bug, and
+  worth reporting. The preview is deliberately routed *through* the track, so the
+  fader, the monitor cue and any device after it all apply.
 
 More depth: [README](../README.md) (includes how this project relates to the
 [m4l-jweb](https://github.com/alienmind/m4l-jweb) library it's built on) and
