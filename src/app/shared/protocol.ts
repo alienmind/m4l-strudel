@@ -2,8 +2,8 @@
  * protocol.ts (midi) - every selector that crosses this device's bridge.
  *
  * The single source of truth for BOTH sides: the app binds/emits these names,
- * and the Max side (wrapper/device.ts, plus the routes in patcher/chains.mjs)
- * handles them. A selector that exists on one side only is a message falling on
+ * and the Max side (wrapper/device.ts, plus the packaged chains from
+ * @m4l-jweb/build) handles them. A selector that exists on one side only is a message falling on
  * the floor, and it produces no error at runtime - so keep them here.
  *
  * DEVICE_IN and CHAIN_OUT are spread in, not retyped: those names belong to

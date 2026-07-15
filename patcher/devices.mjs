@@ -74,7 +74,7 @@ export default [
 		name: "alienmind-strudel-fx",
 		ui: "fx",
 		type: "audio", // 'aaaa' audio effect: it sits anywhere in an audio chain
-		chains: ["lowpass", "drive", "strudel-delay", "strudel-room", "gain"],
+		chains: ["lowpass", "drive", "delay", "reverb", "gain"],
 		unmatchedTo: "js",
 	},
 ];

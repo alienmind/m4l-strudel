@@ -16,7 +16,7 @@
  * automated, and it has no business on Push. A map of eleven words to eleven pads is
  * not a number.
  */
-import { defineSurface, state } from "@m4l-jweb/surface";
+import { defineSurface, state, window } from "@m4l-jweb/surface";
 import { DEFAULT_DRUM_MAP } from "@/lib/mini/drums";
 import { transportParams } from "../shared/surface";
 
@@ -24,5 +24,18 @@ export default defineSurface({
 	params: transportParams,
 	state: {
 		drumMap: state({ default: DEFAULT_DRUM_MAP }),
+	},
+	/**
+	 * The drum map is what this device is FOR, and the device view is a fixed
+	 * ~169 px - the in-view DrumRack shows a 16-pad window and a scroll stripe, but
+	 * only one octave-and-a-third at a time. `editor` is an OPTIONAL bigger view of
+	 * the SAME map: the same DrumRack given the whole C1..C6 range at once. It reads
+	 * and writes the `drumMap` state slot via useStateSync, so edits in the window
+	 * and edits in the mini rack are the same data and stay in sync live (the library
+	 * broadcasts each write to every view). The mini rack is not replaced - the window
+	 * is a second, roomier way to reach the same thing.
+	 */
+	windows: {
+		editor: window({ title: "Strudel Drum Map", width: 480, height: 560, entry: "Window" }),
 	},
 });

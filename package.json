@@ -33,9 +33,9 @@
 		]
 	},
 	"devDependencies": {
-		"@m4l-jweb/bridge": "^0.6.0",
-		"@m4l-jweb/build": "^0.6.0",
-		"@m4l-jweb/surface": "^0.6.0",
+		"@m4l-jweb/bridge": "^0.6.5",
+		"@m4l-jweb/build": "^0.6.5",
+		"@m4l-jweb/surface": "^0.6.5",
 		"@tailwindcss/vite": "^4.0.0",
 		"@tonaljs/tonal": "^4.10.0",
 		"@types/node": "^22.0.0",

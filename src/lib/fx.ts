@@ -26,8 +26,9 @@
  * THE RACK - one table, in the frozen graph's signal order (see ARCHITECTURE
  * §3c). Everything else in this file is derived from it: the neutral chain, the
  * effects the line may name, and the line the parameters are written back out as.
- * Adding a stage is a row here, a chain in patcher/chains.mjs, and a dial in
- * src/app/fx/surface.ts - not a fourth hand-written list to fall out of step.
+ * Adding a stage is a row here, a chain in the manifest (patcher/devices.mjs, drawn
+ * from @m4l-jweb/build's vocabulary), and a dial in src/app/fx/surface.ts - not a
+ * fourth hand-written list to fall out of step.
  *
  * `neutral` is the value at which the stage is a wire. `decimals` is how much of
  * the value is worth writing down: a filter does not need a milli-hertz, and a
