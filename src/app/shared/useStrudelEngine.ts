@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bindInlet, flushNotes, inJweb, outlet, sendNote, uiReady } from "@m4l-jweb/bridge";
 import { useParam } from "@m4l-jweb/surface/react";
+import type { Surface } from "@m4l-jweb/surface";
 import { renderPattern, toFlatList, type NoteEvent } from "@/lib/mini/render";
 import { eventsToMini, type RawNote } from "@/lib/mini/unparse";
 import type { NoteContext, OctaveConvention } from "@/lib/mini/notes";
 import { isBareMini } from "@/lib/strudelCode";
+import { detectCps, suggestBeatsPerCycle } from "@/lib/tempo";
 import { activeSpans, parseForPlayhead, type Span } from "@/lib/mini/playhead";
-import surface from "./surface";
+import type { transportParams } from "./surface";
 import EngineWorker from "./engine.worker.js?worker&inline";
 import { IN, OUT } from "./protocol";
 
@@ -56,9 +58,19 @@ type EngineMessage =
 	| { t: "flush" }
 	| { t: "clock"; free: boolean };
 
-const BEATS_PER_BAR = 4;
+/** The clip's meter, when the user has not picked one. */
+const DEFAULT_BEATS_PER_BAR = 4;
 
 export interface EngineOptions {
+	/**
+	 * The DEVICE's surface - the one its own surface.ts declares, not a shared one.
+	 *
+	 * It is passed in rather than imported here because the two devices' surfaces are
+	 * no longer the same object (the drums device declares a drumMap state slot), and
+	 * a bundle holding two Surfaces that both declare `play` would have them fight
+	 * over one bridge selector. See shared/surface.ts.
+	 */
+	surface: Surface<typeof transportParams>;
 	/** The pattern the device opens with - its own idiom, not a shared one. */
 	initialText: string;
 	/**
@@ -80,8 +92,19 @@ export interface EngineOptions {
 export interface EngineState {
 	text: string;
 	setText: (t: string) => void;
-	bars: number;
-	setBars: (n: number) => void;
+	/** How many of Live's beats one Strudel cycle occupies in an exported clip.
+	 *  Auto-derived from the pattern's setcpm/setcps and Live's tempo, but editable. */
+	beatsPerCycle: number;
+	setBeatsPerCycle: (n: number) => void;
+	/** Whether beatsPerCycle is still tracking the detected tempo (true) or the user
+	 *  has typed an override (false). */
+	bpcAuto: boolean;
+	/** Drop an override and snap beatsPerCycle back to the detected-tempo suggestion. */
+	resetBeatsPerCycle: () => void;
+	/** The clip's meter (4 = 4/4). Bar-counting and From-Clip reading only - it does
+	 *  not enter the cycle-to-beat scaling, which beatsPerCycle owns. */
+	beatsPerBar: number;
+	setBeatsPerBar: (n: number) => void;
 	grid: number;
 	setGrid: (n: number) => void;
 	conv: OctaveConvention;
@@ -115,10 +138,10 @@ export interface EngineState {
 }
 
 export function useStrudelEngine(opts: EngineOptions): EngineState {
-	const { ctx, liveScale, initialText } = opts;
+	const { ctx, liveScale, initialText, surface } = opts;
 	const [playParam, setPlayParam] = useParam(surface, "play");
 	const [text, setText] = useState(initialText);
-	const [bars, setBars] = useState(1);
+	const [beatsPerBar, setBeatsPerBar] = useState(DEFAULT_BEATS_PER_BAR);
 	const [grid, setGrid] = useState(16);
 	const [conv, setConv] = useState<OctaveConvention>("strudel");
 	const [octaveOffset, setOctaveOffset] = useState(0);
@@ -128,8 +151,34 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 	const [clipAvailable, setClipAvailable] = useState(!inJweb);
 
 	const [amxdBuild, setAmxdBuild] = useState("?");
+	// Live's transport tempo. The ref feeds the worker (no re-render on every tick);
+	// the state drives the beats-per-cycle suggestion, which must recompute when the
+	// tempo changes.
+	const [tempo, setTempo] = useState(120);
 	const tempoRef = useRef(120);
 	const workerRef = useRef<Worker | null>(null);
+
+	/**
+	 * Beats per cycle: the cycle-to-beat scale the clip export uses. It is derived
+	 * from the pattern's own tempo (setcpm/setcps, which the headless engine ignores)
+	 * and Live's transport, so a `setcpm(120)` pattern no longer lands one cycle in a
+	 * whole bar. The suggestion tracks the tempo until the user types an override.
+	 */
+	const detectedCps = useMemo(() => detectCps(text), [text]);
+	const suggestedBpc = useMemo(() => suggestBeatsPerCycle(detectedCps, tempo), [detectedCps, tempo]);
+	const [beatsPerCycle, setBpcState] = useState(suggestedBpc);
+	const bpcOverridden = useRef(false);
+	useEffect(() => {
+		if (!bpcOverridden.current) setBpcState(suggestedBpc);
+	}, [suggestedBpc]);
+	const setBeatsPerCycle = useCallback((n: number) => {
+		bpcOverridden.current = true;
+		setBpcState(n > 0 ? n : 1);
+	}, []);
+	const resetBeatsPerCycle = useCallback(() => {
+		bpcOverridden.current = false;
+		setBpcState(suggestedBpc);
+	}, [suggestedBpc]);
 
 	/** Everything a mini-notation token needs to become a pitch. Both paths - the
 	 *  live engine and the clip exporter - resolve tokens through this, which is
@@ -138,8 +187,8 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 
 	// The clip exporter reads these inside a worker callback; a ref keeps that
 	// callback from having to be rebuilt (and the worker restarted) on every edit.
-	const exportRef = useRef({ bars, text: "" });
-	exportRef.current.bars = bars;
+	const exportRef = useRef({ beatsPerCycle, text: "" });
+	exportRef.current.beatsPerCycle = beatsPerCycle;
 
 	useEffect(() => {
 		// The [js] side pushes `clip_available 0/1` (polled once a second).
@@ -153,6 +202,7 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 		bindInlet(IN.tempo, (bpm) => {
 			if (Number(bpm) > 0) {
 				tempoRef.current = Number(bpm);
+				setTempo(Number(bpm));
 				workerRef.current?.postMessage({ t: "tempo", bpm: Number(bpm) });
 			}
 		});
@@ -162,9 +212,11 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 	// The note-count readout while typing: local, instant, bare-mini only. The
 	// engine is what actually renders the clip (toMidi below).
 	const { noteCount, errors, capped } = useMemo(() => {
-		const r = renderPattern(text, { bars, ...noteCtx });
+		// bars is cosmetic here: the readout counts notes and cycles, which the
+		// cycle-to-beat scale does not change. The engine renders the real clip.
+		const r = renderPattern(text, { bars: 1, ...noteCtx });
 		return { noteCount: r.notes.length, errors: r.errors, capped: r.capped };
-	}, [text, bars, noteCtx]);
+	}, [text, noteCtx]);
 
 	// From MIDI: the [js] side replies `notes <loopEndBeats> <n> <p s d> ...`
 	useEffect(() => {
@@ -180,15 +232,15 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 					duration: Number(args[o + 2]),
 				});
 			}
-			const barsRead = Math.max(1, Math.round(loopEnd / BEATS_PER_BAR));
-			const mini = eventsToMini(raw, { bars: barsRead, grid, conv, octaveOffset });
+			const barsRead = Math.max(1, Math.round(loopEnd / beatsPerBar));
+			const mini = eventsToMini(raw, { bars: barsRead, grid, conv, octaveOffset, beatsPerBar });
 			setText(mini);
 			setStatus(`Read ${n} notes → ${barsRead} bar(s) (Structure is flattened)`);
 		});
 		bindInlet(IN.read_error, () => {
 			setStatus("No clip found on this track - create or play a MIDI clip first");
 		});
-	}, [grid, conv, octaveOffset]);
+	}, [grid, conv, octaveOffset, beatsPerBar]);
 
 	/**
 	 * To Clip. The pattern is rendered by the Strudel engine, not by the local
@@ -203,9 +255,9 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 			return;
 		}
 		exportRef.current.text = text;
-		workerRef.current?.postMessage({ t: "export", code: text, ctx: noteCtx, bars, liveScale });
+		workerRef.current?.postMessage({ t: "export", code: text, ctx: noteCtx, beatsPerCycle, liveScale });
 		setStatus("Rendering the pattern…");
-	}, [text, noteCtx, bars, liveScale, errors]);
+	}, [text, noteCtx, beatsPerCycle, liveScale, errors]);
 
 	const fromMidi = useCallback(() => {
 		outlet(OUT.read_notes);
@@ -268,16 +320,16 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 					});
 				}
 			} else if (m.t === "clip") {
-				// Cycles -> beats. One cycle is `bars` bars, which is the only thing
-				// the UI gets to decide about the clip's shape.
-				const beatsPerCycle = exportRef.current.bars * BEATS_PER_BAR;
+				// Cycles -> beats. One cycle occupies `beatsPerCycle` of Live's beats -
+				// derived from the pattern's tempo (see tempo.ts) or the user's override.
+				const bpc = exportRef.current.beatsPerCycle;
 				const notes: NoteEvent[] = m.notes.map((n) => ({
 					pitch: n.pitch,
 					velocity: n.velocity,
-					start: n.start * beatsPerCycle,
-					duration: n.duration * beatsPerCycle,
+					start: n.start * bpc,
+					duration: n.duration * bpc,
 				}));
-				const lengthBeats = m.cycles * beatsPerCycle;
+				const lengthBeats = m.cycles * bpc;
 				outlet(OUT.write_clip, ...toFlatList(notes, lengthBeats));
 				setStatus(
 					`Wrote ${notes.length} notes over ${lengthBeats} beats (${m.cycles} cycle${m.cycles === 1 ? "" : "s"})`,
@@ -377,8 +429,12 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 	return {
 		text,
 		setText,
-		bars,
-		setBars,
+		beatsPerCycle,
+		setBeatsPerCycle,
+		bpcAuto: !bpcOverridden.current,
+		resetBeatsPerCycle,
+		beatsPerBar,
+		setBeatsPerBar,
 		grid,
 		setGrid,
 		conv,

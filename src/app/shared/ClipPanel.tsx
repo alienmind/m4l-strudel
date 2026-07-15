@@ -1,8 +1,12 @@
 import { ArrowDownToLine, ArrowUpFromLine, ChevronLeft } from "lucide-react";
 
 export function ClipPanel({
-	bars,
-	setBars,
+	beatsPerCycle,
+	setBeatsPerCycle,
+	bpcAuto,
+	resetBeatsPerCycle,
+	beatsPerBar,
+	setBeatsPerBar,
 	grid,
 	setGrid,
 	toMidi,
@@ -10,8 +14,12 @@ export function ClipPanel({
 	clipAvailable,
 	onClose,
 }: {
-	bars: number;
-	setBars: (v: number) => void;
+	beatsPerCycle: number;
+	setBeatsPerCycle: (v: number) => void;
+	bpcAuto: boolean;
+	resetBeatsPerCycle: () => void;
+	beatsPerBar: number;
+	setBeatsPerBar: (v: number) => void;
 	grid: number;
 	setGrid: (v: number) => void;
 	toMidi: () => void;
@@ -35,18 +43,49 @@ export function ClipPanel({
 			<div className="flex-1 px-1 py-1 flex flex-col gap-4">
 				<div className="flex flex-col gap-2 bg-input/20 rounded p-2 border border-input">
 					<div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Configuration</div>
-					<div className="flex gap-4 items-center text-[11px]">
-						<label className="flex items-center gap-1.5">
-							<span>Bars</span>
+					<div className="flex flex-wrap gap-x-4 gap-y-2 items-center text-[11px]">
+						<label
+							className="flex items-center gap-1.5"
+							title="How many of Live's beats one Strudel cycle occupies (Save to Clip). Auto-filled from the pattern's setcpm/setcps and Live's tempo; type to override."
+						>
+							<span>Beats/cycle</span>
 							<input
 								type="number"
-								min={1}
-								max={8}
-								value={bars}
-								onChange={(e) => setBars(Math.max(1, Math.min(8, Number(e.target.value))))}
-								className="w-10 rounded bg-input/50 px-1.5 py-0.5"
-								title="Length of the exported clip (applies only to Save to Clip)"
+								min={0.25}
+								step={0.25}
+								value={beatsPerCycle}
+								onChange={(e) => setBeatsPerCycle(Number(e.target.value))}
+								className="w-14 rounded bg-input/50 px-1.5 py-0.5"
 							/>
+							{bpcAuto ? (
+								<span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">auto</span>
+							) : (
+								<button
+									type="button"
+									onClick={resetBeatsPerCycle}
+									className="text-[9px] text-primary hover:underline uppercase tracking-wide"
+									title="Snap back to the tempo-derived value"
+								>
+									reset
+								</button>
+							)}
+						</label>
+						<label
+							className="flex items-center gap-1.5"
+							title="The clip's meter (beats per bar). Affects bar counting and Load from Clip, not the cycle-to-beat scaling."
+						>
+							<span>Beats/bar</span>
+							<select
+								value={beatsPerBar}
+								onChange={(e) => setBeatsPerBar(Number(e.target.value))}
+								className="rounded bg-input/50 px-1.5 py-0.5"
+							>
+								{[2, 3, 4, 5, 6, 7].map((b) => (
+									<option key={b} value={b}>
+										{b}/4
+									</option>
+								))}
+							</select>
 						</label>
 						<label className="flex items-center gap-1.5">
 							<span>Grid</span>

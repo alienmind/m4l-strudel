@@ -13,7 +13,8 @@
  * parameter actually has and `exponent` bends the KNOB's travel without touching
  * the value, so every readout is honest and the DSP takes the number directly.
  */
-import { defineSurface, dial } from "@m4l-jweb/surface";
+import { defineSurface, dial, state } from "@m4l-jweb/surface";
+import type { FxParam } from "@/lib/fx";
 
 export default defineSurface({
 	params: {
@@ -74,4 +75,24 @@ export default defineSurface({
 	},
 
 	banks: [{ name: "FX", params: ["cutoff", "drive", "delay", "delaytime", "delayfeedback", "room", "gain"] }],
+
+	/**
+	 * WHICH STAGES THE USER NAMED - the line, in the only form worth saving.
+	 *
+	 * The VALUES need nothing here: they are Live parameters, and Live has been saving
+	 * them all along. What it could not save is the difference between a stage the user
+	 * asked for and a stage that happens to sit at its neutral value - `.gain(1)` typed
+	 * on purpose, versus a gain nobody has ever touched. That distinction is the whole
+	 * of the FX line's UI (see App.tsx: the parameters are the truth, the line is a view
+	 * of them), and reopening the set used to lose it: every stage left at neutral
+	 * vanished from the screen, and the line the user wrote came back shorter than they
+	 * typed it.
+	 *
+	 * So the SHAPE of the line persists, and the parameters keep carrying its numbers.
+	 * There is no second copy of a value anywhere, which is what keeps a knob, an
+	 * automation lane and this slot from disagreeing.
+	 */
+	state: {
+		named: state<FxParam[]>({ default: [] }),
+	},
 });

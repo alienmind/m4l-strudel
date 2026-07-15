@@ -15,7 +15,7 @@
  *   in:  {t:'tick', playing, beats}   (plugsync~ outlets 0 and 6)
  *        {t:'tempo', bpm}             (LiveAPI live_set tempo observer)
  *        {t:'code', code, ctx, liveScale}   -> {t:'evalok'} | {t:'evalerr', message}
- *        {t:'export', code, ctx, bars, liveScale} -> {t:'clip'} | {t:'exporterr'}
+ *        {t:'export', code, ctx, beatsPerCycle, liveScale} -> {t:'clip'} | {t:'exporterr'}
  *        {t:'hush'}              -> {t:'flush'}
  *   out: {t:'ready'} once the strudel scope is booted
  *        {t:'clock', free} when the clock source flips (free-run vs Live)
@@ -165,9 +165,11 @@ onmessage = async (e) => {
 		try {
 			setLiveScale(m.liveScale);
 			const pat = await compile(asStrudelCode(m.code, m.ctx));
-			// One cycle spans `bars` bars, so its rate follows the tempo. Only
-			// patterns that read _cps care, but they should read the right one.
-			const cps = bpm / 60 / (m.bars * 4);
+			// One cycle occupies `beatsPerCycle` of Live's beats, so its rate follows
+			// the tempo. Only patterns that read _cps care, but they should read the
+			// right one - and this makes it the pattern's own declared cps when the
+			// UI left beatsPerCycle on its auto (tempo-derived) suggestion.
+			const cps = bpm / 60 / m.beatsPerCycle;
 			const cycles = patternCycles(pat, cps, m.ctx);
 			postMessage({ t: "clip", notes: exportNotes(pat, cycles, cps, m.ctx), cycles });
 		} catch (err) {
