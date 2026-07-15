@@ -118,7 +118,7 @@ value (`.lpf(sine.range(200,2000))`) is refused for the same reason: see
 
 You can download the pre-built `.amxd` devices ready for Ableton Live from:
 - **[Download Latest Release](https://github.com/alienmind/m4l-strudel/releases/latest)**
-- **[Gumroad](https://alienmindzzz.gumroad.com/l/m4l-strudel)**
+- **[Gumroad](https://alienmindzzz.gumroad.com/l/m4l-strudel)** (might be outdated)
 
 ## Install
 
