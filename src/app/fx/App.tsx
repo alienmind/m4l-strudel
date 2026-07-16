@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { uiReady } from "@m4l-jweb/bridge";
-import { useNativeLayout, useParam, useStateSync } from "@m4l-jweb/surface/react";
+import { useNativePanel, useParam, useStateSync } from "@m4l-jweb/surface/react";
 import { cn } from "@/lib/utils";
 import {
 	formatFxChain,
@@ -47,6 +47,10 @@ export default function App() {
 	const [showAdd, setShowAdd] = useState(false);
 	const [showAbout, setShowAbout] = useState(false);
 
+	// The view switch: on = native knob panel, off = this web UI. A native toggle,
+	// so it stays visible in the panel as the way back.
+	const [knobs, setKnobs] = useParam(surface, "knobs");
+
 	const [cutoff, setCutoff] = useParam(surface, "cutoff");
 	const [drive, setDrive] = useParam(surface, "drive");
 	const [delay, setDelay] = useParam(surface, "delay");
@@ -91,17 +95,15 @@ export default function App() {
 		uiReady();
 	}, []);
 
-	// Drive the native dials from the SAME `shown` set the old HTML sliders used: a
-	// stage the line does not name and no knob has moved off neutral is hidden,
-	// exactly as its slider used to be. useNativeLayout also REFLOWS the visible
-	// dials (packed top-left, no gaps) and grows [jweb] into the reclaimed space, so
-	// an empty line gives the whole width to the UI. A hidden dial still automates,
-	// MIDI-maps and reaches Push - only the device view drops it. `shown` is already
-	// in RACK order, which is the display order the layout wants.
-	const applyNativeLayout = useNativeLayout(surface);
+	// THE TWO SCREENS. Runtime reflow/resize of native objects does not work in a
+	// frozen M4L device (measured) - only hide/show does - so instead of packing
+	// dials we LAYER two views and flip between them: the web UI, or the native knob
+	// panel with every dial. `knobs` (a native toggle) drives it and stays visible in
+	// both, as the way back from the panel.
+	const applyPanel = useNativePanel(surface, ["knobs"]);
 	useEffect(() => {
-		applyNativeLayout(shown);
-	}, [shown, applyNativeLayout]);
+		applyPanel(knobs ? "native" : "web");
+	}, [knobs, applyPanel]);
 
 	const text = draft ?? formatFxChain(params, named);
 	const fx = useMemo(() => parseFxChain(text), [text]);
@@ -148,7 +150,18 @@ export default function App() {
 				>
 					Strudel Audio FX
 				</button>
-				<span className="text-[10px] text-muted-foreground">audio effect</span>
+				<div className="flex items-center gap-2">
+					{/* Flip to the native knob panel: hides this web UI, shows every
+					    dial. The way back is the native "Knobs" toggle in the panel. */}
+					<button
+						onClick={() => setKnobs(true)}
+						className="rounded bg-accent px-1.5 py-0.5 text-[10px] text-accent-foreground hover:brightness-110"
+						title="Show the native knob panel"
+					>
+						Knobs
+					</button>
+					<span className="text-[10px] text-muted-foreground">audio effect</span>
+				</div>
 			</div>
 
 			<div className="flex items-center gap-1">
