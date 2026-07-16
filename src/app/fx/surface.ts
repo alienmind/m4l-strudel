@@ -86,13 +86,21 @@ export default defineSurface({
 	banks: [{ name: "FX", params: ["cutoff", "drive", "delay", "delaytime", "delayfeedback", "room", "gain"] }],
 
 	/**
-	 * THE TWO SCREENS. Every fx parameter is a NATIVE live.dial, plus the `knobs`
-	 * view switch. The app layers them (useNativePanel): the web UI OR the native
-	 * knob panel, never both, flipped by hiding/showing [jweb] and the dials. `knobs`
-	 * is listed first so it lands top-left and stays reachable in the panel; it is
-	 * kept visible in both modes as the switch back.
+	 * THE TWO SCREENS. The seven fx dials are the native grid; `knobs` is the view
+	 * SWITCH (pinned top-right, over the web UI's own "Knobs" button, so it stays in
+	 * one place across both views). The app layers them (useNativePanel): the web UI
+	 * OR the native knob panel, never both. `rows: 2` lays the dials out in two rows
+	 * across the wide panel - seven dials cannot be two columns in a 169 px-tall view
+	 * (only three rows fit), so two rows is the clean use of the space.
 	 */
-	layout: { native: { params: ["knobs", "cutoff", "drive", "delay", "delaytime", "delayfeedback", "room", "gain"], rows: 3, panel: true } },
+	layout: {
+		native: {
+			params: ["cutoff", "drive", "delay", "delaytime", "delayfeedback", "room", "gain"],
+			rows: 2,
+			panel: true,
+			switch: "knobs",
+		},
+	},
 
 	/**
 	 * WHICH STAGES THE USER NAMED - the line, in the only form worth saving.
