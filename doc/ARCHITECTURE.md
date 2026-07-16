@@ -116,6 +116,15 @@ The MIDI devices support both bare mini-notation (`0 [2 ~] bd*2`) and full Strud
 **The Frozen Graph Law:** The Max patcher DSP graph is generated at build time. The JS only provides values.
 - Every effect always exists in the graph. Setting an effect means altering its values. Missing effects are disabled by setting their parameter to a neutral state.
 - The order of effects is frozen (e.g., filter → drive → delay → reverb → gain). Typing `.gain(1.2).lpf(800)` produces the same routing as `.lpf(800).gain(1.2)`.
+- `.lpf()`, `.drive()`, `.delay()`, `.room()` and `.gain()` make sound (delay/reverb are the library's `delay`/`reverb` chains, confirmed audible in Live). `.crush()` and `.hpf()` are named and honestly refused until they have a chain.
+
+**The Two-Screen Native UI (m4l-jweb 0.7.0):** The seven fx parameters are NATIVE `live.dial` objects, declared in `src/app/fx/surface.ts` via `layout: { native: { ..., panel: true, switch: "knobs" } }`. This shed the HTML sliders, so the dials automate, MIDI-map and hit Push like any factory device.
+
+Because a frozen M4L device can hide/show native objects at runtime but **cannot reposition them** (measured — see m4l-jweb's ARCHITECTURE.md), the device is not one reflowing view but **two layered screens**, flipped by `useNativePanel`:
+- **Web mode** — the `[jweb]` (full width) shows the Strudel line UI; all dials hidden.
+- **Knob panel** — the `[jweb]` is hidden, revealing all seven dials in two rows, plus a "Back" `button` (a `live.text`, top-right) that returns to the web UI. The web UI paints a matching "Knobs" button at the same spot.
+
+**The black-screen fix:** a FRESH fx instance's `named` state slot returns an empty dict `{}` (the upstream state-default seeding bug), not the declared `[]`. `named.includes(...)` then threw a few milliseconds after mount — right after the `get_state` reply — and React unmounted to a black screen. `App.tsx` coerces the slot to an array (`Array.isArray(named) ? named : []`); an object means "nothing named yet".
 
 ### 4c. Sample Browser: Downloader and Preview
 

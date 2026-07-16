@@ -15,201 +15,29 @@ The plan has three parts, in dependency order:
 
 | Part | What | Verdict | Gate |
 |---|---|---|---|
-| 1. Build-time native UI | `surface.ts` declares which parameters render as NATIVE Max dials; the compiler lays them out next to a narrower `[jweb]` | **Feasible now.** Small, low-risk compiler change. | None. |
+| 1. Native UI | `surface.ts` declares which parameters render as NATIVE Max dials | **DELIVERED (0.7.0), verified in Live.** Landed as a two-screen panel (web UI ⇄ native knobs), not the side-by-side shape first imagined - see Part 1 below and ARCHITECTURE.md. | Done. |
 | 2. Dynamic chains | A Strudel fx line populates REAL Ableton devices in the user's rack via the LOM, with signal-rate modulation | **Spike-gated.** Reconciliation and modulation are documented and sound; device INSERTION rests on a LOM surface that may not exist for M4L at all. | Spike R1 first. |
 | 3. The m4l-strudel Rack | ONE thing in the user library: a rack preset with every required device pre-added, each with its proper type, sharing one codebase | **Feasible.** The earlier "one super-device with a mode toggle" shape is impossible (device types are build-time); the rack is the shape that works. | Instrument slot gated on Phase 8 + instance-scoped buffers. |
 
 ---
 
-## Part 1: Build-time declarative native UI
+## Part 1: Native UI  <- DELIVERED (0.7.0), verified in Live
 
-### The idea
+`surface.ts` declares which parameters render as NATIVE `live.*` objects; the compiler
+lays them out and the app controls them. What landed differs from the side-by-side shape
+first sketched here, because of one thing measured in Live:
 
-`surface.ts` already declares every Live parameter once, and the compiler already
-generates the `live.dial` objects and their wiring in both directions. Today those
-dials are invisible and React redraws every control in HTML. The idea: let the
-declaration also say WHICH parameters should be visible as native Max objects, and
-have the compiler lay them out in the device view, side by side with a `[jweb]`
-shifted right. React is freed from rendering those controls; `useParam()` remains
-available when app logic wants the value.
+- **A frozen M4L device can hide/show native objects at runtime (`obj.hidden`) but
+  CANNOT reposition or resize them (`presentation_rect` is stored, never redrawn).** So
+  the fx device is not a narrow web view beside always-visible dials; it is TWO SCREENS -
+  the web UI (the Strudel line, full width) OR a native knob panel (all dials, `[jweb]`
+  hidden), flipped by a "Back" button. Only hide/show is used.
 
-### Why it is cheap
-
-The generated dials are invisible today only because they carry no `presentation`
-attribute - Live shows the presentation view, and only boxes with `presentation: 1`
-appear in it. So the whole feature is a presentation OVERLAY on codegen that already
-exists: two extra keys per box, plus a shift of `obj-jweb`'s `presentation_rect`.
-**No wiring changes at all** - the fan-out contract (`paramObject` / `paramValue`),
-the `set_<id>` route and `useParam()` are untouched. A native dial is the same
-parameter with the same graph, now visible.
-
-Two facts that shape the API:
-
-- There is no `patcher.mjs`; the `[jweb]` box comes from
-  `packages/build/templates/base.json` (id `obj-jweb`,
-  `presentation_rect: [0, 0, 420, 169]`) and is mutated from `applySurface()`,
-  which already receives `jwebId`.
-- **A single vertical column does not fit.** The device view is a fixed ~169 px
-  tall; a `live.dial` is 44x48 at a 56 px pitch, so only 3 fit vertically and the
-  fx device declares 7 parameters. The primitive is therefore a GRID that fills
-  rows top-to-bottom and overflows into new columns - column-major, so the reading
-  order stays stable when a parameter is added.
-
-### 1a. `m4l-jweb/packages/surface/src/index.ts` - extend the declaration
-
-```ts
-/** Which parameters render as NATIVE Max objects in the device view. */
-export interface NativeLayout<K extends string = string> {
-  /** In display order: fills rows top-to-bottom, then the next column. */
-  params: readonly K[];
-  /** Max rows per column. Default 3 (what 169 px holds at 56 px pitch). */
-  rows?: number;
-}
-
-export interface SurfaceDef<P, S, W> {
-  params: P;
-  banks?: readonly Bank<Extract<keyof P, string>>[];
-  windows?: W;
-  state?: S;
-  layout?: { native?: NativeLayout<Extract<keyof P, string>> };
-}
-```
-
-Validation in `defineSurface()`, next to the existing bank checks (throwing fails
-`pnpm build`, which is the enforcement everything else here uses):
-
-```ts
-for (const id of def.layout?.native?.params ?? []) {
-  if (!def.params[id]) throw new Error(`surface: layout.native names "${id}", which is not a declared parameter`);
-}
-const rows = def.layout?.native?.rows ?? 3;
-if (rows < 1 || rows > 3) throw new Error(`surface: layout.native.rows must be 1..3 - the device view is 169 px tall`);
-```
-
-Also export a tiny predicate for app code (optional but it keeps App.tsx honest):
-
-```ts
-export const isNative = (surface: Surface, id: string): boolean =>
-  !!surface.layout?.native?.params.includes(id as never);
-```
-
-`defineSurface()` returns `{ ...def, ids }` already, so `layout` survives into the
-compiled surface and into `loadSurface()` with no further plumbing.
-
-### 1b. `m4l-jweb/packages/build/src/surface.mjs` - the layout math and the jweb shift
-
-Constants and slot computation (pure function, unit-testable):
-
-```js
-// The device view Live gives an M4L device. Height is fixed; width is whatever
-// the presentation content needs.
-const DEVICE_H = 169;
-const MARGIN = 8;
-// Per-kind native sizes, from Max's own defaults (live.dial includes its label).
-const NATIVE_SIZE = { dial: [44, 48], toggle: [44, 15], menu: [100, 15] };
-const PITCH_Y = 56;
-
-/** id -> presentation_rect for every native param, plus the zone's total width. */
-export function computeNativeSlots(surface) {
-  const native = surface.layout?.native;
-  if (!native || native.params.length === 0) return { slots: new Map(), width: 0 };
-  const rows = native.rows ?? 3;
-  const slots = new Map();
-  let col = 0, row = 0, colW = 0, x = MARGIN;
-  for (const id of native.params) {
-    const [w, h] = NATIVE_SIZE[surface.params[id].kind];
-    if (row >= rows) { row = 0; col += 1; x += colW + MARGIN; colW = 0; }
-    slots.set(id, [x, MARGIN + row * PITCH_Y, w, h]);
-    colW = Math.max(colW, w);
-    row += 1;
-  }
-  return { slots, width: x + colW + MARGIN };
-}
-```
-
-In `applySurface()`, the dial loop gains three keys and nothing else changes:
-
-```js
-const { slots, width: nativeW } = computeNativeSlots(surface);
-for (const id of surface.ids) {
-  const spec = surface.params[id];
-  const rect = slots.get(id);
-  boxes.push({
-    box: {
-      id: paramObject(id),
-      maxclass: MAXCLASS[spec.kind],
-      // ... existing keys unchanged ...
-      patching_rect: rect ?? [x, 300, 44, 48],
-      ...(rect ? { presentation: 1, presentation_rect: rect, varname: `param-${id}` } : {}),
-      saved_attribute_attributes: { valueof: parameterAttrs(id, spec) },
-    },
-  });
-  // read/write wiring: UNCHANGED. A native dial is the same parameter with the
-  // same fan-out; the app may still read it with useParam() or write it.
-}
-
-// Shift [jweb] right to make room. Width is preserved: the device gets wider,
-// the web view does not get narrower (React layouts were built for 420 px).
-if (nativeW > 0) {
-  const jweb = boxes.find((b) => b.box.id === ctx.jwebId).box;
-  const [, py, pw, ph] = jweb.presentation_rect ?? [0, 0, 420, DEVICE_H];
-  jweb.presentation_rect = [nativeW, py, pw, ph];
-}
-```
-
-Notes for the implementer:
-
-- `varname` must not collide with the state dicts' varnames (`obj-state-<id>`);
-  the `param-` prefix above avoids it.
-- Do NOT touch the patching_rect fan-out or `claimAppMessages` ordering. The whole
-  point is that presentation is a display overlay on the same graph.
-- `live.dial` renders its `parameter_shortname` as the label; no separate comment
-  boxes are needed.
-
-### 1c. Tests (`m4l-jweb/packages/build/tests/`)
-
-Extend the existing surface codegen test with one fixture surface carrying
-`layout.native`:
-
-- every listed param's box has `presentation: 1` and a rect inside
-  `[0, 0, zoneWidth, 169]`;
-- no two presentation rects overlap;
-- params NOT listed have no `presentation` key;
-- `obj-jweb`'s presentation x equals the zone width, and its width is unchanged;
-- a surface with no `layout` produces byte-identical output to today (regression
-  guard: this feature must be invisible until asked for).
-
-### 1d. `m4l-strudel` adoption (the fx device)
-
-1. `src/app/fx/surface.ts`: add
-
-   ```ts
-   layout: { native: { params: ["cutoff", "drive", "delay", "delaytime", "delayfeedback", "room", "gain"], rows: 3 } },
-   ```
-
-   Seven params at 3 rows = 3 columns of dials, roughly 160 px of native zone.
-2. `src/app/fx/App.tsx`: delete the per-stage slider rendering (the `shown` /
-   `AddEffectPanel` machinery can stay or go - see the judgment call below). The
-   text line, the draft/commit model and `useStateSync(surface, "named")` stay
-   exactly as they are: the parameters remain the truth and the line remains a view
-   of them, now alongside native dials instead of HTML ones.
-3. Judgment call to make at implementation time: with all seven dials permanently
-   visible natively, the `named` state slot loses its display role (it existed to
-   decide which HTML sliders to show) but KEEPS its round-trip role (which stages
-   the line prints). Keep the slot; delete only the slider UI.
-4. Version note: this is a minor-version framework feature. Bump `@m4l-jweb/*` in
-   `m4l-strudel/package.json` when it ships (currently `^0.6.5`).
-
-### Risks, honestly stated
-
-- **Rigid layout**: true. All native stages are always visible. For fx this is
-  arguably a feature (the rack is frozen anyway).
-- **OS scaling**: not a real risk. Max patcher coordinates are logical points; Live
-  scales the whole device view uniformly.
-- **The one real unknown**: whether Live recomputes device width from presentation
-  content on an .amxd built with a wider rect (it should - the template's own rect
-  is what sets today's width). Verify in Live with a 2-param hello device before
-  building the whole grid; that is a 30-minute check.
+The declaration (`layout.native` with `panel`/`switch`), the `button` kind, the codegen
+and the `useNativePanel` flip live in `m4l-jweb`; the fx adoption is `src/app/fx/`. **The
+full design and the Live findings are in ARCHITECTURE.md** (this repo's fx section and
+`m4l-jweb`'s native-layout section). What is left for the library - Push banks, the
+`state()` default seed - is in the two TODO.md files.
 
 ---
 
@@ -494,11 +322,10 @@ preset.
 
 Dependencies, not preferences:
 
-1. **Part 1** (native layout) - self-contained, no spikes, immediately pays down
-   fx App complexity. Framework change + fx adoption in one release train, with
-   the state-default seeding fix riding along.
+1. ~~**Part 1** (native layout)~~ - **DONE (0.7.0), verified in Live**, as the
+   two-screen fx panel. See Part 1 above and ARCHITECTURE.md.
 2. **Spike R1** (browser/load_item) - one afternoon, decides Part 2's shape. The
-   spike spec lives in m4l-jweb's TODO item 2B.
+   spike spec lives in m4l-jweb's TODO item 1.
 3. **The `remote` chain** (modulation) - documented, valuable regardless of R1's
    outcome, and it unblocks Phase 7.2.
 4. **Part 2 reconciler** - only if R1 passes; else the "adopt, don't create"
@@ -511,9 +338,9 @@ Dependencies, not preferences:
 
 Upstream items this plan depends on (all filed in m4l-jweb's TODO):
 
-- item 7: `layout.native` codegen (Part 1) - NEXT UP there.
-- item 2B / Spike R1: instantiation (Part 2).
-- item 3: the `remote` chain (Parts 2 and 3).
-- item 8: installers copy `presets/` (Part 3's .adg delivery).
-- item 1: instance-scoped buffer names (Part 3's instrument slot).
-- the state-default seeding bug (Parts 2 and 3).
+- ~~`layout.native` codegen (Part 1)~~ - **shipped**.
+- item 1 / Spike R1: instantiation (Part 2).
+- item 2: the `remote` chain (Parts 2 and 3).
+- item 5: installers copy `presets/` (Part 3's .adg delivery).
+- row 11: instance-scoped buffer names (Part 3's instrument slot).
+- item 3: the state-default seeding bug (Parts 2 and 3).
