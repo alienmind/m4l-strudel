@@ -13,11 +13,20 @@
  * parameter actually has and `exponent` bends the KNOB's travel without touching
  * the value, so every readout is honest and the DSP takes the number directly.
  */
-import { defineSurface, dial, state } from "@m4l-jweb/surface";
+import { defineSurface, dial, state, toggle } from "@m4l-jweb/surface";
 import type { FxParam } from "@/lib/fx";
 
 export default defineSurface({
 	params: {
+		/**
+		 * THE VIEW SWITCH - the "two screens" toggle. On = the native knob panel
+		 * (all dials, [jweb] hidden); off = the web UI ([jweb] full width, dials
+		 * hidden). A native live.toggle so it stays visible in BOTH modes, which the
+		 * switch back from the knob panel needs (the web UI is hidden there). Runtime
+		 * reflow/resize of native objects does not work in a frozen M4L device - only
+		 * hide/show does - so we layer the two views instead of packing one.
+		 */
+		knobs: toggle({ default: false, short: "Knobs" }),
 		cutoff: dial({
 			// The audible band. 18 kHz is "off" for a one-pole: above it there is
 			// nothing left to take away.
@@ -77,18 +86,13 @@ export default defineSurface({
 	banks: [{ name: "FX", params: ["cutoff", "drive", "delay", "delaytime", "delayfeedback", "room", "gain"] }],
 
 	/**
-	 * SHED THE HTML SLIDERS. Every fx parameter renders as a NATIVE live.dial in the
-	 * device view, laid out by the compiler in three columns (seven dials at rows: 3),
-	 * with [jweb] shifted right to sit beside them. They are the same parameters with
-	 * the same fan-out graph - a dial turn still reaches the app, so the line still
-	 * redraws from it - now drawn by Max instead of React. App.tsx keeps only the
-	 * Strudel line; the bottom slider grid is gone.
-	 *
-	 * The rack is frozen anyway (ARCHITECTURE.md, the frozen-graph law), so every
-	 * stage being permanently visible is honest here rather than a limitation: there
-	 * is no stage to hide, only a value to leave neutral.
+	 * THE TWO SCREENS. Every fx parameter is a NATIVE live.dial, plus the `knobs`
+	 * view switch. The app layers them (useNativePanel): the web UI OR the native
+	 * knob panel, never both, flipped by hiding/showing [jweb] and the dials. `knobs`
+	 * is listed first so it lands top-left and stays reachable in the panel; it is
+	 * kept visible in both modes as the switch back.
 	 */
-	layout: { native: { params: ["cutoff", "drive", "delay", "delaytime", "delayfeedback", "room", "gain"], rows: 3 } },
+	layout: { native: { params: ["knobs", "cutoff", "drive", "delay", "delaytime", "delayfeedback", "room", "gain"], rows: 3, panel: true } },
 
 	/**
 	 * WHICH STAGES THE USER NAMED - the line, in the only form worth saving.
