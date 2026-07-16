@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { uiReady } from "@m4l-jweb/bridge";
-import { useNativeVisibility, useParam, useStateSync } from "@m4l-jweb/surface/react";
+import { useNativeLayout, useParam, useStateSync } from "@m4l-jweb/surface/react";
 import { cn } from "@/lib/utils";
 import {
 	formatFxChain,
@@ -91,16 +91,17 @@ export default function App() {
 		uiReady();
 	}, []);
 
-	// The native dials are always visible by default (presentation is a build-time
-	// attribute). Drive their visibility from the SAME `shown` set the old HTML
-	// sliders used: a stage the line does not name and no knob has moved off neutral
-	// is hidden, exactly as its slider used to be. A hidden dial still automates,
-	// MIDI-maps and reaches Push - only the device view drops it. (Runtime show/hide
-	// is a spike: see useNativeVisibility / applyNativeControl.)
-	const setNativeVisible = useNativeVisibility(surface);
+	// Drive the native dials from the SAME `shown` set the old HTML sliders used: a
+	// stage the line does not name and no knob has moved off neutral is hidden,
+	// exactly as its slider used to be. useNativeLayout also REFLOWS the visible
+	// dials (packed top-left, no gaps) and grows [jweb] into the reclaimed space, so
+	// an empty line gives the whole width to the UI. A hidden dial still automates,
+	// MIDI-maps and reaches Push - only the device view drops it. `shown` is already
+	// in RACK order, which is the display order the layout wants.
+	const applyNativeLayout = useNativeLayout(surface);
 	useEffect(() => {
-		for (const { param } of RACK) setNativeVisible(param, shown.includes(param));
-	}, [shown, setNativeVisible]);
+		applyNativeLayout(shown);
+	}, [shown, applyNativeLayout]);
 
 	const text = draft ?? formatFxChain(params, named);
 	const fx = useMemo(() => parseFxChain(text), [text]);
