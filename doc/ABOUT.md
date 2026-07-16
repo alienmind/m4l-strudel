@@ -21,6 +21,8 @@ richer effects rack; see [doc/TODO.md](TODO.md).
 
 ## What's in the box
 
+![All Devices](screenshot-all-devices.png)
+
 | Device | Type, drop it on | What it does for you |
 |---|---|---|
 | **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect, a **MIDI track**, before an instrument | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
@@ -63,6 +65,7 @@ Two workflows in one device:
   track, and read clips back into mini-notation via a dedicated popup.
 
 ![Clip Export and Import](screenshot-midi-export-import.png)
+![MIDI Clip generated from Strudel pattern](screenshot-devices-export-midi.png)
 
 ### The editor
 
@@ -166,6 +169,8 @@ file is already on disk in `samples/` beside the device → drag the row out.
 ## Strudel Audio FX (`alienmind-strudel-fx.amxd`)
 
 ![Strudel Audio FX device](screenshot-fx.png)
+![Strudel Audio FX Add Menu](screenshot-fx-2.png)
+![Strudel Audio FX Sliders](screenshot-fx-3.png)
 
 A genuine **audio effect** that brings Strudel's chainable DSP vocabulary to any audio track.
 
