@@ -13,20 +13,21 @@
  * parameter actually has and `exponent` bends the KNOB's travel without touching
  * the value, so every readout is honest and the DSP takes the number directly.
  */
-import { defineSurface, dial, state, toggle } from "@m4l-jweb/surface";
+import { button, defineSurface, dial, state } from "@m4l-jweb/surface";
 import type { FxParam } from "@/lib/fx";
 
 export default defineSurface({
 	params: {
 		/**
-		 * THE VIEW SWITCH - the "two screens" toggle. On = the native knob panel
-		 * (all dials, [jweb] hidden); off = the web UI ([jweb] full width, dials
-		 * hidden). A native live.toggle so it stays visible in BOTH modes, which the
-		 * switch back from the knob panel needs (the web UI is hidden there). Runtime
-		 * reflow/resize of native objects does not work in a frozen M4L device - only
-		 * hide/show does - so we layer the two views instead of packing one.
+		 * THE VIEW SWITCH - the "two screens" control, shown only in the knob panel
+		 * (the web UI has its own button). A labelled `button` (live.text) reading
+		 * "Back", because a bare toggle is a mute orange square that says nothing;
+		 * clicking it returns to the Strudel chain editor. On = the native knob panel
+		 * ([jweb] hidden); off = the web UI. Runtime reflow/resize of native objects
+		 * does not work in a frozen M4L device - only hide/show does - so we layer the
+		 * two views instead of packing one.
 		 */
-		knobs: toggle({ default: false, short: "Knobs" }),
+		knobs: button({ default: false, label: "Back", short: "Back" }),
 		cutoff: dial({
 			// The audible band. 18 kHz is "off" for a one-pole: above it there is
 			// nothing left to take away.
