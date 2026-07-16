@@ -14,6 +14,21 @@ it (including the designs tried and rejected) is in [ARCHITECTURE.md](ARCHITECTU
 
 # What comes next (priority order)
 
+## R1b - `.crush()` and `.hpf()` as real chains  ← **LOW-HANGING FRUIT, DO FIRST**
+
+The only two effects the fx device still names and refuses. Both are easy static chains
+(`m4l-jweb` calls them the cheap siblings of what already ships: `hpf` next to
+`lowpass`, `crush` via `degrade~`/`downsamp~`, neutral at full bit depth). Small,
+self-contained, and it finishes the fx vocabulary.
+
+- **Upstream (`m4l-jweb`):** add the `hpf` and `crush` chains to
+  `packages/build/src/chains.mjs`, each neutral at rest (frozen-graph law), pinned by
+  `tests/neutrality.test.mjs`.
+- **Here:** declare `hpfreq` and `crush` params in `src/app/fx/surface.ts` (native
+  dials, so they join the panel), add the two chains to the manifest in the frozen
+  order, and drop them from the "refused" list in `src/lib/fx.ts`. Re-check the
+  neutral-at-rest values by ear.
+
 ## R2 - Spike: can a device populate the user's rack? (PLAN.md Part 2 gate)
 
 One afternoon, falsifiable, runnable HERE in a throwaway `wrapper/device.ts` handler on
