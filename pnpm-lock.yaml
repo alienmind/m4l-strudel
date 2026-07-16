@@ -28,14 +28,14 @@ importers:
         version: 2.6.1
     devDependencies:
       '@m4l-jweb/bridge':
-        specifier: ^0.6.5
-        version: 0.6.5
+        specifier: ^0.7.0
+        version: 0.7.0
       '@m4l-jweb/build':
-        specifier: ^0.6.5
-        version: 0.6.5
+        specifier: ^0.7.0
+        version: 0.7.0
       '@m4l-jweb/surface':
-        specifier: ^0.6.5
-        version: 0.6.5(@m4l-jweb/bridge@0.6.5)(react@19.2.7)
+        specifier: ^0.7.0
+        version: 0.7.0(@m4l-jweb/bridge@0.7.0)(react@19.2.7)
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.3.2(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0))
@@ -647,24 +647,24 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@m4l-jweb/bridge@0.6.5':
-    resolution: {integrity: sha512-0e8HVXBmWYin87SmvgtnqlZNzkXYyrxoSAowG1rWAygMlSJc8sCqGYWpPr4Qs8BR6vioZYjpLH6gaovU0AbitQ==}
+  '@m4l-jweb/bridge@0.7.0':
+    resolution: {integrity: sha512-b5aBrF9RFs08zhtwvd9XSRgGDQz/WLIwXJAlSgn3kq18+px2zIgivD67yKufPk2oTqBmWhj5BzQKcGVZ1vd4yQ==}
 
-  '@m4l-jweb/build@0.6.5':
-    resolution: {integrity: sha512-UGp6ezr8fDdF9CISjI70Yiwbtsqp+pdrG9HLlYikHis9r0WqKI2FH2+46H+CEldbBT8FHuFH0ro4n+rS1kr7NA==}
+  '@m4l-jweb/build@0.7.0':
+    resolution: {integrity: sha512-pI1RKHz5tx1RzVmegbEuct3loTJNg5V24c4PntOGssS+qSgqbWhNQm33ORty83Ok9N2mun8qfp8waVdbAxxk2A==}
     hasBin: true
 
-  '@m4l-jweb/surface@0.6.5':
-    resolution: {integrity: sha512-lPUfOhCA54uDhJYHRsJVEZJ4e0fpDvZdAldSgq2QduCivZNIb80QBn4DDE45stRJeTFRVT18iqPDZtmZ/1Baaw==}
+  '@m4l-jweb/surface@0.7.0':
+    resolution: {integrity: sha512-R7cDKmedGnlRiQnH9cxpoPH2qItCFlgc603fYAsT/YS8CnsJHUte0pCZq2ln88/FtWgIvVggzbZaozV4IRm2ag==}
     peerDependencies:
-      '@m4l-jweb/bridge': 0.6.5
+      '@m4l-jweb/bridge': 0.7.0
       react: '>=18'
     peerDependenciesMeta:
       react:
         optional: true
 
-  '@m4l-jweb/wrapper@0.6.5':
-    resolution: {integrity: sha512-FZYRq1ka/SIKySHmtvR1iKPkzYlx/tDemMBR5Q5mvudLu1fcyfIJdI14LO0zVE2I/sxylHJpnNFjy0AoM8T0oQ==}
+  '@m4l-jweb/wrapper@0.7.0':
+    resolution: {integrity: sha512-km8GrMsKBj3Bouy9uharj3oi7y03IFOnSPXt71ZL3V4nZKFV116Sl/Uy3YT6HsB/gTyGTtOh7jMx9yYUExrWtw==}
 
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
@@ -2237,11 +2237,11 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@m4l-jweb/bridge@0.6.5': {}
+  '@m4l-jweb/bridge@0.7.0': {}
 
-  '@m4l-jweb/build@0.6.5':
+  '@m4l-jweb/build@0.7.0':
     dependencies:
-      '@m4l-jweb/wrapper': 0.6.5
+      '@m4l-jweb/wrapper': 0.7.0
       acorn: 8.17.0
       archiver: 7.0.1
       esbuild: 0.25.12
@@ -2251,13 +2251,13 @@ snapshots:
       - bare-buffer
       - react-native-b4a
 
-  '@m4l-jweb/surface@0.6.5(@m4l-jweb/bridge@0.6.5)(react@19.2.7)':
+  '@m4l-jweb/surface@0.7.0(@m4l-jweb/bridge@0.7.0)(react@19.2.7)':
     dependencies:
-      '@m4l-jweb/bridge': 0.6.5
+      '@m4l-jweb/bridge': 0.7.0
     optionalDependencies:
       react: 19.2.7
 
-  '@m4l-jweb/wrapper@0.6.5': {}
+  '@m4l-jweb/wrapper@0.7.0': {}
 
   '@pkgjs/parseargs@0.11.0':
     optional: true
