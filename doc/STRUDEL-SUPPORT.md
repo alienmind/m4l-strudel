@@ -50,12 +50,14 @@ $: note("<e4 g4>").midichan(2)
 .lpf(800)              // one-pole lowpass at 800 Hz
 .lpf(2000).gain(1.2)   // ... and a little push
 .cutoff(440)           // `cutoff` and `lpf` are the same control
+.delay(0.4).room(0.5)  // delay and reverb, real Max chains
 ```
 
-`.room()`, `.delay()` and `.crush()` are recognised but have no Max chain behind
-them yet - the device tells you so rather than pretending they worked. A modulated
-value (`.lpf(sine.range(200,2000))`) is refused for the same reason: see
-[doc/TODO.md](doc/TODO.md).
+`.lpf()`, `.drive()`, `.delay()`, `.room()` and `.gain()` make sound. `.crush()` and
+`.hpf()` are recognised but have no Max chain behind them yet - the device tells you
+so rather than pretending they worked. A modulated value
+(`.lpf(sine.range(200,2000))`) is refused for the same reason (it needs the `remote`
+chain): see [doc/TODO.md](doc/TODO.md).
 
 ---
 
