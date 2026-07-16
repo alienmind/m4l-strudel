@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { uiReady } from "@m4l-jweb/bridge";
-import { useParam, useStateSync } from "@m4l-jweb/surface/react";
+import { useNativeVisibility, useParam, useStateSync } from "@m4l-jweb/surface/react";
 import { cn } from "@/lib/utils";
 import {
 	formatFxChain,
@@ -75,7 +75,13 @@ export default function App() {
 	 *  Persisted in the Live set (surface.ts), because it is the only part of the line
 	 *  the parameters cannot reconstruct: a stage sitting at its neutral value was
 	 *  either typed on purpose or never touched, and Live has no way to tell. */
-	const [named, setNamed] = useStateSync(surface, "named");
+	const [namedState, setNamed] = useStateSync(surface, "named");
+	// A FRESH instance's slot comes back as an empty dict `{}`, not our declared
+	// `[]` default - the state-default seeding bug (m4l-jweb TODO row 14). Our
+	// default is an ARRAY, so coerce: an object means "nothing named yet". Without
+	// this, `named.includes(...)` below throws a few ms after mount (right after the
+	// `get_state named -> {}` reply lands) and React unmounts to a black screen.
+	const named = useMemo(() => (Array.isArray(namedState) ? namedState : []), [namedState]);
 	const shown = useMemo(
 		() => RACK.map((s) => s.param).filter((p) => named.includes(p) || params[p] !== NEUTRAL[p]),
 		[named, params],
@@ -84,6 +90,17 @@ export default function App() {
 	useEffect(() => {
 		uiReady();
 	}, []);
+
+	// The native dials are always visible by default (presentation is a build-time
+	// attribute). Drive their visibility from the SAME `shown` set the old HTML
+	// sliders used: a stage the line does not name and no knob has moved off neutral
+	// is hidden, exactly as its slider used to be. A hidden dial still automates,
+	// MIDI-maps and reaches Push - only the device view drops it. (Runtime show/hide
+	// is a spike: see useNativeVisibility / applyNativeControl.)
+	const setNativeVisible = useNativeVisibility(surface);
+	useEffect(() => {
+		for (const { param } of RACK) setNativeVisible(param, shown.includes(param));
+	}, [shown, setNativeVisible]);
 
 	const text = draft ?? formatFxChain(params, named);
 	const fx = useMemo(() => parseFxChain(text), [text]);
