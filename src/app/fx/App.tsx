@@ -100,7 +100,7 @@ export default function App() {
 	// dials we LAYER two views and flip between them: the web UI, or the native knob
 	// panel with every dial. `knobs` (a native toggle) drives it and stays visible in
 	// both, as the way back from the panel.
-	const applyPanel = useNativePanel(surface, ["knobs"]);
+	const applyPanel = useNativePanel(surface);
 	useEffect(() => {
 		applyPanel(knobs ? "native" : "web");
 	}, [knobs, applyPanel]);
@@ -144,24 +144,26 @@ export default function App() {
 	return (
 		<div className="device flex h-full w-full flex-col gap-1.5 overflow-hidden bg-background p-1.5 text-foreground">
 			<div className="flex items-center justify-between leading-none">
-				<button
-					onClick={() => setShowAbout(true)}
-					className="text-xs font-semibold tracking-tight hover:text-primary transition-colors cursor-pointer text-left"
-				>
-					Strudel Audio FX
-				</button>
-				<div className="flex items-center gap-2">
-					{/* Flip to the native knob panel: hides this web UI, shows every
-					    dial. The way back is the native "Knobs" toggle in the panel. */}
+				<div className="flex items-baseline gap-1.5">
 					<button
-						onClick={() => setKnobs(true)}
-						className="rounded bg-accent px-1.5 py-0.5 text-[10px] text-accent-foreground hover:brightness-110"
-						title="Show the native knob panel"
+						onClick={() => setShowAbout(true)}
+						className="text-xs font-semibold tracking-tight hover:text-primary transition-colors cursor-pointer text-left"
 					>
-						Knobs
+						Strudel Audio FX
 					</button>
 					<span className="text-[10px] text-muted-foreground">audio effect</span>
 				</div>
+				{/* Top-right, over the native "knobs" switch (surface.ts pins it to the
+				    same spot) so the control stays put when the views flip. Clicking it
+				    hides this web UI and shows the native knob panel; the native toggle
+				    there flips back. */}
+				<button
+					onClick={() => setKnobs(true)}
+					className="rounded bg-accent px-1.5 py-0.5 text-[10px] text-accent-foreground hover:brightness-110"
+					title="Show the native knob panel"
+				>
+					Knobs
+				</button>
 			</div>
 
 			<div className="flex items-center gap-1">
