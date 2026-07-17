@@ -165,6 +165,15 @@ export default defineSurface({
 	 */
 	state: {
 		named: state<FxParam[]>({ default: [] }),
+		/**
+		 * THE MODULATED STAGES' SOURCE TEXT, param -> expression - `{ cutoff:
+		 * "sine.range(200, 2000)" }`. The one part of a patterned stage nothing else can
+		 * reconstruct: a Pattern cannot say what it was written as, and the PARAMETER
+		 * holds only whatever value the modulation last passed through. Without this
+		 * slot, reopening the set would print the line from the parameters and quietly
+		 * rewrite `.lpf(sine.range(200, 2000))` into `.lpf(1372)`.
+		 */
+		sources: state<Partial<Record<FxParam, string>>>({ default: {} }),
 		/** What the caret is on, so the floating help can follow the typing. */
 		helpQuery: helpQuerySlot(),
 	},

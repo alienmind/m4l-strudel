@@ -42,7 +42,7 @@ Stopped at the first NO, as designed:
 
 The throwaway `spike_rack` block has been deleted from `wrapper/device.ts`.
 
-## R3 - Pattern-driven modulation (Phase 7.2) - UPSTREAM SHIPPED, PARSE LAYER DONE
+## R3 - Pattern-driven modulation (Phase 7.2) - BUILT END TO END, UNVERIFIED IN LIVE
 
 The `remote` chain exists upstream (`live.remote~` per declared slot, each value ramped
 by a `[line~]` so a control-rate stream leaves Max as continuous modulation, bound by
@@ -65,11 +65,23 @@ back as a `patterned` stage carrying the Strudel pattern AND its source text, an
 - **This modulates REAL Live devices too** - including ones the user placed by hand -
   so it is valuable with or without R2 passing.
 
-**What is left:** the fx App has never been an engine - it has no transport tick. It
-needs the tick, remote slot allocation, `resolveParamId()` + `bindRemote()` on load AND
-after every set reload (LOM ids do not survive one), and `writeRemote()` per tick.
-`remotes: <n>` is deliberately NOT in the manifest yet: declaring it now would generate
-`live.remote~` objects nothing drives.
+**The consumer is BUILT (2026-07-17), unverified in Live** - see
+[TESTING.md](TESTING.md) section 3. `src/app/fx/useModulation.ts` is the whole of it:
+
+- **The tick:** the wrapper already sent `tick <playing> <beats>` at 20 Hz to every
+  device; the fx app now listens. One cycle = one 4/4 bar (beats/4), locked to
+  `current_song_time` - so `.lpf(sine)` sweeps once a bar at any tempo and survives
+  loop jumps. No cps to honour: a one-line fx chain has no `setcpm()`.
+- **Slots:** `remotes: 9` is now in the manifest, mapped by RACK index - slot 0 is
+  cutoff, slot 8 is gain, forever. No allocator to get wrong.
+- **Bind/release:** `resolveParamId()` + `bindRemote()` when a stage becomes
+  modulated; `bindRemote(slot, 0)` when it stops, because a bound live.remote~ owns
+  the parameter exclusively and would freeze the dial. Set reload needs no observer:
+  it reloads [jweb], and the hook re-resolves on mount. Ids are never persisted.
+- **The missing half of persistence:** patterned SOURCES now survive - a `sources`
+  state slot (param -> expression). Before this, committing
+  `.lpf(sine.range(200, 2000))` reprinted as `.lpf(18000)` from the parameters - the
+  exact snapshot bug the parse layer was built to avoid.
 
 ## R4 - The m4l-strudel Rack (PLAN.md Part 3) - can start ANY TIME
 

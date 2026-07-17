@@ -9,6 +9,7 @@ import {
 	formatFxChain,
 	NEUTRAL,
 	parseFxChain,
+	patternSources,
 	RACK,
 	unsupportedMessage,
 	type FxParam,
@@ -17,6 +18,7 @@ import {
 import surface from "./surface";
 import { AddEffectPanel } from "./AddEffectPanel";
 import { AboutPanel } from "../shared/AboutPanel";
+import { useModulation } from "./useModulation";
 
 /**
  * Strudel Audio FX - an audio effect. Sits anywhere in an audio chain and applies
@@ -102,6 +104,24 @@ export default function App() {
 	// it costs: `named.includes(...)` throws a few ms after mount on anything that is
 	// not an array, and React unmounts the whole device.
 	const named = useMemo(() => (Array.isArray(namedState) ? namedState : []), [namedState]);
+
+	/** The modulated stages' source text, param -> expression (surface.ts `sources`).
+	 *  Same defensive coercion as `named`, for the same reason. */
+	const [sourcesState, setSources] = useStateSync(surface, "sources");
+	const sources = useMemo(
+		() => (sourcesState && typeof sourcesState === "object" && !Array.isArray(sourcesState) ? (sourcesState as Partial<Record<FxParam, string>>) : {}),
+		[sourcesState],
+	);
+
+	// THE MODULATION, derived from `sources` alone - not from the visible line. The
+	// visible line includes the draft (half-typed modulation must not move a dial) and
+	// redraws whenever a parameter moves (a modulated parameter moves 20 times a
+	// second, and re-evaluating the chain on each is work with no new answer). Printing
+	// only the sourced stages and parsing that is the cheap stable path to the same
+	// Pattern objects.
+	const patterned = useMemo(() => parseFxChain(formatFxChain(NEUTRAL, [], sources)).patterned, [sources]);
+	useModulation(patterned);
+
 	const shown = useMemo(
 		() => RACK.map((s) => s.param).filter((p) => named.includes(p) || params[p] !== NEUTRAL[p]),
 		[named, params],
@@ -121,16 +141,21 @@ export default function App() {
 		applyPanel(knobs ? "native" : "web");
 	}, [knobs, applyPanel]);
 
-	const text = draft ?? formatFxChain(params, named);
+	const text = draft ?? formatFxChain(params, named, sources);
 	const fx = useMemo(() => parseFxChain(text), [text]);
 
-	/** Commit the draft: the line becomes the parameters, and stops being the truth. */
+	/** Commit the draft: the line becomes the parameters, and stops being the truth.
+	 *  A patterned stage's expression goes to `sources` - the parameters cannot carry
+	 *  it, and it is what keeps `.lpf(sine.range(200, 2000))` from being reprinted as
+	 *  a snapshot of wherever the sweep happened to be. Replaced wholesale: the line
+	 *  is the complete statement of what is modulated. */
 	const commit = () => {
 		if (draft === null) return;
 		const parsed = parseFxChain(draft);
 		if (parsed.error) return; // stay in the draft, with the error showing
 		for (const { param } of RACK) setters[param](parsed.params[param]);
 		setNamed(parsed.used);
+		setSources(patternSources(parsed.patterned));
 		setDraft(null);
 	};
 
