@@ -115,16 +115,34 @@ The MIDI devices support both bare mini-notation (`0 [2 ~] bd*2`) and full Strud
 
 **The Frozen Graph Law:** The Max patcher DSP graph is generated at build time. The JS only provides values.
 - Every effect always exists in the graph. Setting an effect means altering its values. Missing effects are disabled by setting their parameter to a neutral state.
-- The order of effects is frozen (e.g., filter → drive → delay → reverb → gain). Typing `.gain(1.2).lpf(800)` produces the same routing as `.lpf(800).gain(1.2)`.
-- `.lpf()`, `.drive()`, `.delay()`, `.room()` and `.gain()` make sound (delay/reverb are the library's `delay`/`reverb` chains, confirmed audible in Live). `.crush()` and `.hpf()` are named and honestly refused until they have a chain.
+- The order of effects is frozen (`lowpass, hpf, drive, crush, delay, reverb, gain`). Typing `.gain(1.2).lpf(800)` produces the same routing as `.lpf(800).gain(1.2)`.
+- All nine stages make sound: `.lpf()`, `.hpf()`, `.drive()`, `.crush()`, `.delay()` (+ time/feedback), `.room()` and `.gain()`, all confirmed audible in Live.
+- **`hpf` is the lowpass's COMPLEMENT, not a highpass object.** Max's `onepole~` is lowpass-only, and a one-pole highpass is exactly `dry - lowpass(dry)`. That is what makes 0 Hz a TRUE neutral: a lowpass at 0 Hz passes nothing, so the subtraction returns the dry signal bit-for-bit. A highpass object would rest at its cutoff floor, still turning DC - an always-on colouration the frozen-graph law forbids.
+- **`crush` rests at 24 bits, NOT Strudel's 16.** Strudel calls `.crush(16)` "minimum crush", but 16-bit quantisation is a quiet crush, not a wire, and a stage always in the path needs a setting where it does nothing. `.crush(16)` still gives 16-bit quantisation exactly as superdough does.
 
-**The Two-Screen Native UI (m4l-jweb 0.7.0):** The seven fx parameters are NATIVE `live.dial` objects, declared in `src/app/fx/surface.ts` via `layout: { native: { ..., panel: true, switch: "knobs" } }`. This shed the HTML sliders, so the dials automate, MIDI-map and hit Push like any factory device.
+**Pattern modulation (`.lpf(sine.range(200, 2000))`):** a signal argument parses into a `patterned` stage carrying the Strudel pattern AND its source text; `src/app/fx/useModulation.ts` makes it move, on the library's `remote` chain (one `live.remote~` per slot, `remotes: 9` in the manifest, mapped by RACK index - no allocator). Verified end to end in Live. The design in one paragraph:
+
+- **The clock**: one cycle = one 4/4 bar (`beats/4`), locked to `current_song_time` from the wrapper's 20 Hz `tick` - sweeps land on the downbeat at any tempo and survive loop jumps. No cps to honour: a one-line fx chain has no `setcpm()`.
+- **Bind/stream/release**: `resolveParamId()` + `bindRemote()` when a stage becomes modulated; `queryFxPattern()` + `writeRemote()` per tick while the transport runs; `bindRemote(slot, 0)` when the stage stops - a bound `live.remote~` owns the parameter exclusively and would freeze the dial. LOM ids are resolved on mount and never persisted (a set reload reloads `[jweb]`, so the hook re-resolves; ids do not survive a reload).
+- **The units warp**: `live.remote~` takes knob TRAVEL, not the parameter's units (measured upstream - see m4l-jweb's ARCHITECTURE.md). `toRemote()` clamps into the dial's range and aims the travel at `norm(v)^(1/exponent)` so Live's re-applied exponent lands where the pattern asked. Exponent-1 dials pass through untouched.
+- **Source persistence**: a modulated stage's expression is the only record of what the user asked for - a Pattern cannot say what it was written as, and the parameter holds only where the sweep last was. The `sources` state slot (param -> expression) persists it; without it a committed `.lpf(sine.range(200, 2000))` reprinted as `.lpf(18000)`.
+- **Cost, so it is not a surprise:** `@strudel/core` in the fx app took the UI bundle from 269 kB to 448 kB. This machinery also modulates REAL Live devices by the same bind - the basis of Adopt mode (TODO).
+
+**The Two-Screen Native UI (m4l-jweb 0.7.0):** The nine fx parameters are NATIVE `live.dial` objects, declared in `src/app/fx/surface.ts` via `layout: { native: { ..., panel: true, switch: "knobs" } }`. This shed the HTML sliders, so the dials automate, MIDI-map and hit Push like any factory device. Nine dials broke the Push bank budget (8 per page - the library throws on a ninth), so the banks split where the rack splits: **Tone** (cutoff, hpfreq, drive, crush) and **Space** (delay, delaytime, delayfeedback, room, gain).
 
 Because a frozen M4L device can hide/show native objects at runtime but **cannot reposition them** (measured — see m4l-jweb's ARCHITECTURE.md), the device is not one reflowing view but **two layered screens**, flipped by `useNativePanel`:
 - **Web mode** — the `[jweb]` (full width) shows the Strudel line UI; all dials hidden.
-- **Knob panel** — the `[jweb]` is hidden, revealing all seven dials in two rows, plus a "Back" `button` (a `live.text`, top-right) that returns to the web UI. The web UI paints a matching "Knobs" button at the same spot.
+- **Knob panel** — the `[jweb]` is hidden, revealing all nine dials in two rows, plus a "Back" `button` (a `live.text`, top-right) that returns to the web UI. The web UI paints a matching "Knobs" button at the same spot.
 
-**The black-screen fix:** a FRESH fx instance's `named` state slot returns an empty dict `{}` (the upstream state-default seeding bug), not the declared `[]`. `named.includes(...)` then threw a few milliseconds after mount — right after the `get_state` reply — and React unmounted to a black screen. `App.tsx` coerces the slot to an array (`Array.isArray(named) ? named : []`); an object means "nothing named yet".
+**Defensive state coercion:** `App.tsx` coerces the `named` slot to an array and `sources` to an object before use. The two bugs that motivated it are both fixed upstream (the `[dict]` envelope, and state-default seeding - see m4l-jweb's ARCHITECTURE.md), but the coercion stays: a malformed slot must degrade to "nothing named yet", not unmount the device to a black screen.
+
+### 4b-2. The reference and help windows
+
+The three Strudel-taking devices have a `?` (shared `HelpButton`) opening a "Supported Strudel features" window - **our reference, not a link to strudel.cc**, because a Live set is often open with no internet, and because strudel.cc documents Strudel while this documents THESE DEVICES: `.crush()` is real here, `.vowel()` silently is not, and a bare number is a scale degree in our mini-notation but a raw MIDI pitch in full code. Each entry carries a `status` (works / not yet / syntax) and the list is filtered per device; `only` is REQUIRED on every entry so a new one cannot be added without answering which devices it belongs to. The sample browser has no `?`, deliberately: it takes no Strudel at all. `src/lib/__tests__/reference.test.ts` ties the data to the code it describes - every RACK stage must be listed as working, and nothing marked working may be an effect the parser refuses.
+
+The floating window is pinned (`alwaysOnTop`) and follows the caret: the device view writes the token being typed into a `helpQuery` state slot and the window narrows to it. It is a HEURISTIC, not a parser - half-typed code does not parse, and that is exactly when help is wanted. The wart, named: the slot persists, so the last word typed about is saved with the set - the library has no transient channel between views. Window placement stops at "420 px wide, remembers where you drag it": nothing reports where Live draws a device on screen.
+
+The **Full Studio window** is the same pattern grown up: a big editor over the same `code` state slot, so the window and device view are two views of ONE pattern. An EDITOR, not an engine - the device view alone receives `tick`, so there is one scheduler however many views are open (the claim to re-check: exactly ONE stream of notes; doubled notes mean the window has grown an engine).
 
 ### 4c. Sample Browser: Downloader and Preview
 
@@ -182,6 +200,46 @@ When testing manually, ensure:
 
 ---
 
+## Not possible - measured, so nobody re-opens it
+
+- **The LOM cannot create an audio clip from a file on disk.** `ClipSlot.create_clip`
+  is MIDI-only (it takes a length, makes an empty MIDI clip); there is no LOM call
+  that points a clip slot at a WAV. It is a drag-and-drop operation in the
+  application, not an API. The sample browser therefore goes as far as the API
+  allows: the file is on disk at a known path, the row is a drag source, and
+  reveal-in-folder is the fallback (whether the drag lands is the open
+  [SPIKE-DRAG-TO-CLIP.md](SPIKE-DRAG-TO-CLIP.md)).
+- **Live's Browser is unreachable from `[js]`** (the R2 spike, 2026-07-17).
+  `new LiveAPI("live_app browser")` resolves to id 0 -
+  `jsliveapi: component 'browser' is not an object`. The Browser (`load_item`,
+  hotswap) is exposed to control-surface Python scripts only, so a device can never
+  INSTANTIATE another device. Translate mode is therefore adopt-only: bind to
+  devices the user placed by hand, never create them.
+
+## Verified in Live - claims worth re-checking
+
+Each of these was confirmed by hand, and each could quietly stop being true. What to
+re-check, and when:
+
+- **Instance-scoped buffers** (if buffer naming in m4l-jweb's `chains.mjs` changes):
+  two copies of Strudel Samples on two tracks, different samples - each must keep its
+  own sound. `---` scopes per device; `#0` was tried first and never expands in an
+  `.amxd`.
+- **Chain neutrality** (if the fx chains change): `.hpf(0)` and `.crush(24)` must be
+  SILENT - bit-for-bit the dry signal, A/B'd against bypass. `.lpf(18000)`, `.gain(1)`,
+  `.delay(0)`, `.room(0)` likewise.
+- **Modulation** (if useModulation, the `remote` chain, or the surface ranges
+  change): `.lpf(sine.range(200, 2000))` + play must sweep Cutoff between the actual
+  200 Hz and 2 kHz once per bar, with the automation lane EMPTY; replacing the line
+  with `.lpf(800)` must give the dial back; save/close/reopen must restore the line
+  and resume the sweep on play.
+- **Editor persistence** (if state slots or the engine's restore path change): an
+  empty editor is a VALUE - select-all-and-cut, save, reopen must come back empty,
+  not restore the default. Multi-space runs in a pattern must survive verbatim.
+- **One scheduler** (if the Studio window changes): however many views are open,
+  exactly ONE stream of notes. The device view alone receives `tick`.
+- **Engine boot / timing / preview / persistence** - the four gates in §6 above.
+
 ## Appendix: Past Architectural Decisions
 
 The following architectural designs were moved away from. They are documented here to preserve context on why the system is built the way it is today.
@@ -197,3 +255,9 @@ An earlier device attempted to act as an instrument by driving a `[poly~]` synth
 
 ### Normalized (0-1) Parameters
 A previous design mapped all audio parameters to a 0-1 range and applied scaling secretly inside the Max patch. This broke Live automation lanes and Push controllers, which displayed meaningless 0-1 values instead of real units (e.g. Hz). All parameters are now declared in their real units.
+
+### The `ui:` merge that must not happen (the "unified app")
+Sharing one `ui:` folder between the midi and fx devices was specified and then rejected on mechanism: the build loads ONE SURFACE per UI folder and generates a `live.*` object for every param in it, for every device using it - so the MIDI device would ship nine audio dials that drive nothing, and the FX device a Play toggle that does nothing, all visible in automation lanes and on Push. The stated intent ("share CODE across container types while each device keeps its identity") is what `src/app/shared/` already does. Revisit only if the library ever separates a device's surface from its UI folder.
+
+### `#0` buffer scoping
+The first attempt at instance-scoped buffer names used `#0`, documented for abstractions. An `.amxd` device patcher does not count as one: the token stayed literal everywhere, writer and reader agreed on one global name, and the collision survived silently. Replaced by Live's `---` device-scoped prefix (verified). The wrapper-minted-id route was ruled out earlier still: a `[buffer~]` takes its name from its creation argument and has no documented runtime rename, so a name minted after load cannot reach a box frozen at build time.
