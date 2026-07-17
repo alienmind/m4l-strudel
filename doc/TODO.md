@@ -9,32 +9,30 @@ chains, and the m4l-strudel Rack - and this file is sequenced against it. **Open
 is at the top, in priority order; what has shipped and been tested is at the
 [END](#done).** What a device does is in [README.md](../README.md); how and why it does
 it (including the designs tried and rejected) is in [ARCHITECTURE.md](ARCHITECTURE.md).
+**What a human still has to check in Live - every interactive test and both open spikes -
+is in [TESTING.md](TESTING.md).**
 
 ---
 
 # What comes next (priority order)
 
-## R1b - `.crush()` and `.hpf()` as real chains  ← **LOW-HANGING FRUIT, DO FIRST**
+> **STATE (2026-07-17).** Everything built is **confirmed working in Live**. What is left
+> at the top of this file is: **two spikes**, the half of R3 that needs a transport tick,
+> and the Rack.
+>
+> **-> The two spikes are written up in [TESTING.md](TESTING.md).** Both are gates: R2
+> decides whether Translate mode exists at all, and the `#0` spike (m4l-jweb item 0)
+> decides whether P3's drum rack can be built at all.
+>
+> Released as **0.9.0**, alongside `m4l-jweb` 0.9.0 - the two versions move together from
+> here.
 
-The only two effects the fx device still names and refuses. Both are easy static chains
-(`m4l-jweb` calls them the cheap siblings of what already ships: `hpf` next to
-`lowpass`, `crush` via `degrade~`/`downsamp~`, neutral at full bit depth). Small,
-self-contained, and it finishes the fx vocabulary.
+## R2 - Spike: can a device populate the user's rack? (PLAN.md Part 2 gate) - HARNESS BUILT, NOT RUN
 
-- **Upstream (`m4l-jweb`):** add the `hpf` and `crush` chains to
-  `packages/build/src/chains.mjs`, each neutral at rest (frozen-graph law), pinned by
-  `tests/neutrality.test.mjs`.
-- **Here:** declare `hpfreq` and `crush` params in `src/app/fx/surface.ts` (native
-  dials, so they join the panel), add the two chains to the manifest in the frozen
-  order, and drop them from the "refused" list in `src/lib/fx.ts`. Re-check the
-  neutral-at-rest values by ear.
-
-## R2 - Spike: can a device populate the user's rack? (PLAN.md Part 2 gate)
-
-One afternoon, falsifiable, runnable HERE in a throwaway `wrapper/device.ts` handler on
-any existing device. The five questions, in order, are specified in `m4l-jweb` TODO
-item 1 (stop at the first NO: browser reachable? `load_item` callable? landing site
-steerable? clicks during playback? sane undo?).
+`spike_rack` in `wrapper/device.ts` - a THROWAWAY block, marked as one, to be deleted
+once its answers are written down here. It answers Q1-Q3 by itself and stops at the
+first NO; Q4 (clicks during playback) and Q5 (undo grouping) print what to do and need
+your ears and eyes. **How to run it: [TESTING.md](TESTING.md) section 1.**
 
 - **If it passes:** Translate mode (R4-d) gets its reconciler - consumer-side code in
   `wrapper/device.ts`, diff rules per PLAN.md Part 2 (only touch what you own; never
@@ -43,18 +41,34 @@ steerable? clicks during playback? sane undo?).
   Auto Filter in the rack once; the device binds `.lpf()` to it and the UI says what to
   add. Most of the value survives.
 
-## R3 - Pattern-driven modulation (Phase 7.2) - WAITING on `m4l-jweb`'s `remote` chain
+## R3 - Pattern-driven modulation (Phase 7.2) - UPSTREAM SHIPPED, PARSE LAYER DONE
 
-`.lpf(sine.range(200, 2000))` is a *signal*, not 20 Hz of parameter writes that step
-audibly and fight the automation lane. The design is concrete upstream (the `remote`
-chain: `live.remote~` per declared slot, values ramped by `[line~ 20]`, bound by LOM
-id, automation writing suppressed by design). When it ships:
+The `remote` chain exists upstream (`live.remote~` per declared slot, each value ramped
+by a `[line~]` so a control-rate stream leaves Max as continuous modulation, bound by
+LOM id, automation writing suppressed by design). `bindRemote()` / `writeRemote()` /
+`resolveParamId()` are on the bridge.
 
-- declare `remotes: <n>` in the manifest, stream values from the engine on the
-  transport tick, and route patterned fx args to `writeRemote()` instead of refusing
-  them in `parseFxChain()`.
+Here, `parseFxChain()` no longer refuses a signal: `.lpf(sine.range(200, 2000))` comes
+back as a `patterned` stage carrying the Strudel pattern AND its source text, and
+`queryFxPattern(stage, cycle)` is what a tick asks for its value.
+
+- **The line stopped being a pure projection of the parameters, and had to.** A Pattern
+  cannot say what it was written as, so printing a modulated stage from its parameter
+  would rewrite `.lpf(sine.range(200, 2000))` into `.lpf(1372)` - the user's modulation
+  silently replaced by a snapshot of it, on nothing more than a re-render. Patterned
+  stages persist their SOURCE (recovered with acorn, which walks the same chain the
+  recorder does); constant stages are still derived from the parameters, so the
+  round-trip invariant holds everywhere it was ever true.
+- **Cost, so it is not a surprise:** `@strudel/core` in the fx app took the UI bundle
+  from 269 kB to 448 kB and the `.amxd` from 465 kB to 707 kB.
 - **This modulates REAL Live devices too** - including ones the user placed by hand -
   so it is valuable with or without R2 passing.
+
+**What is left:** the fx App has never been an engine - it has no transport tick. It
+needs the tick, remote slot allocation, `resolveParamId()` + `bindRemote()` on load AND
+after every set reload (LOM ids do not survive one), and `writeRemote()` per tick.
+`remotes: <n>` is deliberately NOT in the manifest yet: declaring it now would generate
+`live.remote~` objects nothing drives.
 
 ## R4 - The m4l-strudel Rack (PLAN.md Part 3) - can start ANY TIME
 
@@ -65,17 +79,8 @@ device pre-added, each with its proper type - Sequencer (MIDI effect) -> Instrum
 library. A single toggling device is impossible (container types are build-time) and
 the rack is better anyway: users can swap, remove and reorder the parts.
 
-Steps, none of which wait on R2/R3:
+Steps. R4-a and R4-b are settled (see DONE); these are what is left:
 
-- **R4-a: the unified app.** Merge the midi and fx apps into `src/app/unified/`, shipped
-  into the existing containers via manifest `ui:` sharing, branched by the `mode` the
-  wrapper already sends. KEEP THE SHIPPED DEVICE NAMES - renaming breaks user sets and
-  the preset. Mind the Push bank budget when the surfaces merge.
-- **R4-b: the Full Studio window.** `windows: { studio: ... }` + `StudioWindow.tsx` - an
-  EDITOR, not an engine: it binds the code through a shared `state()` slot and the
-  device-view engine (which alone receives `tick`) does all scheduling, so Live's
-  quantization and scale are enforced for free. The window makes no sound, ever
-  (`[jweb]` audio cannot reach the track - measured).
 - **R4-c: the preset.** Compose the rack in Live with a native Ableton instrument in the
   middle slot (honest and useful until ours exists), save the .adg, commit under
   `presets/`. **Upstream:** `m4l-jweb` item 5 (installers copy `presets/` next to the
@@ -85,25 +90,26 @@ Steps, none of which wait on R2/R3:
 - **Later, the instrument slot:** replaced by the Strudel instrument when Phase 8
   Route B ships AND `m4l-jweb` ships instance-scoped buffer names (see P3).
 
-## P2-b - The sample browser in a window
+## P3 - The polyphonic Strudel sampler - UNBLOCKED, and the fix is itself a spike
 
-Same shape as the shipped drum-rack window: the catalog/list/audition UI moves to a
-floating window, the device view keeps the small transport. Reuses the drag-source and
-reveal-in-folder work already there; the build harness is in place. Independent of the
-roadmap above - do it whenever it is the most valuable next thing.
+**The upstream fix is in** (m4l-jweb item 0): buffer names are now instance-scoped -
+`#0-buf-<device>-<slot>` in the device patcher, `#1-buf-...` in the `[poly~]` voice,
+with the device passing its own `#0` to `poly~` as an argument. The `#0` route was
+chosen over a wrapper-minted id on evidence, not preference: **a `[buffer~]` takes its
+name from its creation argument and has no documented runtime rename**, so a name minted
+after load cannot reach a box frozen at build time. `#0` is the only mechanism that can
+work.
 
-## P3 - The polyphonic Strudel sampler - PARKED on an upstream fix
+**It is unverified, and it is the P3 gate**: `#0` is documented for abstractions, and
+whether an `.amxd` device counts as one is the question. **See
+[TESTING.md](TESTING.md) section 2** - it is two copies of the sampler and your ears, and
+a NO has a loud failure mode (the name keeps a literal `#0` and nothing resolves).
 
-The `instrument` chain substrate is built and its polyphony confirmed in Live, but **the
-buffer-name collision is still open**: `instrumentChain()` names buffers
-`buf-<device>-<slot>`, global to Max and fixed at BUILD time, so two copies of the drum
-rack on two tracks would corrupt each other's samples, silently. A drum rack is exactly
-the multi-instance case - and the Rack (R4) makes multi-instance the NORMAL case.
-
-**Decision (2026-07-15): defer the device, the fix is filed upstream** in
-[m4l-jweb TODO](../../m4l-jweb/doc/TODO.md) row 11, with two candidate routes (`#0`
-instance argument vs. a wrapper-minted id) to be settled by a spike there. **P3 resumes
-the day `m4l-jweb` ships instance-scoped buffer names.**
+**The device itself is still to build** once that is a YES: a new instrument device on
+the `instrument` chain, a slot per pad, notes routed to `playVoice()`. The substrate and
+its polyphony are already confirmed in Live; what was missing was only the ability to put
+two of them in a set, which is the normal case for a drum rack and what R4's Rack makes
+normal for everything.
 
 ## Phase 8 - Strudel's own audio in the track - Route B first
 
@@ -122,7 +128,9 @@ Full Strudel code does not see the Octave/Shift controls or the Live Scale toggl
 passed through untouched - correct, since it is real Strudel code and rewriting a user's
 JS would be worse - but `note("c5")` there is MIDI **72** (scientific), while `c5` in
 bare mini-notation follows the octave convention. The UI warns in amber; it cannot fix
-it. R4-b raises the stakes: the Full Studio window invites more full-code use.
+it. **R4-b has now raised those stakes for real**: the Full Studio window is a big
+editor, it invites full-code use, and it carries the same amber warning because that is
+still all anyone can honestly do about it.
 
 ### 2. Playhead highlighting for full Strudel code (Medium)
 The playhead highlight only works for bare mini-notation, computed from our own AST whose
@@ -131,14 +139,6 @@ characters. Strudel's editor solves this with hap `context.locations` from the
 transpiler - wiring that up means mapping locations in the *rewritten* string back to the
 user's text, real work for a feature that mostly matters in the dialect that already has
 it.
-
-## A cheap upstream ask, not a block
-
-- **`.hpf()` and `.crush()` as library chains.** `m4l-jweb` says they are easy
-  follow-ons to `delay`/`reverb`. The unblock is: declare the two params in
-  `fx/surface.ts` and ask. Until then the FX device honestly refuses them. R2 may make
-  this moot for Live-native effects (Redux IS `.crush()` in Translate mode); the static
-  chains remain the answer outside a rack.
 
 ---
 
@@ -161,6 +161,123 @@ fallback is a reveal-in-folder button; the file is on disk at a known path eithe
 ---
 
 # DONE (and tested)
+
+## R4-a / R4-b - the unified app, and the Full Studio window (2026-07-17)
+
+- **R4-a: the unified app - NOT AS SPECIFIED. Do not do the `ui:` merge.**
+  **The mechanism does not work**, and it is worth writing down why rather than
+  rediscovering it: the build does `loadSurface(root, d.ui ?? d.name)` - **one surface
+  per UI FOLDER** - and `applySurface()` generates a `live.*` object for every param in
+  it, for every device using it. So sharing `ui: "unified"` between the midi and fx
+  devices means sharing ONE SURFACE: the MIDI device would ship **nine audio dials that
+  drive nothing** (it has no audio chains to drive), and the FX device a Play toggle that
+  does nothing. Both would show up in automation lanes, in the parameter list, and on
+  Push. That is a regression for every user, traded for a refactor.
+  **The stated intent is already met**: "share CODE across container types while each
+  shipped device keeps its identity" is what `src/app/shared/` does, and it grew again
+  this round - `useStrudelEngine`, `PatternEditor`, `AboutPanel`, `ClipPanel`, and now
+  `HelpWindow`, `HelpButton`, `StudioWindow`. Share components there. Revisit only if the
+  library ever separates a device's surface from its UI folder.
+- **R4-b: the Full Studio window - WAS BROKEN, NOW FIXED.** It shipped empty and dead in
+  both directions, and the cause was the `[dict]` bug at the top of this file: the `code`
+  slot is a STRING, a dict cannot hold one, so the window and the device view were each
+  reading their own default and neither could write. Fixed upstream. It also grew a
+  **contextual help panel** (see P2-b) - the reference, following the caret, in the one
+  place where you are actually typing.
+  `StudioWindow.tsx`,
+  shared, with a per-device entry file that does the `code` binding (a surface is
+  invariant in its params, so a component taking "any surface with a code slot" is either
+  one device's or `any` - the entry file is the seam). An EDITOR, not an engine: the
+  device view alone receives `tick` and does all scheduling, so there is one scheduler
+  however many views are open, and Live's quantization and scale are enforced for free.
+  It makes no sound, ever.
+  **It fixed a real bug on the way, which nobody had written down: the pattern text was
+  never saved.** It lived in `useState`, so reopening a set silently restored the
+  built-in default over whatever the user wrote. It is now the `code` `state()` slot -
+  which is also the only thing two Chromium contexts can share, so the same change is
+  what makes the window and the device view two views of ONE pattern. Moving it there is
+  what exposed the `[dict]` bug: the slot was the right home, and the home was broken.
+
+## R1b - `.crush()` and `.hpf()` as real chains - CONFIRMED WORKING IN LIVE (2026-07-17)
+
+Both are real static chains now, in the frozen order
+(`lowpass, hpf, drive, crush, delay, reverb, gain`). What landed, and the two decisions
+worth knowing:
+
+- **`hpf` is the lowpass's COMPLEMENT, not a highpass object.** Max's `onepole~` is
+  lowpass-only, and a one-pole highpass is exactly `dry - lowpass(dry)`. That is also
+  what makes 0 Hz a *true* neutral: a lowpass at 0 Hz passes nothing, so the
+  subtraction returns the dry signal bit-for-bit. A highpass object would rest at its
+  cutoff floor, still turning DC and the bottom octave - an always-on colouration the
+  frozen-graph law forbids.
+- **`crush` rests at 24 bits, NOT Strudel's 16.** Strudel calls `.crush(16)` "minimum
+  crush", but 16-bit quantisation is not a wire, and a stage always in the path needs a
+  setting where it does nothing. `.crush(16)` still gives 16-bit quantisation exactly as
+  superdough does; a line that never says `.crush()` gets its signal back untouched.
+- Nine dials broke the **Push bank budget** (8 per page - the library throws on a
+  ninth), so the banks split where the rack splits: **Tone** (cutoff, hpfreq, drive,
+  crush) and **Space** (delay, delaytime, delayfeedback, room, gain).
+
+## P2-b - Help buttons - CONFIRMED IN LIVE (2026-07-17)
+
+**On the three devices that take Strudel. NOT on the sample browser**, which was the last
+correction: that device takes no Strudel at all - it is a catalog, a download and an
+audition - so a Strudel reference there answered a question nobody was asking, and worse,
+implied a box to type into that does not exist.
+
+**Two rounds of feedback changed it**, all from real use:
+
+- **The split was wrong and the fix is structural.** `only` used to be optional, meaning
+  "every device", so mini-notation was listed on the FX device - whose line is
+  `.lpf(800).gain(1.2)`, a method chain, where `<a b>` has never meant anything. `only`
+  is now REQUIRED on every entry, so a new one cannot be added without answering the
+  only question the list exists to answer. FX gets Effects + Modulation; the MIDI devices
+  get Mini-notation + Patterns; the browser gets nothing, because it takes no Strudel.
+- **The framing was wrong.** It is not "what this device can do" - it is **which
+  strudel.cc features this collection supports**. Strudel is the language; these devices
+  implement a subset, and a different subset each.
+- **It floats** (`alwaysOnTop`, new upstream). Without it the window is useless in the
+  way that matters: clicking back into Live to type is exactly what buried it.
+
+The three Strudel-taking devices have a `?` (shared `HelpButton`) opening a "Supported
+Strudel features" window (`src/app/shared/HelpWindow.tsx`, one component, a thin entry
+file per device).
+
+**It is OUR reference, not a link to strudel.cc, and that is the point.** Two reasons,
+and the second is the one that matters: a Live set is often open with no internet, and -
+**strudel.cc documents Strudel, while this has to document THESE DEVICES.** They are not
+the same list. `.crush()` is real here as of R1b; `.vowel()` is real on strudel.cc and
+silently does nothing here; a bare number is a scale degree in our mini-notation and a
+raw MIDI pitch in full Strudel code. A reference that told you what strudel.cc says would
+be wrong in exactly the places a user is stuck - which is why they opened it. So each
+entry carries a `status` (**works** / **not yet** / **syntax**) and the list is filtered
+per device: `sine` is the FX device's, `s("bd sd")` is the MIDI devices'.
+
+`src/lib/__tests__/reference.test.ts` ties the data to the code it describes - every
+stage in the `RACK` must be listed as working, and nothing marked working may be an
+effect the parser refuses. A doc that drifts is worse than none, because it is believed.
+
+**Context-sensitivity SHIPPED, in BOTH windows.** The Studio has a `ReferencePanel` down
+its right-hand side; the floating `?` window follows the DEVICE's box, which is what was
+actually asked for - type `.del` in the device and the floating reference narrows to
+`.delay` while you type. That crosses a Chromium context boundary, so it rides a
+`helpQuery` state slot: the device view writes the token the caret is on, the help window
+reads it. **The wart, named rather than hidden: the slot persists**, so the last word you
+typed about is saved with the set. The library has no transient channel between views,
+only persisted state, and inventing a wrapper message type for a UI hint was not worth
+it.
+
+**Placement is where it stops.** "Put the window above the device, aligned to it" is not
+reachable: a device view is drawn inside Live's own device chain, and nothing - not Max,
+not the LOM - reports where that is on screen, while `thispatcher window size` wants
+absolute screen coordinates. The window is 420 px wide (the device view's own width) so
+it at least reads as an extension of it, and Max windows remember where you drag them.
+
+It is a HEURISTIC, not a parser, deliberately: it reads backwards from the caret for the
+nearest word. Half-typed code does not parse - and that is exactly when help is wanted -
+so a parser would be wrong at the only moment that matters, and would be a second
+dialect to keep in step with the engine's (the lesson from `src/lib/mini`). Inside a
+call it looks up the FUNCTION rather than the number being typed into it.
 
 ## R1 - Native fx UI: the two-screen knob panel - SHIPPED 0.7.0, VERIFIED IN LIVE
 The fx device shed its HTML sliders for NATIVE `live.dial` objects (`layout.native` in
