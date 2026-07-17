@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { uiReady } from "@m4l-jweb/bridge";
-import { useNativePanel, useParam, useStateSync } from "@m4l-jweb/surface/react";
+import { useNativePanel, useParam, useStateSync, useWindow } from "@m4l-jweb/surface/react";
+import { HelpButton } from "../shared/HelpButton";
+import { tokenAtCaret } from "@/lib/reference";
 import { cn } from "@/lib/utils";
 import {
 	formatFxChain,
@@ -46,13 +48,21 @@ export default function App() {
 	const [draft, setDraft] = useState<string | null>(null);
 	const [showAdd, setShowAdd] = useState(false);
 	const [showAbout, setShowAbout] = useState(false);
+	const helpWindow = useWindow(surface, "help");
+	// The floating reference follows the caret: type `.del` here and the window narrows
+	// to `.delay`. It is a different Chromium context, so a state slot is the only way to
+	// tell it what you are typing about.
+	const [, setHelpQuery] = useStateSync(surface, "helpQuery");
+	const trackCaret = (value: string, caret: number) => setHelpQuery(tokenAtCaret(value, caret));
 
 	// The view switch: on = native knob panel, off = this web UI. A native toggle,
 	// so it stays visible in the panel as the way back.
 	const [knobs, setKnobs] = useParam(surface, "knobs");
 
 	const [cutoff, setCutoff] = useParam(surface, "cutoff");
+	const [hpfreq, setHpfreq] = useParam(surface, "hpfreq");
 	const [drive, setDrive] = useParam(surface, "drive");
+	const [crush, setCrush] = useParam(surface, "crush");
 	const [delay, setDelay] = useParam(surface, "delay");
 	const [delaytime, setDelaytime] = useParam(surface, "delaytime");
 	const [delayfeedback, setDelayfeedback] = useParam(surface, "delayfeedback");
@@ -60,12 +70,14 @@ export default function App() {
 	const [gain, setGain] = useParam(surface, "gain");
 
 	const params: FxParams = useMemo(
-		() => ({ cutoff, drive, delay, delaytime, delayfeedback, room, gain }),
-		[cutoff, drive, delay, delaytime, delayfeedback, room, gain],
+		() => ({ cutoff, hpfreq, drive, crush, delay, delaytime, delayfeedback, room, gain }),
+		[cutoff, hpfreq, drive, crush, delay, delaytime, delayfeedback, room, gain],
 	);
 	const setters: Record<FxParam, (v: number) => void> = {
 		cutoff: setCutoff,
+		hpfreq: setHpfreq,
 		drive: setDrive,
+		crush: setCrush,
 		delay: setDelay,
 		delaytime: setDelaytime,
 		delayfeedback: setDelayfeedback,
@@ -80,11 +92,15 @@ export default function App() {
 	 *  the parameters cannot reconstruct: a stage sitting at its neutral value was
 	 *  either typed on purpose or never touched, and Live has no way to tell. */
 	const [namedState, setNamed] = useStateSync(surface, "named");
-	// A FRESH instance's slot comes back as an empty dict `{}`, not our declared
-	// `[]` default - the state-default seeding bug (m4l-jweb TODO row 14). Our
-	// default is an ARRAY, so coerce: an object means "nothing named yet". Without
-	// this, `named.includes(...)` below throws a few ms after mount (right after the
-	// `get_state named -> {}` reply lands) and React unmounts to a black screen.
+	// This slot came back `{}` on EVERY load, and it was written off as the
+	// state-default seeding gap. It was not: a Max [dict] is a key/value map and cannot
+	// hold a top-level ARRAY, so `named` never persisted at all - the write had nowhere
+	// to land. Fixed upstream (every value now travels in an envelope; see the state
+	// store in @m4l-jweb/surface).
+	//
+	// The coercion stays, because the black screen it prevents is worse than the line
+	// it costs: `named.includes(...)` throws a few ms after mount on anything that is
+	// not an array, and React unmounts the whole device.
 	const named = useMemo(() => (Array.isArray(namedState) ? namedState : []), [namedState]);
 	const shown = useMemo(
 		() => RACK.map((s) => s.param).filter((p) => named.includes(p) || params[p] !== NEUTRAL[p]),
@@ -152,6 +168,7 @@ export default function App() {
 						Strudel Audio FX
 					</button>
 					<span className="text-[10px] text-muted-foreground">audio effect</span>
+					<HelpButton onOpen={helpWindow.open} />
 				</div>
 				{/* Top-right, over the native "knobs" switch (surface.ts pins it to the
 				    same spot) so the control stays put when the views flip. Clicking it
@@ -169,7 +186,14 @@ export default function App() {
 			<div className="flex items-center gap-1">
 				<input
 					value={text}
-					onChange={(e) => setDraft(e.target.value)}
+					onChange={(e) => {
+						setDraft(e.target.value);
+						trackCaret(e.target.value, e.target.selectionStart ?? 0);
+					}}
+					// Every way the caret moves without the text changing.
+					onKeyUp={(e) => trackCaret(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
+					onClick={(e) => trackCaret(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
+					onSelect={(e) => trackCaret(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
 					onBlur={commit}
 					onKeyDown={(e) => {
 						if (e.key === "Enter") {

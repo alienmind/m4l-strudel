@@ -13,8 +13,9 @@
  * parameter actually has and `exponent` bends the KNOB's travel without touching
  * the value, so every readout is honest and the DSP takes the number directly.
  */
-import { button, defineSurface, dial, state } from "@m4l-jweb/surface";
+import { button, defineSurface, dial, state, window } from "@m4l-jweb/surface";
 import type { FxParam } from "@/lib/fx";
+import { helpQuerySlot } from "../shared/surface";
 
 export default defineSurface({
 	params: {
@@ -43,11 +44,37 @@ export default defineSurface({
 			format: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)} kHz` : `${Math.round(v)} Hz`),
 			short: "Cutoff",
 		}),
+		hpfreq: dial({
+			// From 0, which is the neutral the chain guarantees: the hpf is `dry minus
+			// a one-pole lowpass`, and at 0 Hz that lowpass passes nothing, so the
+			// stage is a wire. A range starting at 40 (the lowpass's floor) would have
+			// no such setting - the device would always be taking the bottom away.
+			range: [0, 8000],
+			default: 0,
+			unit: "Hz",
+			// Same reason as `cutoff`: hearing is logarithmic. The interesting travel is
+			// in the bottom couple of hundred Hz, where a linear knob would race past.
+			exponent: 4,
+			format: (v) => (v < 1 ? "off" : v >= 1000 ? `${(v / 1000).toFixed(1)} kHz` : `${Math.round(v)} Hz`),
+			short: "HP Freq",
+		}),
 		drive: dial({
 			range: [1, 10],
 			default: 1,
 			unit: "x",
 			short: "Drive",
+		}),
+		crush: dial({
+			// BITS, and the top of the range is "off" - degrade~ at full depth passes
+			// its input through. Strudel's own scale calls 16 "minimum crush", but 16
+			// still quantises; a stage that is always in the path needs a true wire, so
+			// the range runs to 24 and rests there. Down at 1-4 bits it is the noisy
+			// crunch the effect is for.
+			range: [1, 24],
+			default: 24,
+			unit: "bit",
+			format: (v) => (v >= 24 ? "off" : `${Math.round(v)} bit`),
+			short: "Crush",
 		}),
 		delay: dial({
 			range: [0, 1],
@@ -84,19 +111,36 @@ export default defineSurface({
 		}),
 	},
 
-	banks: [{ name: "FX", params: ["cutoff", "drive", "delay", "delaytime", "delayfeedback", "room", "gain"] }],
+	/**
+	 * TWO BANKS, because Push shows EIGHT encoders per page and the rack is now nine
+	 * stages - a ninth parameter in a bank is not an error Max reports, it is one that
+	 * never appears (the library throws at build time rather than let that ship).
+	 *
+	 * Split where the rack itself splits rather than at the eighth name: the stages
+	 * that shape TONE, then the ones that put it in a SPACE and set its level. A page
+	 * turn then lands on a group that means something.
+	 */
+	banks: [
+		{ name: "Tone", params: ["cutoff", "hpfreq", "drive", "crush"] },
+		{ name: "Space", params: ["delay", "delaytime", "delayfeedback", "room", "gain"] },
+	],
 
 	/**
 	 * THE TWO SCREENS. The seven fx dials are the native grid; `knobs` is the view
 	 * SWITCH (pinned top-right, over the web UI's own "Knobs" button, so it stays in
 	 * one place across both views). The app layers them (useNativePanel): the web UI
 	 * OR the native knob panel, never both. `rows: 2` lays the dials out in two rows
-	 * across the wide panel - seven dials cannot be two columns in a 169 px-tall view
+	 * across the wide panel - nine dials cannot be two columns in a 169 px-tall view
 	 * (only three rows fit), so two rows is the clean use of the space.
+	 *
+	 * The grid fills DOWN then steps right, so this reads as five columns of two, in
+	 * the rack's own signal order. Live recomputes the device width from the
+	 * presentation rects, so adding hpf and crush widened the panel rather than
+	 * overflowing it.
 	 */
 	layout: {
 		native: {
-			params: ["cutoff", "drive", "delay", "delaytime", "delayfeedback", "room", "gain"],
+			params: ["cutoff", "hpfreq", "drive", "crush", "delay", "delaytime", "delayfeedback", "room", "gain"],
 			rows: 2,
 			panel: true,
 			switch: "knobs",
@@ -121,5 +165,12 @@ export default defineSurface({
 	 */
 	state: {
 		named: state<FxParam[]>({ default: [] }),
+		/** What the caret is on, so the floating help can follow the typing. */
+		helpQuery: helpQuerySlot(),
+	},
+
+	/** The reference, one `?` away. Tall and narrow: it is a list you scroll. */
+	windows: {
+		help: window({ title: "Strudel Reference", width: 420, height: 620, entry: "Help", alwaysOnTop: true }),
 	},
 });
