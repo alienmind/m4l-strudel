@@ -126,17 +126,6 @@ its polyphony are already confirmed in Live; what was missing was only the abili
 two of them in a set, which is the normal case for a drum rack and what R4's Rack makes
 normal for everything.
 
-## Phase 8 - Strudel's own audio in the track - Route B first
-
-`FEAT-STRUDEL-002`. **Do not wait for the C++ external**: the standing analysis
-([../../m4l-jweb/doc/ENHANCEMENTS.md](../../m4l-jweb/doc/ENHANCEMENTS.md)) ranks offline
-rendering first - `OfflineAudioContext` renders cycle N+1 with the real superdough
-(bit-identical sound), `saveToFile()` (to be built upstream) writes the WAV,
-`[buffer~]`/`[play~]` locked to `current_song_time` plays it double-buffered. One cycle
-of edit latency; random/stateful patterns fall back with a visible notice. See
-[SPIKE-OFFLINE.md](SPIKE-OFFLINE.md). This eventually fills the Rack's instrument slot.
-
-## Active backlog (Easy to Hard)
 
 ### 1. Scale and pitch matching in full Strudel code (Medium)
 Full Strudel code does not see the Octave/Shift controls or the Live Scale toggle. It is
@@ -154,6 +143,19 @@ characters. Strudel's editor solves this with hap `context.locations` from the
 transpiler - wiring that up means mapping locations in the *rewritten* string back to the
 user's text, real work for a feature that mostly matters in the dialect that already has
 it.
+
+---
+
+## Phase 8 - Strudel's own audio in the track - Route B first
+
+`FEAT-STRUDEL-002`. **Do not wait for the C++ external**: the standing analysis
+([../../m4l-jweb/doc/ENHANCEMENTS.md](../../m4l-jweb/doc/ENHANCEMENTS.md)) ranks offline
+rendering first - `OfflineAudioContext` renders cycle N+1 with the real superdough
+(bit-identical sound), `saveToFile()` (to be built upstream) writes the WAV,
+`[buffer~]`/`[play~]` locked to `current_song_time` plays it double-buffered. One cycle
+of edit latency; random/stateful patterns fall back with a visible notice. See
+[SPIKE-OFFLINE.md](SPIKE-OFFLINE.md). This eventually fills the Rack's instrument slot.
+
 
 ---
 
