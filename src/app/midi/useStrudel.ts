@@ -11,6 +11,7 @@ import {
 import { isBareMini } from "@/lib/strudelCode";
 import { miniNoteTokens } from "@/lib/mini/resolve";
 import { useStrudelEngine, type EngineState } from "../shared/useStrudelEngine";
+import { INITIAL_TEXT } from "./surface";
 import { IN } from "../shared/protocol";
 import surface from "./surface";
 
@@ -56,7 +57,7 @@ export function useStrudel(): StrudelState {
 
 	const engine = useStrudelEngine({
 		surface,
-		initialText: "<c1 c1 <c2 c#2>>*16",
+		initialText: INITIAL_TEXT,
 		ctx,
 		liveScale: liveScaleName,
 	});

@@ -20,6 +20,7 @@ export function PatternEditor({
 	onRun,
 	spans,
 	invalid,
+	onCaret,
 }: {
 	value: string;
 	onChange: (v: string) => void;
@@ -27,6 +28,11 @@ export function PatternEditor({
 	/** Source ranges sounding right now. Empty for code, which has no mapping. */
 	spans: Span[];
 	invalid: boolean;
+	/**
+	 * Where the caret is, on every move. The device reports it so the floating help
+	 * window can show what you are typing about - see the `helpQuery` slot.
+	 */
+	onCaret?: (caret: number) => void;
 }) {
 	const scroller = useRef<HTMLPreElement>(null);
 
@@ -49,7 +55,15 @@ export function PatternEditor({
 			</pre>
 			<textarea
 				value={value}
-				onChange={(e) => onChange(e.target.value)}
+				onChange={(e) => {
+					onChange(e.target.value);
+					onCaret?.(e.target.selectionStart ?? 0);
+				}}
+				// Every way the caret can move without the text changing - arrows, a click,
+				// a drag-select. The help window follows the caret, not the keystrokes.
+				onKeyUp={(e) => onCaret?.(e.currentTarget.selectionStart ?? 0)}
+				onClick={(e) => onCaret?.(e.currentTarget.selectionStart ?? 0)}
+				onSelect={(e) => onCaret?.(e.currentTarget.selectionStart ?? 0)}
 				// Keep the highlight layer aligned when the text is long enough to scroll.
 				onScroll={(e) => {
 					if (scroller.current) scroller.current.scrollTop = e.currentTarget.scrollTop;

@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useStateSync } from "@m4l-jweb/surface/react";
 import { DEFAULT_DRUM_MAP, type DrumMap } from "@/lib/mini/drums";
 import { useStrudelEngine, type EngineState } from "../shared/useStrudelEngine";
+import { INITIAL_TEXT } from "./surface";
 import surface from "./surface";
 
 /**
@@ -42,7 +43,7 @@ export function useStrudel(): StrudelState {
 
 	const engine = useStrudelEngine({
 		surface,
-		initialText: 's("bd hh sd hh")',
+		initialText: INITIAL_TEXT,
 		ctx,
 	});
 

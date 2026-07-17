@@ -18,12 +18,20 @@
  */
 import { defineSurface, state, window } from "@m4l-jweb/surface";
 import { DEFAULT_DRUM_MAP } from "@/lib/mini/drums";
-import { transportParams } from "../shared/surface";
+import { codeSlot, helpQuerySlot, transportParams } from "../shared/surface";
+
+/** The pattern this device opens with. It lives here, not in useStrudel.ts, because the
+ *  BUILD loads surface.ts outside vite - see midi/surface.ts for the full reason. */
+export const INITIAL_TEXT = 's("bd hh sd hh")';
 
 export default defineSurface({
 	params: transportParams,
 	state: {
 		drumMap: state({ default: DEFAULT_DRUM_MAP }),
+		/** The pattern, saved with the set and shared with the Studio window. */
+		code: codeSlot(INITIAL_TEXT),
+		/** What the caret is on, so the floating help can follow the typing. */
+		helpQuery: helpQuerySlot(),
 	},
 	/**
 	 * The drum map is what this device is FOR, and the device view is a fixed
@@ -37,5 +45,11 @@ export default defineSurface({
 	 */
 	windows: {
 		editor: window({ title: "Strudel Drum Map", width: 480, height: 560, entry: "Window" }),
+		/** The reference, one `?` away. Tall and narrow: it is a list you scroll. */
+		help: window({ title: "Strudel Reference", width: 420, height: 620, entry: "Help", alwaysOnTop: true }),
+		/** Room to write. An EDITOR only - the device view's engine still schedules
+		 *  everything, because it is the only thing that receives `tick`. See
+		 *  midi/surface.ts for the full reasoning. */
+		studio: window({ title: "Strudel Studio", width: 720, height: 560, entry: "StudioWindow", alwaysOnTop: true }),
 	},
 });
