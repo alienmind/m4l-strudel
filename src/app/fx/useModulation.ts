@@ -36,6 +36,7 @@ import { useEffect, useRef } from "react";
 import { bindInlet, bindRemote, resolveParamId, writeRemote } from "@m4l-jweb/bridge";
 import { queryFxPattern, RACK, type FxParam, type PatternedStage } from "@/lib/fx";
 import { IN } from "./protocol";
+import surface from "./surface";
 
 /** Beats per cycle: one 4/4 bar. See "THE CLOCK" above. */
 const BEATS_PER_CYCLE = 4;
@@ -43,6 +44,30 @@ const BEATS_PER_CYCLE = 4;
 /** The fixed slot map: slot i drives RACK[i]'s parameter. patcher/devices.mjs
  *  declares `remotes: 9` from this same order - the two must agree. */
 const SLOT: Record<FxParam, number> = Object.fromEntries(RACK.map((s, i) => [s.param, i])) as Record<FxParam, number>;
+
+/**
+ * Pre-warp a value for live.remote~: it does NOT take the parameter's own units.
+ *
+ * Measured, not read anywhere: Live treats the incoming value as a LINEAR position
+ * across the parameter's range and then applies the knob's `exponent` curve to it,
+ * exactly as if the number had grabbed the dial by its travel. Send 2000 into
+ * cutoff (range 40-18000, exponent 4) and the parameter lands at
+ * 40 + 17960 * ((2000-40)/17960)^4 = 42.5 Hz - which is how `.lpf(sine.range(200,
+ * 2000))` swept the dial between 40 and 42. Parameters with exponent 1 pass
+ * through untouched, which is why the chain's own tests never caught it.
+ *
+ * So invert the curve: aim the travel at norm(v)^(1/e) and Live's ^e lands the
+ * value where the pattern asked. Clamped first - outside the range the inverse
+ * is not defined, and Live would clamp anyway.
+ */
+function toRemote(param: FxParam, v: number): number {
+	const spec = surface.params[param];
+	if (spec.kind !== "dial") return v;
+	const [min, max] = spec.range;
+	const e = spec.exponent ?? 1;
+	const norm = Math.min(1, Math.max(0, (v - min) / (max - min)));
+	return min + (max - min) * (e === 1 ? norm : Math.pow(norm, 1 / e));
+}
 
 export function useModulation(patterned: readonly PatternedStage[]): void {
 	/** What the tick handler reads. A ref, not state: a 20 Hz clock must not render. */
@@ -86,7 +111,7 @@ export function useModulation(patterned: readonly PatternedStage[]): void {
 			for (const { stage, slot } of stagesRef.current) {
 				const v = queryFxPattern(stage, cycle);
 				// null is "the pattern says nothing here" - leave the parameter be.
-				if (v !== null) writeRemote(slot, v);
+				if (v !== null) writeRemote(slot, toRemote(stage.param, v));
 			}
 		});
 	}, []);
