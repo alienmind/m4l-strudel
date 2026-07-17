@@ -30,7 +30,11 @@
  * silently false forever - which is exactly the bug this project shipped for
  * months. Scan for a known token rather than trusting an index.
  */
-var MODES = ["midi", "sampler-browser"];
+// "audio" is the fx device: the wrapper defaults a device's mode to its container
+// type, and the fx entry declares none of its own. Before it was listed here every
+// fx instance warned "no device mode" and fell back to midi - harmless but noisy,
+// and it ran the midi-only clip poll on a device with no clips to read.
+var MODES = ["midi", "sampler-browser", "audio"];
 function resolveStrudelMode(): string {
 	for (var i = 0; i < jsarguments.length; i++) {
 		var a = String(jsarguments[i]);
@@ -60,8 +64,9 @@ var lastClipAvail = -1;
 var clipPoll = new Task(checkClipAvailable, this);
 
 function startClipPoll(): void {
-	// The strudel-sample-browser is an audio effect with no MIDI notes of its own.
-	if (IS_SAMPLER_BROWSER) return;
+	// Clips are the MIDI devices' business: the sample browser auditions, the fx
+	// device filters - neither reads notes, so neither should poll for them.
+	if (STRUDEL_MODE !== "midi") return;
 	lastClipAvail = -1;
 	clipPoll.cancel();
 	clipPoll.interval = 1000;
