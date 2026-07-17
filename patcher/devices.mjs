@@ -79,7 +79,13 @@ export default [
 		// filter it complements, crush with the dirt it belongs to, and the send/level
 		// tail is last. Changing the order changes every user's sound - it is frozen,
 		// and src/lib/fx.ts's RACK must read back in the same order.
-		chains: ["lowpass", "hpf", "drive", "crush", "delay", "reverb", "gain"],
+		chains: ["lowpass", "hpf", "drive", "crush", "delay", "reverb", "gain", "remote"],
+		// One live.remote~ slot per rack stage, mapped by RACK index (src/lib/fx.ts) -
+		// slot 0 is cutoff, slot 8 is gain, forever. `remote` is not a stage: it touches
+		// no audio, it only lets a pattern in the line modulate this device's own
+		// parameters (.lpf(sine.range(200, 2000))). Keep this count equal to RACK's
+		// length or the last stages silently lose their modulation.
+		remotes: 9,
 		unmatchedTo: "js",
 	},
 ];

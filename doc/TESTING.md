@@ -108,12 +108,32 @@ drum rack is exactly the multi-instance case.
 
 ---
 
+# 3. Pattern-driven modulation (TODO R3) - built, needs your ears
+
+The whole chain is code except the last inch: does `live.remote~` actually move the
+parameter, audibly and without writing automation? Put **Strudel Audio FX** on a track
+with audio and:
+
+1. Type `.lpf(sine.range(200, 2000))` and press Enter. The line must KEEP that text
+   (not rewrite itself to a number) - that is the `sources` persistence.
+2. **Start the transport.** The Cutoff dial must sweep once per bar, and you must hear
+   the filter move. Stopped transport = no motion (the last value holds).
+3. While modulated, try to turn the Cutoff dial: live.remote~ owns it - expected.
+   Check the automation lane stays EMPTY while the sweep runs (the whole point of
+   live.remote~ over parameter writes).
+4. Replace the line with `.lpf(800)`, Enter. The dial must come BACK (the release,
+   `id 0`) and sit at 800.
+5. Retype the sine line, save the set, close, reopen. The line must come back intact
+   and the sweep must resume on play - LOM ids re-resolved on load, sources from the
+   state slot.
+
+**Afterwards:** write the answer into TODO.md R3. A NO on step 2 with a
+`live.remote~` complaint in the Max console is a binding problem (check
+`get_param_id` lines); silence with no complaint is a tick problem (check the fx
+app's console for `tick` arriving).
+
 # What is NOT here, and why
 
-- **Pattern modulation** (`.lpf(sine.range(200, 2000))`) is **not testable yet.** The
-  parser understands it and the `remote` chain exists upstream, but the FX app has no
-  transport tick, so nothing streams values. It will type without an error and do
-  nothing. See TODO R3.
 - **The Rack preset** (R4-c) has to be composed and saved by hand in Live - there is no
   code to test. See TODO R4-c.
 

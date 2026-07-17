@@ -152,6 +152,19 @@ describe("parseFxChain", () => {
 		expect(Number.isInteger(queryFxPattern(stage, 0.1) as number)).toBe(true);
 	});
 
+	it("modulation survives a set reload through `sources` alone", () => {
+		// The app persists only the source map (surface `sources`) and, on load,
+		// reconstructs the stages by printing the sourced stages over a neutral rack and
+		// parsing that - this is useModulation's input path, so pin the whole round trip:
+		// the reborn Pattern must not just exist, it must answer the same values.
+		const before = parseFxChain(".lpf(sine.range(200, 2000))");
+		const saved = patternSources(before.patterned);
+		const after = parseFxChain(formatFxChain(NEUTRAL, [], saved));
+		expect(after.error).toBeNull();
+		expect(after.patterned.map((p) => p.param)).toEqual(["cutoff"]);
+		expect(queryFxPattern(after.patterned[0], 0.25)).toBe(queryFxPattern(before.patterned[0], 0.25));
+	});
+
 	it("the last call still wins across the two kinds", () => {
 		// `.lpf(sine).lpf(800)` is a plain 800: a stage that takes a new value drops the
 		// modulation it had, or the two would fight over one parameter forever.
