@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Drum, FolderOpen, Play, Square, ChevronLeft, Maximize2, RotateCcw } from "lucide-react";
-import { useWindow } from "@m4l-jweb/surface/react";
+import { useStateSync, useWindow } from "@m4l-jweb/surface/react";
 import { isBareMini } from "@/lib/strudelCode";
 import surface from "./surface";
 import { DrumRack } from "./DrumRack";
 import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
 import { ClipPanel } from "../shared/ClipPanel";
+import { HelpButton } from "../shared/HelpButton";
+import { tokenAtCaret } from "@/lib/reference";
 import { useStrudel } from "./useStrudel";
 
 /**
@@ -21,6 +23,11 @@ import { useStrudel } from "./useStrudel";
 export default function App() {
 	const s = useStrudel();
 	const editorWindow = useWindow(surface, "editor");
+	const helpWindow = useWindow(surface, "help");
+	// The floating reference follows the caret. It is a different Chromium context, so a
+	// state slot is the only way to tell it what you are typing about.
+	const [, setHelpQuery] = useStateSync(surface, "helpQuery");
+	const studioWindow = useWindow(surface, "studio");
 	const [showDrums, setShowDrums] = useState(false);
 	// The bottom-left note of the mini rack's 16-pad window (C1 = 36, like Live).
 	const [drumBase, setDrumBase] = useState(36);
@@ -124,12 +131,23 @@ export default function App() {
 							className="w-8 rounded bg-input/50 px-1 py-0.5 outline-none"
 						/>
 					</label>
+					{/* Room to write. The window edits the same `code` slot this view binds -
+					    it does NOT run an engine, so the transport stays here. */}
+					<button
+						onClick={studioWindow.open}
+						title="Open the Full Studio - a bigger editor for the same pattern"
+						className="rounded bg-input/50 px-1 py-0.5 hover:bg-input"
+					>
+						Studio
+					</button>
+					<HelpButton onOpen={helpWindow.open} />
 				</div>
 			</div>
 
 			<PatternEditor
 				value={s.text}
 				onChange={s.setText}
+				onCaret={(caret) => setHelpQuery(tokenAtCaret(s.text, caret))}
 				onRun={s.run}
 				spans={s.playing}
 				invalid={Boolean(s.evalError || (!codeMode && s.errors.length > 0))}

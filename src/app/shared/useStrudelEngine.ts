@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bindInlet, flushNotes, inJweb, outlet, sendNote, uiReady } from "@m4l-jweb/bridge";
-import { useParam } from "@m4l-jweb/surface/react";
+import { useParam, useStateSync } from "@m4l-jweb/surface/react";
 import type { Surface } from "@m4l-jweb/surface";
 import { renderPattern, toFlatList, type NoteEvent } from "@/lib/mini/render";
 import { eventsToMini, type RawNote } from "@/lib/mini/unparse";
@@ -140,7 +140,40 @@ export interface EngineState {
 export function useStrudelEngine(opts: EngineOptions): EngineState {
 	const { ctx, liveScale, initialText, surface } = opts;
 	const [playParam, setPlayParam] = useParam(surface, "play");
-	const [text, setText] = useState(initialText);
+	/**
+	 * THE PATTERN, from the `code` state slot - not component state.
+	 *
+	 * Two things follow, and both are the reason for it: the pattern now SURVIVES THE
+	 * SET (it used to be `useState`, so reopening a set silently restored the built-in
+	 * default over whatever the user wrote), and the Studio window edits the same slot,
+	 * so the two views are two faces of one pattern rather than two editors racing.
+	 *
+	 * It needed an upstream fix to work at all: a Max [dict] is a key/value map and
+	 * cannot hold a bare string, so a `state<string>` used to round-trip to `{}` no
+	 * matter what was written. Every value now travels in an envelope - see the state
+	 * store in @m4l-jweb/surface. The `typeof` guard stays because a slot can still
+	 * legitimately have nothing in it: a fresh instance Live has never saved.
+	 */
+	const [savedText, setSavedText] = useStateSync(surface, "code");
+	/**
+	 * AN EMPTY BOX IS A VALUE, NOT A MISSING ONE - and this line used to disagree.
+	 *
+	 * It read `savedText.length ? savedText : initialText`, so the instant the editor
+	 * was empty - select-all and cut, or deleting the last character on the way to
+	 * rewriting a line - the pattern "had no value" and the device helpfully restored
+	 * its default over the top. You could not cut and paste, and you could not clear the
+	 * box to start again: it healed back to `<c1 c1 ...>` under your hands.
+	 *
+	 * A pattern editor must let you type something broken, or empty, and LEAVE IT THERE
+	 * for you to fix. Nothing here gets to decide the user meant something else.
+	 *
+	 * There is no length check to replace it with, either: the slot's default IS
+	 * `initialText` (see the device's surface.ts), so a fresh instance already arrives
+	 * holding the opening pattern. The `typeof` guard is only for a slot that is not a
+	 * string at all - which now means a genuine failure, not an empty editor.
+	 */
+	const text = typeof savedText === "string" ? savedText : initialText;
+	const setText = setSavedText;
 	const [beatsPerBar, setBeatsPerBar] = useState(DEFAULT_BEATS_PER_BAR);
 	const [grid, setGrid] = useState(16);
 	const [conv, setConv] = useState<OctaveConvention>("strudel");
