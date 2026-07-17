@@ -73,27 +73,34 @@ a feature.
 
 # 2. SPIKE - do instance-scoped buffer names work?  (TODO P3, m4l-jweb item 0)
 
-**The question:** does Max expand `#0` inside a Max for Live device patcher?
+**RUN 2026-07-17: PASSED with `---`.** Two copies on two tracks, different samples,
+each kept its own sound. The steps stay here as the re-check recipe if the buffer
+naming ever changes - see the confirmed section below.
+
+**The question:** does the `---` prefix scope a buffer name per device instance?
 
 **Why it matters:** buffer names are global to Max. They used to be generated from the
 device name alone, so **two copies of a sampler on two tracks silently corrupted each
-other's samples** - no error, just the wrong sound. Names are now `#0-buf-...`, and `#0`
-expands per patcher instance. `#0` is documented for abstractions; whether an `.amxd`
-counts as one is exactly the unknown.
+other's samples** - no error, just the wrong sound. Names are now `---buf-...`, and
+`---` is Live's documented per-device expansion.
+
+**History:** the first attempt was `#0`, and it FAILED this test (2026-07-17): `#0`
+does not expand in an `.amxd`, both devices agreed on the literal name, and the first
+device played the second's sample - the silent mode, not the loud one predicted below.
+`---` replaced it.
 
 This spike has no code to run - **it is two copies of a device and your ears.**
 
 1. Put **Strudel Samples** on a track. Download and audition a sample. It must play.
-   - **If it does not play at all**, `#0` did NOT expand: the buffer name contains a
-     literal `#0` and nothing resolves. Check the Max Console for a `buffer~` complaint.
-     That is a clean, loud failure - and it is the answer.
+   - **If it does not play at all**, the device and the voice disagreed on the expanded
+     name. Check the Max Console for a `buffer~` complaint. A loud failure is still an
+     answer.
 2. Now put a **second** Strudel Samples on a **different track**.
 3. Load a **different** sample into the second one.
 4. **Audition the FIRST device again.** It must still play ITS OWN sample.
-   - If it now plays the second device's sample, `#0` did not scope the name and the
-     collision is still live. That is the answer, and it means the fallback route (a
-     wrapper-minted id) needs a buffer renameable at runtime - which is why `#0` was
-     chosen instead.
+   - If it now plays the second device's sample, `---` did not scope the name either
+     (this is how `#0` failed). That would exhaust Max's load-time mechanisms and
+     force runtime scripting of the `[buffer~]` from `[js]`.
 
 **Afterwards:** write the answer into [m4l-jweb/doc/TODO.md](../../m4l-jweb/doc/TODO.md)
 item 0. **P3 (the polyphonic drum rack device) cannot be built until this is a YES** - a
@@ -124,6 +131,14 @@ before a fresh clone or CI can install** - until then, the local
 
 Kept rather than deleted: each one is a claim that could quietly stop being true, and
 this says what to re-check if the code underneath it changes.
+
+### Instance-scoped buffer names: `---` scopes, `#0` does not (2026-07-17)
+Two copies of Strudel Samples on two tracks, different samples, each keeps its own
+sound. The mechanism is the `---` prefix (`---buf-<device>-<slot>`), which Live
+expands per DEVICE instance, `[poly~]` voices included. **`#0` was tried first and
+FAILED**: it never expands in an `.amxd`, writer and reader agreed on the literal
+name, and the first device silently played the second's sample. Re-check with
+section 2's steps if the buffer naming in m4l-jweb's `chains.mjs` ever changes.
 
 ### `.hpf()` and `.crush()` make a sound (2026-07-17)
 The two neutral-at-rest claims are the ones worth re-checking if the chains change:
