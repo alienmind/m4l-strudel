@@ -27,19 +27,20 @@ is in [TESTING.md](TESTING.md).**
 > Released as **0.9.0**, alongside `m4l-jweb` 0.9.0 - the two versions move together from
 > here.
 
-## R2 - Spike: can a device populate the user's rack? (PLAN.md Part 2 gate) - HARNESS BUILT, NOT RUN
+## R2 - Spike: can a device populate the user's rack? (PLAN.md Part 2 gate) - RUN 2026-07-17, ANSWER: NO
 
-`spike_rack` in `wrapper/device.ts` - a THROWAWAY block, marked as one, to be deleted
-once its answers are written down here. It answers Q1-Q3 by itself and stops at the
-first NO; Q4 (clicks during playback) and Q5 (undo grouping) print what to do and need
-your ears and eyes. **How to run it: [TESTING.md](TESTING.md) section 1.**
+Ran per [TESTING.md](TESTING.md) section 1, on the strudel-midi device inside a rack.
+Stopped at the first NO, as designed:
 
-- **If it passes:** Translate mode (R4-d) gets its reconciler - consumer-side code in
-  `wrapper/device.ts`, diff rules per PLAN.md Part 2 (only touch what you own; never
-  persist raw LOM ids; idempotent).
-- **If it fails:** the documented fallback - ADOPT, don't create. The user drops an
-  Auto Filter in the rack once; the device binds `.lpf()` to it and the UI says what to
-  add. Most of the value survives.
+- **Q1 browser reachable: NO.** `new LiveAPI("live_app browser")` resolves to id 0,
+  and the console says why: `jsliveapi: component 'browser' is not an object`. The
+  Browser is exposed to control-surface Python scripts only, not to the LOM that
+  `[js]`/`live.object` see. Q2-Q5 are moot.
+- **Verdict: Translate mode is adopt-only.** The documented fallback applies - ADOPT,
+  don't create. The user drops an Auto Filter in the rack once; the device binds
+  `.lpf()` to it and the UI says what to add. Most of the value survives.
+
+The throwaway `spike_rack` block has been deleted from `wrapper/device.ts`.
 
 ## R3 - Pattern-driven modulation (Phase 7.2) - UPSTREAM SHIPPED, PARSE LAYER DONE
 
@@ -90,22 +91,24 @@ Steps. R4-a and R4-b are settled (see DONE); these are what is left:
 - **Later, the instrument slot:** replaced by the Strudel instrument when Phase 8
   Route B ships AND `m4l-jweb` ships instance-scoped buffer names (see P3).
 
-## P3 - The polyphonic Strudel sampler - UNBLOCKED, and the fix is itself a spike
+## P3 - The polyphonic Strudel sampler - GATE OPEN (buffer scoping verified 2026-07-17)
 
-**The upstream fix is in** (m4l-jweb item 0): buffer names are now instance-scoped -
-`#0-buf-<device>-<slot>` in the device patcher, `#1-buf-...` in the `[poly~]` voice,
-with the device passing its own `#0` to `poly~` as an argument. The `#0` route was
-chosen over a wrapper-minted id on evidence, not preference: **a `[buffer~]` takes its
-name from its creation argument and has no documented runtime rename**, so a name minted
-after load cannot reach a box frozen at build time. `#0` is the only mechanism that can
-work.
+**The `#0` route FAILED the spike (2026-07-17)**: `#0` never expands inside an
+`.amxd`, so writer and reader agreed on one global name and the first device played
+the second's sample - the same silent collision the fix was meant to kill.
 
-**It is unverified, and it is the P3 gate**: `#0` is documented for abstractions, and
-whether an `.amxd` device counts as one is the question. **See
-[TESTING.md](TESTING.md) section 2** - it is two copies of the sampler and your ears, and
-a NO has a loud failure mode (the name keeps a literal `#0` and nothing resolves).
+**The upstream fix is now `---`** (m4l-jweb item 0): Max for Live's own device-scoped
+prefix. `---buf-<device>-<slot>` expands per DEVICE instance, voices included, so the
+`[poly~]` voice spells the same name and the `#0`/`#1` hand-off is gone. A
+wrapper-minted id was never an option: **a `[buffer~]` takes its name from its
+creation argument and has no documented runtime rename**, so a name minted after load
+cannot reach a box frozen at build time.
 
-**The device itself is still to build** once that is a YES: a new instrument device on
+**The `---` route PASSED (2026-07-17)**: two copies of the sampler on two tracks,
+different samples, each kept its own sound. See [TESTING.md](TESTING.md) confirmed
+section. The gate is open.
+
+**The device itself is still to build**: a new instrument device on
 the `instrument` chain, a slot per pad, notes routed to `playVoice()`. The substrate and
 its polyphony are already confirmed in Live; what was missing was only the ability to put
 two of them in a set, which is the normal case for a drum rack and what R4's Rack makes
