@@ -74,7 +74,12 @@ export default [
 		name: "alienmind-strudel-fx",
 		ui: "fx",
 		type: "audio", // 'aaaa' audio effect: it sits anywhere in an audio chain
-		chains: ["lowpass", "drive", "delay", "reverb", "gain"],
+		// THE FROZEN ORDER (ARCHITECTURE.md §3c). Each stage is always in the path, so
+		// this list is the signal path itself, not a set of options: hpf sits with the
+		// filter it complements, crush with the dirt it belongs to, and the send/level
+		// tail is last. Changing the order changes every user's sound - it is frozen,
+		// and src/lib/fx.ts's RACK must read back in the same order.
+		chains: ["lowpass", "hpf", "drive", "crush", "delay", "reverb", "gain"],
 		unmatchedTo: "js",
 	},
 ];
