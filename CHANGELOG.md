@@ -3,15 +3,28 @@
 High-level history of m4l-strudel, grouped by milestone release. This is a 0.x
 project, so each minor version is a major milestone. Newest first.
 
-## 0.9.0 - 2026-07-17
+## 0.9.0 - 2026-07-18
 
-Pattern as a first-class signal, and a bigger window to work in.
+Pattern as a first-class signal, a bank-based sampler, and one consistent chrome.
 
+- **Drums Sampler** (was Sampler): code-driven. `s("bd sd, hh*8")` plays a
+  drum-machine **bank** (strudel's `bank()`), samples auto-download from the
+  tidal-drum-machines repo, 16 voices with an LRU name->slot allocator, and a MIDI
+  sequencer in front drives it. Accepts bare expressions (`bd sd, hh!6`) and has its
+  own `?` reference.
+- **One device chrome**: a single grey `Button` across every device; the `?` sits
+  rightmost; the native panels (MIDI Play/Stop) and Full Studio moved into
+  **About > Advanced** (FX keeps its top-bar Knobs). MIDI options (octave/shift/scale)
+  demoted to a small bottom row.
+- **Renames**: `midi-drums` -> `drums-midi`, `sampler` -> `drums-sampler`,
+  `sampler-browser` -> `sample-browser` (screen + disk).
 - Pattern-driven modulation: patterns drive fx parameters on the tick, with
   remote values pre-warped for the knob exponent.
 - fx: `.hpf()` and `.crush()` promoted to real stages; a line that takes signals.
 - The Full Studio window, with the pattern kept as state that survives the set.
 - A reference window listing which Strudel features each device supports.
+- Drag-a-sample-into-a-clip: tried (`DownloadURL`) and failed - CEF strips the
+  payload; parked. "Show folder" is the answer.
 - Runs on m4l-jweb 0.9.0.
 
 ## 0.8.x - 2026-07-13 to 2026-07-16

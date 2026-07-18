@@ -6,10 +6,6 @@ rediscovering the same wall. Ideas that WORKED are not here; they live in
 controls and Push banks, the macro-mappable transport, clip I/O that reaches the track
 even inside a Rack, the shipped Instrument Rack preset).
 
-(The drag-a-sample-into-a-clip idea is NOT here: it was reopened with a new,
-untested approach - see [SPIKE-DRAG-TO-CLIP.md](SPIKE-DRAG-TO-CLIP.md). It lands here
-only if that spike also fails.)
-
 ---
 
 ## Translate / Adopt mode - `.lpf()` drives the user's own Auto Filter
@@ -67,3 +63,11 @@ hand-composable (swap the instrument, remove the fx, add your own). So the unifi
 bought nothing over the devices as they are, and was dropped. The devices stay separate,
 sharing code only where it already pays (`src/app/shared/`, `ui:` reuse), not forced into
 one bundle.
+
+## Drag a sample from the browser directly into a Live clip (DownloadURL)
+
+**Verdict: abandoned. `[jweb]`'s embedded Chromium (CEF) strips the `DownloadURL` payload, making it impossible.**
+
+We attempted to use the `DownloadURL` Chromium drag type so that dragging a sample browser row onto Live's audio lane would prompt Chromium to download the file to `%TEMP%` and pass it to Live as a native `CF_HDROP` file drag. We tested passing the remote `https://` URL in the payload, but the file handoff did not occur. The drop target in Live (and even notepad.exe) only received the raw text payload, proving that the CEF runtime inside Max 8 strips the `DownloadURL` data entirely.
+
+Without native file drop support from the webview, there is no scripted way to create an audio clip from a file path in Ableton Live (LOM only supports `ClipSlot.create_clip` for MIDI). The shipping answer remains the **"Show folder"** button, which reveals the downloaded file in the OS file manager so the user can drag it into Live from there.

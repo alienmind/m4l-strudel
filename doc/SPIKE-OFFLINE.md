@@ -82,5 +82,5 @@ Turn the machine's network OFF (airplane mode, or unplug), then:
 
 ---
 
-*Related: [SPIKE-DRAG-TO-CLIP.md](SPIKE-DRAG-TO-CLIP.md) (the other open browser question),
+*Related: the drag-to-clip idea (tried and failed - [DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILED_IDEAS.md)),
 and [ARCHITECTURE.md](ARCHITECTURE.md) §3d (the whole preview path).*

@@ -17,37 +17,29 @@ Live is [TESTING.md](TESTING.md). Ideas tried and abandoned are in
 
 ### 1. Run the remaining Live checks
 
-[TESTING.md](TESTING.md) holds the open ones. The recently-shipped work that still needs
-a human in Live: **clip I/O from inside a Rack** (the `ownTrack` climb + the
-disable-on-no-track fallback), and **mapping a Rack macro / Push button to the native
-Play/Stop** parameter. Plus the small re-check that the sampler lights every struck pad
-now, not just one.
+[TESTING.md](TESTING.md) holds the open ones. The big 0.9.0 items are now **confirmed**
+(clip I/O in a Rack, macro-map Play/Stop, the bank-based Sampler). What is left after the
+UI rework: the **native controls moved into About > Advanced > Controls** (the panel and
+Full Studio reachable there; FX keeps its top-bar Knobs; every `?` sits rightmost), and
+the **Sampler "Show folder"** now that the wrapper sends its samples folder.
 
-### 2. The drag-to-clip spike  [REOPENED - new approach, not yet coded]
+### 2. Recapture the screenshots
 
-[SPIKE-DRAG-TO-CLIP.md](SPIKE-DRAG-TO-CLIP.md): can a drag from `[jweb]` produce an OS
-file drop Live's audio lane accepts? Reopened with the **`DownloadURL`** approach - a
-Chromium drag type that makes the browser download the URL to `%TEMP%` and hand the
-drop target a real `CF_HDROP` file, exactly like an `explorer.exe` drag. The earlier
-"no" was void: it tested `DownloadURL` with a `file://` URL, which the handoff never
-accepts. The open question is now narrow: does Max's `[jweb]` (embedded Chromium/CEF)
-carry Chrome's `DownloadURL` desktop-drop behaviour, or strip it? The spike doc has the
-exact code plan and test protocol. Reveal-in-folder stays the fallback either way. (If
-this also fails, it moves to [DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILED_IDEAS.md).)
+The UI changed shape (shared grey buttons, the Sampler's two screens, the reorganised MIDI
+bottom row) and two devices were renamed (**Drums MIDI**, **Drums Sampler**). The
+`doc/screenshot-*.png` referenced by README/ABOUT are now stale - retake them from Live:
+the four device faces, the Sampler's CODE and SOUNDS screens, the Drums MIDI Kit, and the
+overview. Keep the filenames so the doc links still resolve.
+
+
 
 ---
 
 ## Deferred to 1.0.0
 
-### 5. Populate the Rack with the sampler instrument
+### 4. Strudel's own audio in the track (Route B first)
 
-Join point between the shipped Rack preset and the shipped standalone sampler. Swap the
-sampler into the Rack's instrument slot, replacing the placeholder native Ableton Bass.
-Held for 1.0.0 - the rack ships with the native Bass in 0.9.0.
-
-### 6. Phase 8 - Strudel's own audio in the track (Route B first)
-
-`FEAT-STRUDEL-002`. **Do not wait for the C++ external**: the standing analysis
+**Do not wait for the C++ external**: the standing analysis
 ([m4l-jweb ENHANCEMENTS.md](../../m4l-jweb/doc/ENHANCEMENTS.md)) ranks offline
 rendering first - `OfflineAudioContext` renders cycle N+1 with the real superdough
 (bit-identical sound), `saveToFile()` (to be built upstream) writes the WAV,
@@ -55,7 +47,11 @@ rendering first - `OfflineAudioContext` renders cycle N+1 with the real superdou
 cycle of edit latency; random/stateful patterns fall back with a visible notice. See
 [SPIKE-OFFLINE.md](SPIKE-OFFLINE.md). This eventually fills the Rack's instrument slot.
 
-### 7. Cross-device coordination in the Rack (enhancement)
+This is also what the **Sampler's "render to WAV + drop an audio clip"** ask needs (the
+MIDI device writes a MIDI clip; a sampler's output is audio). It is deferred here on
+purpose: it needs the offline render above plus an upstream `saveToFile()`, neither built.
+
+### 5. Cross-device coordination in the Rack (enhancement)
 
 Today the Rack's devices are independent: the pattern is typed in Strudel MIDI, the fx
 line in the FX device. A single expression spanning both - `note("c3 e3").lpf(800)` split

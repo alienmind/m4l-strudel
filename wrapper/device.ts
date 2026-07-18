@@ -34,7 +34,7 @@
 // type, and the fx entry declares none of its own. Before it was listed here every
 // fx instance warned "no device mode" and fell back to midi - harmless but noisy,
 // and it ran the midi-only clip poll on a device with no clips to read.
-var MODES = ["midi", "sample-browser", "audio"];
+var MODES = ["midi", "sample-browser", "drums-sampler", "audio"];
 function resolveStrudelMode(): string {
 	for (var i = 0; i < jsarguments.length; i++) {
 		var a = String(jsarguments[i]);
@@ -49,6 +49,12 @@ function resolveStrudelMode(): string {
 /** The packaged core also computes a MODE; ours is the authoritative one. */
 var STRUDEL_MODE = resolveStrudelMode();
 var IS_SAMPLE_BROWSER = STRUDEL_MODE === "sample-browser";
+/** The code-driven Sampler: an instrument, but it ACQUIRES samples the same way the
+ *  browser does (fetch-to-disk, reveal folder), so it shares those paths. It does NOT
+ *  poll for clips - it is an instrument with none. */
+var IS_DRUMS_SAMPLER = STRUDEL_MODE === "drums-sampler";
+/** The devices that own a samples folder on disk (download chain). */
+var HAS_SAMPLES_FOLDER = IS_SAMPLE_BROWSER || IS_DRUMS_SAMPLER;
 
 post("strudel: mode " + STRUDEL_MODE + "\n");
 
@@ -186,7 +192,7 @@ function sendQuant(): void {
  * of [js] it stays whole.
  */
 function sendFolder(): void {
-	if (!IS_SAMPLE_BROWSER) return;
+	if (!HAS_SAMPLES_FOLDER) return;
 	var folder = deviceFolder(); // the packaged core's - the same resolution the download used
 	if (folder) outlet(0, "device_folder", folder);
 	else post("strudel: no device folder yet (unsaved patcher?) - the sample links will be off\n");
@@ -208,7 +214,7 @@ function sendFolder(): void {
  * disk, so by the time it is clicked the folder is there.
  */
 function reveal_folder(): void {
-	if (!IS_SAMPLE_BROWSER) return;
+	if (!HAS_SAMPLES_FOLDER) return;
 	var folder = deviceFolder();
 	if (!folder) {
 		post("strudel: cannot reveal folder - the patcher is unsaved, so it has no path yet\n");
@@ -239,5 +245,7 @@ function onUiReady(): void {
 	sendQuant(); // ...same: the page cannot have heard the first one
 	sendFolder();
 	lastClipAvail = -1;
-	if (!IS_SAMPLE_BROWSER) checkClipAvailable();
+	// The Sampler is an instrument with no clips, so it does not poll for them (it shares
+	// the browser's samples-folder paths, not the MIDI devices' clip paths).
+	if (!HAS_SAMPLES_FOLDER) checkClipAvailable();
 }
