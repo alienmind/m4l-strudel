@@ -52,7 +52,10 @@ browser as one device.
   the device sits on. Everything renders inside the device UI.
 - **From sketch to clip.** The MIDI device can freeze any pattern into a
   regular MIDI clip (and read clips back into mini-notation), so generative
-  sketches become ordinary arrangeable material.
+  sketches become ordinary arrangeable material. It is also a two-way way to
+  *understand* a pattern: freeze a Strudel line you cannot quite read into a
+  clip and **see** it in the piano roll, or drop a clip you already know and
+  read its mini-notation - each side makes the other legible.
 - **A sample library browser with taste.** The community sample maps behind
   strudel.cc (hundreds of drum machines, folk instruments, found sound)
   become browsable, beat-synced-previewable, and downloadable straight into
