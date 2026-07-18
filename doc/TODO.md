@@ -17,7 +17,7 @@ Live is [TESTING.md](TESTING.md). Ideas tried and abandoned are in
 
 All 0.9.0 Live checks are **confirmed** (clip I/O in a Rack, macro-map Play/Stop, the
 bank-based Sampler, native controls + Full Studio in About). [TESTING.md](TESTING.md) is
-clean; the standing re-check recipes live in ARCHITECTURE's "Verified in Live".
+clean; the standing re-check recipes live in DRAWER_OF_FAILED_IDEAS.md's "Verified in Live".
 
 ---
 

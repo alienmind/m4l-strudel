@@ -3,8 +3,8 @@
 The test suites pin what the generated patcher SAYS; nothing in CI can hear a filter,
 watch a window open, or see a Push encoder page. This file holds **only the open
 checks**. Everything already confirmed - and the recipe to re-check it if the code
-underneath changes - lives in [ARCHITECTURE.md](ARCHITECTURE.md) under "Verified in
-Live".
+underneath changes - lives in [DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILED_IDEAS.md) under
+"Verified in Live".
 
 ## Before you start
 
@@ -27,7 +27,7 @@ a new filename and drag that).
 
 Everything shipped for 0.9.0 has been confirmed in Live and the slate is clean for 1.0.0.
 The standing re-check recipes (what to look at should the code underneath change) live in
-[ARCHITECTURE.md](ARCHITECTURE.md) under "Verified in Live"; ideas tried and parked are in
+[DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILED_IDEAS.md) under "Verified in Live"; ideas tried and parked are in
 [DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILED_IDEAS.md). New behaviour lands its own check
 here as it ships.
 
