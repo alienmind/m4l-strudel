@@ -1,6 +1,6 @@
 # m4l-strudel - A Hybrid Live Coding Experiment
 
-![Devices Overview](doc/screenshot-devices-1.png)
+![Devices overview - Strudel MIDI, Drums MIDI, Drums Sampler, Audio FX and the sample browser](doc/screenshot-all-devices.png)
 
 This started as a fun experiment: *How cool is Strudel! Can I connect it to Ableton and control it from the Push to create the ultimate hybrid workflow?*
 
@@ -17,6 +17,10 @@ The result is a set of **Max for Live devices** that bring [Strudel](https://str
 - **A dedicated drum machine.** The new **Strudel Drums MIDI** device brings Strudel's generative drum language (`bd`, `sd`, `hh`) straight to your Ableton Drum Racks. It features a visual **Kit** mapper that natively persists in your Live set, letting you easily route algorithmic sequences to any custom kit!
 
 ![Strudel Drums MIDI Kit Mapping](doc/screenshot-midi-drums-mapping.png)
+
+- **A code-driven drum sampler.** The **Strudel Drums Sampler** plays samples itself: write `s("bd sd, hh*8")`, pick a drum-machine **bank**, and it fetches and plays that machine's sounds - sixteen voices, driven by code (or by MIDI notes in front of it).
+
+![Strudel Drums Sampler - write s(), pick a bank, it plays the machine](doc/screenshot-drums-sampler.png)
 
 - **It's really Live-native.** Patterns start on the bar, follow tempo automation, stop when you stop the transport, and notes land on the track the device sits on. Everything renders inside the device UI.
 - **From sketch to clip.** The MIDI device can freeze any pattern into a regular MIDI clip (and read clips back into mini-notation), so generative sketches become ordinary arrangeable material. This works **inside an Instrument Rack too** - the device finds its track by climbing out of the rack chain, so clip import/export lands on the track the rack sits on. Where a track genuinely cannot be reached, both clip buttons disable themselves with a tooltip rather than failing silently.
@@ -36,6 +40,8 @@ All four devices are ready to use.
 | **Strudel Samples** (`alienmind-strudel-sample-browser.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo) and **audition samples through the track** - beat-synced to your project's launch quantization, looped in time, and heard through the track's own fader and effects. Auditioning downloads the file next to the device; drag it out into a Simpler, a Drum Rack or a track. |
 
 **Ships with an Instrument Rack preset** (`presets/AlienMind Strudel Rack.adg`): Strudel MIDI -> a native Ableton instrument -> Strudel Audio FX, wired and ready to drop from Live's browser.
+
+![The shipped Instrument Rack: sequencer -> instrument -> effects](doc/strudel-rack.png)
 
 ## Quick Examples
 

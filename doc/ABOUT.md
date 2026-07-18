@@ -35,6 +35,12 @@ Press **Run** and patterns play immediately on a free-running clock at the
 project tempo; start **Live's transport** and they lock to the playhead,
 start on the bar, and follow tempo changes.
 
+It also **ships as an Instrument Rack** (`presets/AlienMind Strudel Rack.adg`): Strudel MIDI
+-> a native Ableton instrument -> Strudel Audio FX, wired and ready to drag from Live's
+browser as one device.
+
+![The shipped Instrument Rack: Strudel MIDI -> instrument -> Strudel Audio FX](strudel-rack.png)
+
 ## Why a producer would care
 
 - **Generative sequencing in one line.** `note("c3 e3 g3 b3").sometimesBy(.3, x=>x.fast(2))`
@@ -65,8 +71,7 @@ Two workflows in one device:
 - **Clip mode (Clip)** - convert mini-notation to a regular MIDI clip on this
   track, and read clips back into mini-notation via a dedicated popup.
 
-![Clip Export and Import](screenshot-midi-export-import.png)
-![MIDI Clip generated from Strudel pattern](screenshot-devices-export-midi.png)
+![Clip export and import - a pattern frozen to a MIDI clip, and read back](screenshot-midi-export-import.png)
 
 ### The editor
 
@@ -98,14 +103,23 @@ red outline plus a message under the editor means a parse or eval error.
 The **status line** at the bottom reports everything: engine ready, pattern
 running, eval errors, notes written/read.
 
-Two advanced controls live behind the device title (the **About** screen), under
-**Advanced**, so the top bar stays uncluttered:
+Clicking the device title opens the **About** screen, which holds an **Advanced** row so
+the top bar stays uncluttered:
+
+![The About screen and the Full Studio window](screenshot-about-and-studio.png)
 
 - **Controls** - reveals the native **Play/Stop** panel. That control is a real Live
   parameter, so you can map a **Rack macro** or a **Push button** to it and start/stop the
   sequencer from hardware. The native **Back** switch on the panel returns to the editor.
 - **Full Studio** - opens a larger floating editor over the same pattern (one pattern, one
-  scheduler; the window edits, the device plays).
+  scheduler; the window edits, the device plays) - shown above.
+- **Go to https://strudel.cc** - opens the full web playground in a floating window.
+
+Every Strudel-taking device also has a **?** (top right) that opens a pinned, offline
+reference of exactly what THESE devices support - per device, honest works / not-yet status
+on every entry, narrowing to whatever your caret is on:
+
+![The Strudel reference window](strudel-help.png)
 
 ### Typical flow
 
@@ -156,6 +170,8 @@ Clicking the **Kit** button opens a dedicated visual mapper. This lets you route
 
 ## Strudel Drums Sampler (`alienmind-strudel-drums-sampler.amxd`)
 
+![Strudel Drums Sampler - the CODE screen](screenshot-drums-sampler.png)
+
 Where Drums MIDI sends notes to *your* Drum Rack, the Drums Sampler is a self-contained
 instrument: it plays the sounds itself, from a **drum-machine bank**, driven by Strudel
 code. Drop it on a MIDI track (it is an instrument - nothing after it needed).
@@ -181,6 +197,8 @@ code. Drop it on a MIDI track (it is an instrument - nothing after it needed).
 - **Sixteen voices**: overlapping sounds ring out independently; two instances keep
   separate samples. **Full Studio** is under **About > Advanced**, as on the other devices.
 
+![Strudel Drums Sampler - the SOUNDS screen, a bank's sounds to audition](screenshot-drums-sampler-2.png)
+
 ---
 
 ## Strudel Samples (`alienmind-strudel-sample-browser.amxd`)
@@ -197,8 +215,8 @@ monitor cue and any effect after it all apply.
 | **A row** | **Click it (or arrow onto it) to hear it.** That also downloads it - reading a sample requires putting it on disk, so auditioning *is* acquiring; there is no separate download. A *pitched* badge marks multisampled instruments; the duration and a *mono* tag show once it has loaded. |
 | **◀ n/N ▶** | Steps through a sound's variations (like `bd:3` in Strudel), auditioning each. |
 | **Preview timing** | The audition starts on Live's **launch quantization** (the transport-bar setting) and **loops in time** - the loop is the sample rounded up to whole bars, so it restarts on a downbeat. Press **■** to stop. |
-| **Drag handle (⋮⋮)** | Once a row has been auditioned, **drag the row** into a Simpler, a Drum Rack or a track. (Whether Live accepts the drag out of the embedded browser is still being verified - the file is on disk regardless, in `samples/` next to the device.) |
-| **Show folder** | Opens the `samples/` folder in Finder/Explorer, so you can drag files in from there. Enabled once you have auditioned at least one sound (before that, the folder does not exist yet). |
+| **Drag handle (⋮⋮)** | Once a row has been auditioned, **drag the row** into a Simpler, a Drum Rack or a track. (Dragging a real file straight out of the embedded browser into Live's audio lane was tried and does not work - Max's Chromium strips the payload - so the file is your handle: it is on disk in `samples/` next to the device, drag it from there.) |
+| **Show folder** | *Meant to* open the `samples/` folder in Finder/Explorer. **Known issue (1.0.0):** the OS reveal does not fire on any device yet, so for now open `samples/` next to the device by hand. |
 
 **Flow:** pick a map → search and arrow through it until something fits → the
 file is already on disk in `samples/` beside the device → drag the row out.
@@ -207,16 +225,16 @@ file is already on disk in `samples/` beside the device → drag the row out.
 
 ## Strudel Audio FX (`alienmind-strudel-fx.amxd`)
 
-![Strudel Audio FX device](screenshot-fx.png)
-![Strudel Audio FX Add Menu](screenshot-fx-2.png)
-![Strudel Audio FX Sliders](screenshot-fx-3.png)
+![Strudel Audio FX - the effect line and its native dials](screenshot-fx.png)
 
 A genuine **audio effect** that brings Strudel's chainable DSP vocabulary to any audio track.
 
-Type a chain of Strudel effects, such as `.lpf(800).room(0.3).gain(1.2)`, and hit Enter. The device instantly generates a visual layout of sliders for each active parameter in your expression. 
+Type a chain of Strudel effects, such as `.lpf(800).room(0.3).gain(1.2)`, and hit Enter. The parameters your line names appear as **native Live dials** beside the text - and the line redraws from them, so a dial turn, an automation lane and a keystroke never fight.
 
-- **Dynamic UI**: Only the effects you write are shown in the UI. The sliders map directly to real Live parameters, meaning they are fully automatable, map to external MIDI controllers, and display natively on Push.
-- **Add Effect Menu**: Clicking the `(+)` button opens a secondary overlay that lists all available DSP effects, letting you easily append new stages (like `drive`, `delay`, or `room`) to your chain without writing them manually.
+- **Native, not HTML**: the dials are real Live parameters - automatable, MIDI-mappable, and paged on Push as two named banks (Tone / Space). The **Knobs** button (top right) reveals the full native panel.
+- **Add Effect Menu**: clicking `(+)` opens an overlay listing the available DSP stages (`drive`, `delay`, `room`, ...), so you can append one without writing it.
+
+![Strudel Audio FX - the Add Effect menu](screenshot-fx-2.png)
 
 *Note: The effect chain order is canonical and frozen at build time (e.g. filter → drive → delay → reverb → gain) to keep the Max DSP graph stable. Writing `.room(0.5).lpf(800)` produces the same signal path as `.lpf(800).room(0.5)`.*
 
