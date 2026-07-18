@@ -19,7 +19,7 @@ The result is a set of **Max for Live devices** that bring [Strudel](https://str
 ![Strudel MIDI Drums Kit Mapping](doc/screenshot-midi-drums-mapping.png)
 
 - **It's really Live-native.** Patterns start on the bar, follow tempo automation, stop when you stop the transport, and notes land on the track the device sits on. Everything renders inside the device UI.
-- **From sketch to clip.** The MIDI device can freeze any pattern into a regular MIDI clip (and read clips back into mini-notation), so generative sketches become ordinary arrangeable material.
+- **From sketch to clip.** The MIDI device can freeze any pattern into a regular MIDI clip (and read clips back into mini-notation), so generative sketches become ordinary arrangeable material. This works **inside an Instrument Rack too** - the device finds its track by climbing out of the rack chain, so clip import/export lands on the track the rack sits on. Where a track genuinely cannot be reached, both clip buttons disable themselves with a tooltip rather than failing silently.
 - **Room to type, help that follows you.** A **Full Studio** floating window is a big editor over the same pattern as the device view (one pattern, one scheduler), and every Strudel-taking device has a `?` opening a pinned reference of exactly what THESE devices support - per device, offline, with an honest works / not-yet status on every entry, narrowing to whatever your caret is on.
 - **A sample library browser with taste.** The community sample maps behind strudel.cc (hundreds of drum machines, folk instruments, found sound) become browsable, beat-synced-previewable, and downloadable straight into your User Library workflow.
 
@@ -29,10 +29,13 @@ All four devices are ready to use.
 
 | Device | Type | What it does for you |
 |---|---|---|
-| **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Scale-aware (it follows Live 12's key). Converts patterns **to and from MIDI clips** on the track. |
+| **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Scale-aware (it follows Live 12's key). Converts patterns **to and from MIDI clips** on the track (in a Rack too). A **macro-mappable Play/Stop** parameter (reveal it with the **Macro** button) lets a Rack macro or a Push button start and stop the sequencer. |
 | **Strudel MIDI Drums** (`alienmind-strudel-midi-drums.amxd`) | MIDI effect | The exact same engine as Strudel MIDI, but purpose-built for driving Drum Racks. A dedicated mapping UI routes drum words (`bd`, `sd`, `hh`) to specific Drum Rack pads, and **the map travels with your set**. |
 | **Strudel Audio FX** (`alienmind-strudel-fx.amxd`) | Audio effect | Write **one line** of Strudel's effect vocabulary - `.lpf(800).hpf(120).crush(8).gain(1.2)` - and it applies to whatever audio is already on the track. Nine stages (filter, hpf, drive, crush, delay, reverb, gain), each a real Live parameter: automatable, MIDI-mappable, native dials in the device view, and two named Push banks (Tone / Space). **Patterns modulate too**: `.lpf(sine.range(200, 2000))` sweeps the cutoff once per bar through `live.remote~` - continuous modulation, no automation written, and the dial comes back the moment the line stops asking. |
+| **Strudel Sampler** (`alienmind-strudel-sampler.amxd`) | Instrument | A polyphonic drum-rack instrument: eight pads, one sample per pad, played by MIDI notes (C1..G1) into the track. Load a sound per pad from any Strudel sample map; overlapping notes ring out on independent voices, and two instances keep separate samples. |
 | **Strudel Samples** (`alienmind-strudel-sampler-browser.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo) and **audition samples through the track** - beat-synced to your project's launch quantization, looped in time, and heard through the track's own fader and effects. Auditioning downloads the file next to the device; drag it out into a Simpler, a Drum Rack or a track. |
+
+**Ships with an Instrument Rack preset** (`presets/AlienMind Strudel Rack.adg`): Strudel MIDI -> a native Ableton instrument -> Strudel Audio FX, wired and ready to drop from Live's browser.
 
 ## Quick Examples
 

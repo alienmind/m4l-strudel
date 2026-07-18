@@ -91,7 +91,7 @@ Each device defines its selectors in `src/app/<device>/protocol.ts`, extending `
 | UI → js (all) | `ui_ready` | handshake |
 | js → UI (all) | `mode`, `build`, `tick <playing> <beats>`, `tempo <bpm>` | `DEVICE_IN`, sent by the packaged wrapper |
 | UI → js (midi) | `write_clip ...`, `read_notes` | clip I/O |
-| js → UI (midi) | `notes ...`, `clip_available`, `read_error`, `scale` | clip replies + Live scale |
+| js → UI (midi) | `notes ...`, `clip_available`, `read_error`, `write_error`, `scale` | clip replies + Live scale (`*_error` carry `no_track`/`no_clip`/`no_slot`) |
 | UI → Max (midi) | `midinote ...`, `flush` | scheduled engine output, via `sendNote()`/`flushNotes()` |
 | UI ⇄ worker (midi) | `code`/`hush`/`tick` in, `ready`/`evalok`/`evalerr`/`notes`/`flush` out | postMessage, not Max messages |
 | UI ⇄ Max (browser) | `fetch_to_file` / `fetch_done`, `buffer_load` / `buffer_ready`, `buffer_play` | the `download` and `samples` chains |
@@ -106,6 +106,10 @@ The MIDI devices support both bare mini-notation (`0 [2 ~] bd*2`) and full Strud
 **The Resolver:** `src/lib/mini/resolve.ts` ensures Live Play and To Clip always agree. It rewrites bare mini-notation into absolute MIDI numbers in place (e.g. `"0 [2 ~] bd*2"` becomes `"60 [64 ~] 36*2"`). Live Play and To Clip then compile the exact same string, eliminating any divergence in scale degrees or octaves. The active scale is maintained in `src/lib/mini/scales.ts` and synced with Live's active scale.
 
 **To Clip Export:** The clip exporter uses the Strudel engine. The UI sends the code to the Web Worker, which evaluates it, computes the true loop length (`patternCycles()`), and queries the whole window at once. Because the engine handles it, all Strudel transformations (`.jux()`, `.transpose()`, `.add()`) are fully supported when exporting.
+
+**Macro-mappable transport.** `play` is a real Live parameter (a `live.text` "Play/Stop" button), so a Rack macro or a Push button can start and stop the sequencer. A Live parameter is only *mappable* if it has a presentation rect - an invisible parameter cannot be clicked in map mode - so the MIDI device reveals it in a native panel behind a view switch, exactly like the FX device's knob panel (`layout.native` with `panel: true` + `switch`, driven by `useNativePanel`). The web editor stays the default view; the "Macro" button flips to the native panel to expose the button for mapping, and its "Back" switch returns. (Only the MIDI device places it natively today; the Drums device shares the parameter but not the panel.)
+
+**Clip I/O inside a Rack.** Clip read/write target the device's *track*, but `this_device canonical_parent` is the **Chain**, not the Track, when the device sits in an Instrument/Audio Rack - a Chain has no `clip_slots`, so the naive path both broke `getcount` (a `jsliveapi: invalid property name` once a second from the availability poll) and would have written to the wrong object. The wrapper's `ownTrack()` therefore climbs `canonical_parent` until it reaches a `Track` (no hop on a bare track, one in a rack, several when nested). Where no track resolves at all, `read_notes`/`write_clip` reply `read_error`/`write_error` with reason `no_track`, and the UI disables **both** clip buttons with a tooltip - the "disable on first fail" fallback - distinct from `no_clip` (nothing to read) and `no_slot` (track full), which are transient, not structural. (Fix lives upstream in `@m4l-jweb/wrapper` `liveapi.ts`.)
 
 ### 4b. Audio FX Device: The Frozen Graph
 
@@ -126,7 +130,7 @@ The MIDI devices support both bare mini-notation (`0 [2 ~] bd*2`) and full Strud
 - **Bind/stream/release**: `resolveParamId()` + `bindRemote()` when a stage becomes modulated; `queryFxPattern()` + `writeRemote()` per tick while the transport runs; `bindRemote(slot, 0)` when the stage stops - a bound `live.remote~` owns the parameter exclusively and would freeze the dial. LOM ids are resolved on mount and never persisted (a set reload reloads `[jweb]`, so the hook re-resolves; ids do not survive a reload).
 - **The units warp**: `live.remote~` takes knob TRAVEL, not the parameter's units (measured upstream - see m4l-jweb's ARCHITECTURE.md). `toRemote()` clamps into the dial's range and aims the travel at `norm(v)^(1/exponent)` so Live's re-applied exponent lands where the pattern asked. Exponent-1 dials pass through untouched.
 - **Source persistence**: a modulated stage's expression is the only record of what the user asked for - a Pattern cannot say what it was written as, and the parameter holds only where the sweep last was. The `sources` state slot (param -> expression) persists it; without it a committed `.lpf(sine.range(200, 2000))` reprinted as `.lpf(18000)`.
-- **Cost, so it is not a surprise:** `@strudel/core` in the fx app took the UI bundle from 269 kB to 448 kB. This machinery also modulates REAL Live devices by the same bind - the basis of Adopt mode (TODO).
+- **Cost, so it is not a surprise:** `@strudel/core` in the fx app took the UI bundle from 269 kB to 448 kB.
 
 **The Two-Screen Native UI (m4l-jweb 0.7.0):** The nine fx parameters are NATIVE `live.dial` objects, declared in `src/app/fx/surface.ts` via `layout: { native: { ..., panel: true, switch: "knobs" } }`. This shed the HTML sliders, so the dials automate, MIDI-map and hit Push like any factory device. Nine dials broke the Push bank budget (8 per page - the library throws on a ninth), so the banks split where the rack splits: **Tone** (cutoff, hpfreq, drive, crush) and **Space** (delay, delaytime, delayfeedback, room, gain).
 
@@ -153,6 +157,14 @@ The sample browser browses, downloads, and previews Strudel sample maps.
 - **The Preview:** Handled by the `samples` chain. Files are read via `[buffer~]` and auditioned by `[groove~]`, summed into the Live track's signal path using `[+~]`. Previews are quantized to Live's `clip_trigger_quantization` grid and loop appropriately based on tempo.
 
 All file handling is asynchronous and will never hang the UI thread. The system is designed to degrade gracefully if offline (playing already downloaded samples seamlessly).
+
+### 4d. Strudel Sampler: a polyphonic drum-rack instrument
+
+`alienmind-strudel-sampler` (`src/app/sampler/`) is the repo's first INSTRUMENT device (`type: "instrument"`), built on the library's `instrument` chain: a `[poly~]` of sample voices over a keymap of eight named `[buffer~]`s, one per pad. It keeps its MIDI input ports (an instrument does), takes note input via the `midiin` chain, and loads samples via the `download` chain - the same acquire-by-audition path the browser uses.
+
+- **Eight pads, C1..G1.** Pad `i` is MIDI note `36 + i` (Live's Drum Rack layout). A sound is loaded per pad from any Strudel sample map (browse -> `fetchToFile` -> `loadSample(slot, path)`); the pad remembers the sample's measured duration and channel count.
+- **Note -> voice.** External MIDI (`onNote`) maps a pitch to a pad and calls `playVoice({ slot, rate: 1, velocity, durationMs, channels })`; `[poly~]` allocates a free voice or steals the oldest, so overlapping notes never cut each other. The pad grid also click-auditions. v1 responds to external MIDI only; a Strudel pattern driving the pads is deferred (see TODO).
+- **Instance-scoped buffers.** The pad buffers are `---`-prefixed (device-scoped), so two Sampler instances in one set keep their own sounds - the same mechanism the browser preview relies on.
 
 ## 5. Strudel Integration
 
@@ -213,8 +225,31 @@ When testing manually, ensure:
   `new LiveAPI("live_app browser")` resolves to id 0 -
   `jsliveapi: component 'browser' is not an object`. The Browser (`load_item`,
   hotswap) is exposed to control-surface Python scripts only, so a device can never
-  INSTANTIATE another device. Translate mode is therefore adopt-only: bind to
-  devices the user placed by hand, never create them.
+  INSTANTIATE another device. (This was one leg of the "Translate mode" idea, whose
+  other leg - a device CONTROLLING a sibling it did not create - was built and then
+  abandoned as pointless; see doc/DRAWER_OF_FAILED_IDEAS.md.)
+
+## Deliberate limitations - decided, not open work
+
+Possible to build, chosen against on purpose. Recorded here so they are not
+re-opened as backlog.
+
+- **Scale/pitch in full Strudel code is not matched** (TODO item 4, closed 0.9.0).
+  Full JS code does not see the Octave/Shift controls or the Live Scale toggle; it is
+  passed through untouched, so `note("c5")` there is scientific MIDI 72 while `c5` in
+  bare mini-notation follows the octave convention. Rewriting a user's JS would be
+  worse than the mismatch, so the UI warns in amber and does not fix it (Studio window
+  banner `StudioWindow.tsx`; MIDI device-view line `useStrudel.ts`; dialect detection
+  `isBareMini()` in `strudelCode.ts`). Not a bug - the honest ceiling.
+- **Playhead highlighting for full Strudel code is deferred** (TODO item 5, deferred
+  0.9.0). The playhead highlights bare mini-notation only, from our own AST whose
+  tokens carry source positions (`src/lib/mini/playhead.ts`, painted in
+  `PatternEditor.tsx`). Full code would need CodeMirror in `PatternEditor` plus
+  forwarding hap `context.locations` through the worker postMessage boundary (the
+  worker discards them today, `engine.worker.js`) and wiring the vendored
+  `highlightMiniLocations`. That is a large change to the editor every device shares,
+  for a feature that only matters in the dialect that already lacks it. Deliberately
+  deferred, not open work.
 
 ## Verified in Live - claims worth re-checking
 
@@ -238,6 +273,15 @@ re-check, and when:
   not restore the default. Multi-space runs in a pattern must survive verbatim.
 - **One scheduler** (if the Studio window changes): however many views are open,
   exactly ONE stream of notes. The device view alone receives `tick`.
+- **Sampler polyphony and scope** (if the `instrument` chain or the pad wiring
+  changes): load a sample per pad, play a chord across pads - each hit rings out on its
+  own voice, none stolen mid-tail; two Sampler instances in one set keep separate
+  samples (`---` device-scoped buffers). Confirmed 0.9.0.
+- **Push banks** (if the fx surface `banks` change): on a Push, the FX encoders page as
+  **Tone** and **Space**, named - not "Bank 1"/"Bank 2". Confirmed 0.9.0.
+- **State-default seeding** (if the surface state slots or m4l-jweb's seeding change): a
+  fresh Strudel MIDI shows the demo pattern, a fresh FX device is not blank; a saved
+  pattern restores over the default. Confirmed 0.9.0.
 - **Engine boot / timing / preview / persistence** - the four gates in §6 above.
 
 ## Appendix: Past Architectural Decisions
