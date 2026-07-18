@@ -23,8 +23,8 @@ export default [
 		unmatchedTo: "js", // ui_ready / write_clip / read_notes reach the wrapper
 	},
 	{
-		name: "alienmind-strudel-midi-drums",
-		ui: "midi-drums",
+		name: "alienmind-strudel-drums-midi",
+		ui: "drums-midi",
 		type: "midi", // 'mmmm' MIDI effect
 		chains: ["midiout"],
 		unmatchedTo: "js",
@@ -118,10 +118,10 @@ export default [
 		 * device so two instances keep their own buffers. The app owns which sound occupies
 		 * which slot (a small name -> slot allocator, LRU past 16).
 		 */
-		name: "alienmind-strudel-sampler",
-		ui: "sampler",
+		name: "alienmind-strudel-drums-sampler",
+		ui: "drums-sampler",
 		type: "instrument",
-		mode: "sampler",
+		mode: "drums-sampler",
 		chains: ["instrument", "midiin", "download"],
 		slots: [
 			"slot1", "slot2", "slot3", "slot4", "slot5", "slot6", "slot7", "slot8",

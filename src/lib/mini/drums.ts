@@ -12,7 +12,7 @@
  * never collide with note names, which is why the defaults all have two.
  *
  * The map the user EDITS is not here: it is a state slot on the drums device
- * (src/app/midi-drums/surface.ts), persisted in the Live set, per instance. This
+ * (src/app/drums-midi/surface.ts), persisted in the Live set, per instance. This
  * file holds the defaults it starts from and the lookup itself, which is all that a
  * pattern needs and all that is worth testing.
  */
