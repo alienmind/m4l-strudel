@@ -39,6 +39,20 @@ interface EngineNote {
 	delayMs: number;
 }
 
+/**
+ * One scheduled SAMPLE VOICE, the Sampler's counterpart to EngineNote. The engine
+ * emits these instead of notes when a `voiceSink` is supplied: `s` names the pad,
+ * `n` picks a variation, `rate` repitches (1 for a drum pad), `velocity` is the gain.
+ */
+export interface VoiceEvent {
+	s: string;
+	n: number;
+	velocity: number;
+	rate: number;
+	durMs: number;
+	delayMs: number;
+}
+
 /** A clip note, in cycles - the exporter's units (see engine.mjs). */
 interface ClipNote {
 	pitch: number;
@@ -52,6 +66,7 @@ type EngineMessage =
 	| { t: "evalok" }
 	| { t: "evalerr"; message: string }
 	| { t: "notes"; notes: EngineNote[] }
+	| { t: "voices"; voices: VoiceEvent[] }
 	| { t: "clip"; notes: ClipNote[]; cycles: number }
 	| { t: "exporterr"; message: string }
 	| { t: "phase"; cycle: number }
@@ -92,6 +107,14 @@ export interface EngineOptions {
 	liveScale?: string;
 	/** The device's own amber line. The MAX_CYCLES warning below outranks it. */
 	warning?: string | null;
+	/**
+	 * THE SAMPLER SINK. When set, the engine routes each scheduled hap to this callback
+	 * (a [poly~] voice) INSTEAD of out to the midiout chain via sendNote - the code-driven
+	 * Sampler plays pads by sample name. Its presence flips the worker's `sink` to "voice",
+	 * so a hap that names a sample (`s("bd")`) survives instead of being dropped for having
+	 * no pitch. Absent for the MIDI devices, which stay note-shaped.
+	 */
+	voiceSink?: (voice: VoiceEvent) => void;
 }
 
 export interface EngineState {
@@ -147,6 +170,12 @@ export interface EngineState {
 
 export function useStrudelEngine(opts: EngineOptions): EngineState {
 	const { ctx, liveScale, initialText, surface } = opts;
+	// The Sampler passes a voiceSink; the MIDI devices do not. Presence alone selects the
+	// worker's sink mode. The ref keeps the (bound-once) worker handler reading the current
+	// callback rather than the one it closed over at mount.
+	const sink = opts.voiceSink ? "voice" : "note";
+	const voiceSinkRef = useRef(opts.voiceSink);
+	voiceSinkRef.current = opts.voiceSink;
 	const [playParam, setPlayParam] = useParam(surface, "play");
 	/**
 	 * THE PATTERN, from the `code` state slot - not component state.
@@ -382,6 +411,10 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 						delayMs: n.delayMs,
 					});
 				}
+			} else if (m.t === "voices") {
+				counters.sent += m.voices.length;
+				const play = voiceSinkRef.current;
+				if (play) for (const voice of m.voices) play(voice);
 			} else if (m.t === "clip") {
 				// Cycles -> beats. One cycle occupies `beatsPerCycle` of Live's beats -
 				// derived from the pattern's tempo (see tempo.ts) or the user's override.
@@ -449,13 +482,13 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 		// that plays something else entirely - "bd!4" once became "36!67", 67 kicks
 		// a cycle. A red error the user can ignore is not enough; do not run it.
 		if (!isBareMini(text) || errors.length === 0) {
-			workerRef.current?.postMessage({ t: "code", code: text, ctx: noteCtx, liveScale });
+			workerRef.current?.postMessage({ t: "code", code: text, ctx: noteCtx, liveScale, sink });
 			setLive(true);
 			setPlayParam(true);
 			return;
 		}
 		setStatus(`Parse error at ${errors[0].pos}: ${errors[0].msg}`);
-	}, [text, noteCtx, liveScale, errors, setPlayParam]);
+	}, [text, noteCtx, liveScale, errors, setPlayParam, sink]);
 
 	// Live 12's scale, the drum map, the octave/shift controls: all must reach a
 	// pattern that is ALREADY PLAYING. They are baked into the code the worker
@@ -475,8 +508,8 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 			return;
 		}
 		if (!live) return;
-		workerRef.current?.postMessage({ t: "code", code: textRef.current, ctx: noteCtx, liveScale });
-	}, [noteCtx, liveScale, live]);
+		workerRef.current?.postMessage({ t: "code", code: textRef.current, ctx: noteCtx, liveScale, sink });
+	}, [noteCtx, liveScale, live, sink]);
 
 	const hush = useCallback(() => {
 		workerRef.current?.postMessage({ t: "hush" });

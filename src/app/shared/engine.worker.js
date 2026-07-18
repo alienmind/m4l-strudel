@@ -14,13 +14,16 @@
  * Protocol (postMessage, structured clone - no base64 needed):
  *   in:  {t:'tick', playing, beats}   (plugsync~ outlets 0 and 6)
  *        {t:'tempo', bpm}             (LiveAPI live_set tempo observer)
- *        {t:'code', code, ctx, liveScale}   -> {t:'evalok'} | {t:'evalerr', message}
+ *        {t:'code', code, ctx, liveScale, sink}   -> {t:'evalok'} | {t:'evalerr', message}
+ *          (sink 'note' = MIDI out (default), 'voice' = sample voices for the Sampler)
  *        {t:'export', code, ctx, beatsPerCycle, liveScale} -> {t:'clip'} | {t:'exporterr'}
  *        {t:'hush'}              -> {t:'flush'}
  *   out: {t:'ready'} once the strudel scope is booted
  *        {t:'clock', free} when the clock source flips (free-run vs Live)
  *        {t:'notes', notes:[...]} per lookahead window, MIDI-shaped
  *          (pitch, velocity 1-127, durMs, chan, delayMs)
+ *        {t:'voices', voices:[...]} per window when sink='voice'
+ *          (s name, n variation, velocity 1-127, rate, durMs, delayMs)
  *        {t:'clip', notes:[...], cycles} the whole loop, times in CYCLES
  *        {t:'phase', cycle} ~20 Hz playhead for the editor highlight (-1 = idle)
  *        {t:'flush'} on transport stop
@@ -39,6 +42,7 @@ import {
 	compile,
 	queryWindow,
 	hapToNote,
+	hapToVoice,
 	exportNotes,
 	patternCycles,
 	setLiveScale,
@@ -49,6 +53,12 @@ import { asStrudelCode } from "../../lib/strudelCode";
 let pattern = null;
 let running = false;
 let bpm = 120;
+/**
+ * WHERE THE HAPS GO: "note" (the MIDI devices - out to the midiout chain via sendNote)
+ * or "voice" (the code-driven Sampler - each hap's sample name to a [poly~] voice). Set
+ * per compile from the `code` message, because it belongs to the device, not the tick.
+ */
+let sink = "note";
 
 /**
  * Free-run clock: strudel.cc plays the moment you evaluate - users expect
@@ -117,6 +127,24 @@ const transport = new LiveTransport({
 			postMessage({ t: "evalerr", message: `query: ${e.message}` });
 			return;
 		}
+		if (sink === "voice") {
+			// The Sampler sink: each hap names a sample, played on a [poly~] voice.
+			const voices = [];
+			for (const hap of haps) {
+				const voice = hapToVoice(hap, cps);
+				if (!voice) continue;
+				voices.push({
+					s: voice.s,
+					n: voice.n,
+					velocity: voice.velocity,
+					rate: voice.rate,
+					durMs: Math.round(voice.durMs),
+					delayMs: Math.round(transport.delayMs(voice.beginCycle, nowBeats, bpm)),
+				});
+			}
+			if (voices.length) postMessage({ t: "voices", voices });
+			return;
+		}
 		const notes = [];
 		for (const hap of haps) {
 			const n = hapToNote(hap, cps, engineCtx);
@@ -151,6 +179,7 @@ onmessage = async (e) => {
 		try {
 			setLiveScale(m.liveScale);
 			engineCtx = m.ctx;
+			sink = m.sink === "voice" ? "voice" : "note";
 			pattern = await compile(asStrudelCode(m.code, m.ctx));
 			running = true;
 			syncClockMode();
