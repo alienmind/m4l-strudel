@@ -40,6 +40,12 @@ Passed by hand and no longer open:
   sounds, `.bank()` overrides per-hap, auto-download works, layered sounds are polyphonic
   (16 voices), an unknown name is reported, and a MIDI sequencer in front drives it. The
   old pad-highlight and per-instance polyphony/scope also passed.
+- **Native controls + Full Studio in About** - every device's chrome is one grey set with
+  the `?` rightmost; the MIDI Play/Stop panel and the Full Studio child window are reached
+  from **About > Advanced** (Full Studio still edits the same pattern as the device view),
+  and FX keeps its top-bar **Knobs**.
+- **Sampler "Show folder"** - after the `drums-sampler` wrapper-mode fix it receives its
+  folder; Show folder enables after a download and opens the samples folder.
 
 The re-check recipe for each, should the code underneath change, is in
 [ARCHITECTURE.md](ARCHITECTURE.md) under "Verified in Live". The **drag-to-clip** spike is
@@ -47,24 +53,8 @@ closed as a failure and parked - see [DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILE
 
 ---
 
-## 1. Native controls moved into About (re-check)
-
-The devices' native panels are now reached from **About > Advanced > Controls** instead of
-a top-bar button (the top bars are one consistent grey set now). Confirm:
-
-1. **Strudel MIDI**: click the title (About), then **Advanced > Controls** - the native
-   Play/Stop panel appears; the native **Back** switch returns to the editor. The
-   macro-map round trip still works from there.
-2. **Full Studio** is under the same **Advanced** section on the pattern devices (MIDI,
-   Drums MIDI, Drums Sampler) and still edits the same pattern as the device view.
-3. **Strudel Audio FX** keeps its **Knobs** button in the top bar (its native panel is the
-   primary interaction, not an advanced extra), and every device's **?** sits rightmost.
-
-## 2. Sampler "Show folder" (wrapper fix)
-
-The Sampler now owns a samples folder (`drums-sampler` mode was not resolving, so the
-wrapper never sent its folder). Confirm: after **Run** downloads at least one sample,
-**Show folder** enables and opens the device's samples folder in Explorer/Finder.
+**No open Live checks remain for 0.9.0.** New behaviour lands its own check here as it
+ships; the standing re-check recipes live in ARCHITECTURE's "Verified in Live".
 
 # The dependency note
 

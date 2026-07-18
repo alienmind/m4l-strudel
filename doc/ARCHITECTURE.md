@@ -291,6 +291,14 @@ re-check, and when:
 - **Macro-map the native Play/Stop** (if the transport param or the native panel change): a
   Rack macro / Push button mapped to the transport starts and stops the sequencer, web
   Run/Stop stays in sync. The panel is reached from About > Advanced > Controls. Confirmed 0.9.0.
+- **About > Advanced (Controls + Full Studio)** (if `AboutPanel` or the window entries
+  change): the panel scrolls so the Advanced buttons are reachable in the 169px view;
+  **Controls** reveals the native panel and its Back returns; **Full Studio** opens the
+  child editor window that edits the same `code` slot as the device view (one scheduler,
+  the device view). On MIDI, Drums MIDI, Drums Sampler. Confirmed 0.9.0.
+- **Sampler samples folder** (if the wrapper's `HAS_SAMPLES_FOLDER` gate or `deviceFolder()`
+  change): the `drums-sampler` mode resolves, so the device receives `device_folder` and
+  **Show folder** opens its samples folder after a download. Confirmed 0.9.0.
 - **Push banks** (if the fx surface `banks` change): on a Push, the FX encoders page as
   **Tone** and **Space**, named - not "Bank 1"/"Bank 2". Confirmed 0.9.0.
 - **State-default seeding** (if the surface state slots or m4l-jweb's seeding change): a
