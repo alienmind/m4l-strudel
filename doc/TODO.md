@@ -15,15 +15,12 @@ Live is [TESTING.md](TESTING.md). Ideas tried and abandoned are in
 
 ## For 0.9.0
 
-### 1. Run the remaining Live checks
+All 0.9.0 Live checks are **confirmed** (clip I/O in a Rack, macro-map Play/Stop, the
+bank-based Sampler, native controls + Full Studio in About, Sampler "Show folder"). See
+[TESTING.md](TESTING.md) "Confirmed in 0.9.0" and ARCHITECTURE's "Verified in Live". The
+only open 0.9.0 chore is the screenshots.
 
-[TESTING.md](TESTING.md) holds the open ones. The big 0.9.0 items are now **confirmed**
-(clip I/O in a Rack, macro-map Play/Stop, the bank-based Sampler). What is left after the
-UI rework: the **native controls moved into About > Advanced > Controls** (the panel and
-Full Studio reachable there; FX keeps its top-bar Knobs; every `?` sits rightmost), and
-the **Sampler "Show folder"** now that the wrapper sends its samples folder.
-
-### 2. Recapture the screenshots
+### 1. Recapture the screenshots
 
 The UI changed shape (shared grey buttons, the Sampler's two screens, the reorganised MIDI
 bottom row) and two devices were renamed (**Drums MIDI**, **Drums Sampler**). The
@@ -37,12 +34,16 @@ overview. Keep the filenames so the doc links still resolve.
 
 ## Deferred to 1.0.0
 
+### 3. Sampler Device needs to be able to render a WAV
+And ideally, this needs to be able to be saved to clip
+Same functionality as the MIDI clip save.
+This does not necesarily needs Superdough (see next items), instead
+we render the polysynth device output to disk and then reimport back as audio.
+
 ### 4. Strudel's own audio in the track (Route B first)
 
-**Do not wait for the C++ external**: the standing analysis
-([m4l-jweb ENHANCEMENTS.md](../../m4l-jweb/doc/ENHANCEMENTS.md)) ranks offline
-rendering first - `OfflineAudioContext` renders cycle N+1 with the real superdough
-(bit-identical sound), `saveToFile()` (to be built upstream) writes the WAV,
+Check ([m4l-jweb ENHANCEMENTS.md](../../m4l-jweb/doc/ENHANCEMENTS.md)),
+Offline rendering of audio - `OfflineAudioContext` renders cycle N+1 with the real superdough (bit-identical sound), `saveToFile()` (to be built upstream) writes the WAV,
 `[buffer~]`/`[play~]` locked to `current_song_time` plays it double-buffered. One
 cycle of edit latency; random/stateful patterns fall back with a visible notice. See
 [SPIKE-OFFLINE.md](SPIKE-OFFLINE.md). This eventually fills the Rack's instrument slot.

@@ -32,7 +32,10 @@ export function AboutPanel({
 				<span className="text-xs font-semibold tracking-tight">About this device</span>
 			</div>
 			
-			<div className="flex flex-col flex-1 items-center justify-center gap-4 text-center px-4">
+			{/* Scroll, top-aligned: the device view is ~169px and the Advanced section (Full
+			    Studio / Controls) sits below the version box - centering + overflow-hidden used
+			    to push it off the bottom, so it looked like the Studio button had vanished. */}
+			<div className="flex flex-col flex-1 items-center justify-start gap-3 overflow-y-auto text-center px-4">
 				<div>
 					<h1 className="text-base font-bold text-foreground">m4l-strudel</h1>
 					<a 
@@ -81,7 +84,7 @@ export function AboutPanel({
 					</div>
 				)}
 
-				<div className="text-[10px] text-muted-foreground mt-auto pb-2">
+				<div className="text-[10px] text-muted-foreground mt-2 pb-2">
 					Copyright Alienmind, 2026
 				</div>
 			</div>
