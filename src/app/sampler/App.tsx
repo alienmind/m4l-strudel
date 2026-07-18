@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderOpen, Search } from "lucide-react";
+import { FolderOpen, Play, Search, Square } from "lucide-react";
 import { bindInlet, fetchToFile, loadSample, onNote, outlet, playVoice, uiReady } from "@m4l-jweb/bridge";
 import { cn } from "@/lib/utils";
 import { padNoteName } from "../midi-drums/DrumRack";
@@ -13,6 +13,9 @@ import {
 } from "@/lib/samples";
 import { PRESET_MAPS } from "../sampler-browser/banks";
 import { AboutPanel } from "../shared/AboutPanel";
+import { PatternEditor } from "../shared/PatternEditor";
+import { useStrudelEngine, type VoiceEvent } from "../shared/useStrudelEngine";
+import surface, { INITIAL_TEXT } from "./surface";
 import { IN, OUT } from "./protocol";
 
 /**
@@ -34,7 +37,14 @@ const PAD_ROWS: number[][] = [
 	[0, 1, 2, 3],
 ];
 
+/** The `s()` tokens a fresh kit answers to, one per pad. `s("bd sd, hh*8")` - the opening
+ *  pattern - names bd, sd and hh, so the default kit already has somewhere to send them. */
+const DEFAULT_NAMES = ["bd", "sd", "hh", "oh", "cp", "rim", "lt", "mt"] as const;
+
 interface PadState {
+	/** The `s()` token that triggers this pad from the CODE screen, and the label. Defaults
+	 *  from the loaded sample (`bd:3` -> `bd`); editable on the KIT screen. */
+	padName: string;
 	/** The sound assigned to this pad, for the label. Null until one is dropped in. */
 	name: string | null;
 	/** Where the sample is on disk, once fetched. */
@@ -46,25 +56,36 @@ interface PadState {
 	loading: boolean;
 }
 
-const EMPTY_PAD: PadState = { name: null, path: null, durationMs: null, channels: null, loading: false };
+const emptyPad = (i: number): PadState => ({
+	padName: DEFAULT_NAMES[i] ?? `pad${i + 1}`,
+	name: null,
+	path: null,
+	durationMs: null,
+	channels: null,
+	loading: false,
+});
 
 /**
- * Strudel Sampler - a polyphonic drum-rack instrument.
+ * Strudel Sampler - a polyphonic drum-rack instrument, played by CODE.
  *
- * Eight pads, one dedicated sample per pad, played by MIDI notes coming into the
- * track. The substrate is the `instrument` chain's [poly~]: a note names its sample
- * by slot index and Max allocates a free voice, so overlapping hits never cut each
- * other - which is the whole reason this is a [poly~] and not eight [groove~]s.
+ * Eight pads, one dedicated sample per pad, over the `instrument` chain's [poly~]: a
+ * voice names its sample by slot index and Max allocates a free voice, so overlapping
+ * hits never cut each other.
  *
- * The interaction is two-sided. To BUILD the kit, pick a pad and click a sound in the
- * browser on the right; it is fetched to disk and read into that pad's buffer (the
- * same acquire-by-audition path the sample browser uses - previewing IS downloading).
- * To PLAY it, send MIDI notes 36..43 into the track, or click a loaded pad to audition
- * it. v1 responds to external MIDI only; a Strudel pattern driving the pads is a
- * later pass (doc/TODO.md).
+ * TWO SCREENS, flipped by a button (the same shape as the other devices, but both screens
+ * are web UI, so it is an in-app switch, not native-panel codegen):
+ *   CODE (primary) - a Strudel pattern editor. `s("bd sd, hh*8")` names the pads; the
+ *     shared engine schedules each hap to playVoice() through a `voiceSink`. Commas layer
+ *     (polyphony is free - one [poly~] voice per layered hap), `*`/`[]`/`<>` sequence.
+ *   KIT (secondary) - the pad grid: load a sample per pad from any Strudel sample map,
+ *     click-audition, edit the pad's `s()` NAME, Show folder.
+ *
+ * External MIDI (notes 36..43) still strikes the pads too, so the device works inside a
+ * MIDI-driven Rack exactly as before, alongside its own pattern.
  */
 export default function App() {
-	const [pads, setPads] = useState<PadState[]>(() => SLOTS.map(() => ({ ...EMPTY_PAD })));
+	const [view, setView] = useState<"code" | "kit">("code");
+	const [pads, setPads] = useState<PadState[]>(() => SLOTS.map((_, i) => emptyPad(i)));
 	/** Which pad a picked sound loads into. There is always a selection, so the browser's
 	 *  click has an unambiguous destination. */
 	const [selected, setSelected] = useState(0);
@@ -89,24 +110,14 @@ export default function App() {
 	const flashTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
 	/**
-	 * The pads, in a ref, so the MIDI handler (bound ONCE) always reads the current kit
-	 * rather than the snapshot it closed over. A note that arrives after a pad is loaded
-	 * must see that load; a stale closure would play silence.
+	 * The pads, in a ref, so the MIDI handler and the engine's voiceSink (both bound
+	 * ONCE) always read the current kit rather than the snapshot they closed over. A
+	 * voice that arrives after a pad is loaded, or renamed, must see that change.
 	 */
 	const padsRef = useRef(pads);
 	padsRef.current = pads;
 
-	/** Strike a pad: hand its voice to [poly~]. Shared by an incoming note and a click. */
-	const strike = useCallback((idx: number, velocity: number) => {
-		const pad = padsRef.current[idx];
-		if (!pad || pad.path === null || pad.durationMs === null) return;
-		playVoice({
-			slot: idx,
-			rate: 1, // a drum pad plays its sample at its own pitch - no repitching
-			velocity,
-			durationMs: pad.durationMs, // hold the whole sample, so a one-shot plays out
-			channels: pad.channels ?? 2,
-		});
+	const flash = useCallback((idx: number) => {
 		setStruck((s) => new Set(s).add(idx));
 		const existing = flashTimers.current.get(idx);
 		if (existing) clearTimeout(existing);
@@ -123,16 +134,66 @@ export default function App() {
 		);
 	}, []);
 
+	/** Play a loaded pad on a [poly~] voice. Shared by an incoming note, a click, and the
+	 *  pattern's voiceSink. `rate` repitches (1 for a drum pad); the voice HOLDS the whole
+	 *  sample so a one-shot plays out. Returns false when the pad has no sample yet. */
+	const playPad = useCallback((idx: number, velocity: number, rate: number): boolean => {
+		const pad = padsRef.current[idx];
+		if (!pad || pad.path === null || pad.durationMs === null) return false;
+		playVoice({
+			slot: idx,
+			rate,
+			velocity,
+			durationMs: pad.durationMs,
+			channels: pad.channels ?? 2,
+		});
+		flash(idx);
+		return true;
+	}, [flash]);
+
+	/**
+	 * THE CODE SINK: a scheduled hap names a sample; find the pad answering to that name
+	 * and play it. `gain` arrived as velocity, `speed` as rate. An unknown name is reported
+	 * (once), never silent - the same "say what is missing" rule the FX adopt hint used.
+	 */
+	const missingRef = useRef<Set<string>>(new Set());
+	const [missing, setMissing] = useState<string[]>([]);
+	const voiceSink = useCallback((voice: VoiceEvent) => {
+		const idx = padsRef.current.findIndex((p) => p.padName === voice.s);
+		if (idx < 0 || !playPad(idx, voice.velocity, voice.rate)) {
+			// No pad of that name, or one with no sample loaded: name it once.
+			if (!missingRef.current.has(voice.s)) {
+				missingRef.current.add(voice.s);
+				setMissing([...missingRef.current]);
+			}
+		}
+	}, [playPad]);
+
+	const engine = useStrudelEngine({
+		surface,
+		initialText: INITIAL_TEXT,
+		ctx: EMPTY_CTX,
+		voiceSink,
+	});
+
+	// A pad loaded or renamed can satisfy a name that was missing a moment ago. Clearing on
+	// the kit changing lets the report recover instead of accusing a name that now plays.
+	useEffect(() => {
+		if (missingRef.current.size === 0) return;
+		missingRef.current.clear();
+		setMissing([]);
+	}, [pads]);
+
 	useEffect(() => {
 		bindInlet(IN.device_folder, (path) => setFolder(String(path)));
 		// External MIDI into the instrument: pitch picks a pad, velocity carries through.
 		// Bound once; it reads padsRef, so a later load is visible to an earlier binding.
 		onNote((pitch, velocity) => {
 			const idx = pitch - PAD_BASE;
-			if (idx >= 0 && idx < SLOTS.length) strike(idx, velocity);
+			if (idx >= 0 && idx < SLOTS.length) playPad(idx, velocity, 1);
 		});
 		uiReady();
-	}, [strike]);
+	}, [playPad]);
 
 	/** The list on screen: the map, filtered by the search box. */
 	const shown = useMemo(() => {
@@ -174,8 +235,8 @@ export default function App() {
 	/**
 	 * Assign a sound to the selected pad: fetch it if new, read it into that pad's buffer,
 	 * and remember what [info~] measured (the voice holds for the duration; a mono sample
-	 * folds to both ears from the channel count). This is also the download - there is no
-	 * separate one, the same as the sample browser.
+	 * folds to both ears from the channel count). Loading defaults the pad's `s()` NAME
+	 * from the sample (`bd:3` -> `bd`), unless the user has already typed one.
 	 */
 	const assign = useCallback(
 		async (sound: Sound) => {
@@ -209,12 +270,20 @@ export default function App() {
 				setPads((p) =>
 					p.map((pad, i) =>
 						i === idx
-							? { name: sound.name, path, durationMs: s.durationMs, channels: s.channels, loading: false }
+							? {
+									...pad,
+									name: sound.name,
+									padName: deriveName(sound.name),
+									path,
+									durationMs: s.durationMs,
+									channels: s.channels,
+									loading: false,
+								}
 							: pad,
 					),
 				);
 				setStatus(
-					`${padNoteName(PAD_BASE + idx)} = ${sound.name} - ${fmtMs(s.durationMs)}, ${s.channels === 1 ? "mono" : `${s.channels} ch`}`,
+					`${deriveName(sound.name)} = ${sound.name} - ${fmtMs(s.durationMs)}, ${s.channels === 1 ? "mono" : `${s.channels} ch`}`,
 				);
 			} catch (err) {
 				setPads((p) => p.map((pad, i) => (i === idx ? { ...pad, loading: false } : pad)));
@@ -224,9 +293,18 @@ export default function App() {
 		[selected, mapUrl],
 	);
 
+	const rename = useCallback((idx: number, padName: string) => {
+		setPads((p) => p.map((pad, i) => (i === idx ? { ...pad, padName } : pad)));
+	}, []);
+
 	if (showAbout) {
 		return <AboutPanel amxdBuild={__APP_VERSION__} onClose={() => setShowAbout(false)} />;
 	}
+
+	// The one-line note under both screens: the missing-name report outranks the engine's
+	// own status, since a silent pad is the first thing to explain.
+	const codeStatus =
+		missing.length > 0 ? `No pad named ${missing.map((m) => `"${m}"`).join(", ")} - load or rename one on the Kit screen` : engine.status;
 
 	return (
 		<div className="device flex h-full w-full flex-col gap-1.5 bg-background p-2 text-foreground">
@@ -237,131 +315,212 @@ export default function App() {
 				>
 					Strudel Sampler
 				</button>
-				<select
-					value={mapUrl}
-					onChange={(e) => void load(e.target.value)}
-					disabled={loading}
-					className="ml-auto flex-1 rounded bg-input/50 px-1 py-0.5 disabled:opacity-60"
-				>
-					{PRESET_MAPS.map((p) => (
-						<option key={p.url} value={p.url}>
-							{p.label}
-						</option>
-					))}
-				</select>
+				{view === "code" ? (
+					<>
+						{/* Run/Stop the pattern - the shared engine's transport, also the mappable Play param. */}
+						<button
+							onClick={() => (engine.live ? engine.hush() : engine.run())}
+							className={cn(
+								"ml-auto flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5",
+								engine.live ? "bg-primary/30 hover:bg-primary/40" : "bg-input/50 hover:bg-input",
+							)}
+							title={engine.live ? "Stop the pattern" : "Run the pattern"}
+						>
+							{engine.live ? <Square className="size-3" /> : <Play className="size-3" />}
+							{engine.live ? "Stop" : "Run"}
+						</button>
+						<button
+							onClick={() => setView("kit")}
+							className="shrink-0 rounded bg-input/50 px-1.5 py-0.5 hover:bg-input"
+							title="Build the kit: load samples and name the pads"
+						>
+							Kit
+						</button>
+					</>
+				) : (
+					<>
+						<select
+							value={mapUrl}
+							onChange={(e) => void load(e.target.value)}
+							disabled={loading}
+							className="ml-auto flex-1 rounded bg-input/50 px-1 py-0.5 disabled:opacity-60"
+						>
+							{PRESET_MAPS.map((p) => (
+								<option key={p.url} value={p.url}>
+									{p.label}
+								</option>
+							))}
+						</select>
+						<button
+							onClick={() => setView("code")}
+							className="shrink-0 rounded bg-input/50 px-1.5 py-0.5 hover:bg-input"
+							title="Back to the code screen"
+						>
+							Back
+						</button>
+					</>
+				)}
 			</div>
 
-			<div className="flex min-h-0 flex-1 gap-1.5">
-				{/* The pads: a 4-wide grid, bottom-up like Live's Drum Rack. Click selects a
-				    pad (where the next picked sound loads); a loaded pad also auditions. */}
-				<div className="grid min-h-0 shrink-0 auto-rows-min content-start gap-1">
-					{PAD_ROWS.map((row, ri) => (
-						<div key={ri} className="grid grid-cols-4 gap-1">
-							{row.map((idx) => {
-								const pad = pads[idx];
-								return (
-									<button
-										key={idx}
-										onClick={() => {
-											setSelected(idx);
-											if (pad.path) strike(idx, 100);
-										}}
-										className={cn(
-											"relative flex h-11 w-16 flex-col justify-between rounded-sm border p-1 text-left transition-colors",
-											struck.has(idx)
-												? "border-primary bg-primary/40"
-												: selected === idx
-													? "border-primary bg-primary/15"
-													: pad.name
-														? "border-primary/40 bg-primary/10"
-														: "border-input bg-input/30",
-										)}
-										title={
-											pad.name
-												? `${padNoteName(PAD_BASE + idx)} = ${pad.name} - click to audition`
-												: `${padNoteName(PAD_BASE + idx)} (MIDI ${PAD_BASE + idx}) - select, then click a sound`
-										}
-									>
-										<span className="pointer-events-none font-mono text-[8px] leading-none text-muted-foreground">
-											{padNoteName(PAD_BASE + idx)}
-										</span>
-										<span
+			{view === "code" ? (
+				/* THE CODE SCREEN: write an s() pattern; the engine plays the pads. */
+				<div className="flex min-h-0 flex-1 flex-col gap-1.5">
+					<PatternEditor
+						value={engine.text}
+						onChange={engine.setText}
+						onRun={engine.run}
+						spans={engine.playing}
+						invalid={engine.evalError !== null}
+					/>
+					{engine.evalError && (
+						<span className="shrink-0 truncate text-[10px] text-destructive" title={engine.evalError}>
+							{engine.evalError}
+						</span>
+					)}
+				</div>
+			) : (
+				/* THE KIT SCREEN: load a sample per pad, name it, audition it. */
+				<div className="flex min-h-0 flex-1 gap-1.5">
+					{/* The pads: a 4-wide grid, bottom-up like Live's Drum Rack. Click selects a
+					    pad (where the next picked sound loads); a loaded pad also auditions. The
+					    name field is the s() token the code screen triggers it by. */}
+					<div className="grid min-h-0 shrink-0 auto-rows-min content-start gap-1">
+						{PAD_ROWS.map((row, ri) => (
+							<div key={ri} className="grid grid-cols-4 gap-1">
+								{row.map((idx) => {
+									const pad = pads[idx];
+									return (
+										<div
+											key={idx}
 											className={cn(
-												"pointer-events-none w-full truncate text-[10px] font-semibold",
-												pad.loading ? "text-muted-foreground" : pad.name ? "text-foreground" : "text-muted-foreground/40",
+												"relative flex h-14 w-16 flex-col justify-between rounded-sm border p-1 transition-colors",
+												struck.has(idx)
+													? "border-primary bg-primary/40"
+													: selected === idx
+														? "border-primary bg-primary/15"
+														: pad.name
+															? "border-primary/40 bg-primary/10"
+															: "border-input bg-input/30",
 											)}
 										>
-											{pad.loading ? "..." : (pad.name ?? "-")}
-										</span>
-									</button>
-								);
-							})}
-						</div>
-					))}
-				</div>
-
-				{/* The browser: a sound loads into the SELECTED pad. */}
-				<div className="flex min-h-0 flex-1 flex-col gap-1">
-					<div className="flex items-center gap-1 rounded bg-input/40 px-1.5 text-[11px]">
-						<Search className="size-3 shrink-0 text-muted-foreground" />
-						<input
-							value={query}
-							onChange={(e) => setQuery(e.target.value)}
-							placeholder="Search sounds"
-							className="w-full bg-transparent py-0.5 outline-none"
-						/>
-					</div>
-					<div className="min-h-0 flex-1 overflow-y-auto rounded-md bg-input/20">
-						{sounds.length === 0 ? (
-							<div className="p-2 text-[11px] text-muted-foreground">{loading ? "Loading..." : "No sounds in this map."}</div>
-						) : shown.length === 0 ? (
-							<div className="p-2 text-[11px] text-muted-foreground">Nothing matches "{query}".</div>
-						) : (
-							<table className="w-full text-[11px]">
-								<tbody>
-									{shown.map((sound) => {
-										const playable = isPlayable(variationUrl(sound, 0));
-										return (
-											<tr
-												key={sound.name}
-												onClick={() => playable && void assign(sound)}
-												className={cn(
-													"cursor-pointer border-b border-input/30 last:border-0 hover:bg-input/40",
-													!playable && "cursor-default opacity-40",
-												)}
+											<button
+												onClick={() => {
+													setSelected(idx);
+													if (pad.path) playPad(idx, 100, 1);
+												}}
+												className="flex flex-col text-left"
 												title={
-													playable
-														? `Load into ${padNoteName(PAD_BASE + selected)}`
-														: "[buffer~] reads WAV/AIFF only"
+													pad.name
+														? `${padNoteName(PAD_BASE + idx)} = ${pad.name} - click to audition`
+														: `${padNoteName(PAD_BASE + idx)} (MIDI ${PAD_BASE + idx}) - select, then click a sound`
 												}
 											>
-												<td className="px-1.5 py-1 font-mono">{sound.name}</td>
-											</tr>
-										);
-									})}
-								</tbody>
-							</table>
-						)}
+												<span className="pointer-events-none font-mono text-[8px] leading-none text-muted-foreground">
+													{padNoteName(PAD_BASE + idx)}
+												</span>
+												<span
+													className={cn(
+														"pointer-events-none w-full truncate text-[10px] font-semibold",
+														pad.loading ? "text-muted-foreground" : pad.name ? "text-foreground" : "text-muted-foreground/40",
+													)}
+												>
+													{pad.loading ? "..." : (pad.name ?? "-")}
+												</span>
+											</button>
+											{/* The s() name. Editable, so `s("kick")` can point at whatever loaded. */}
+											<input
+												value={pad.padName}
+												onChange={(e) => rename(idx, e.target.value)}
+												onClick={() => setSelected(idx)}
+												spellCheck={false}
+												className="w-full rounded-sm bg-background/60 px-1 font-mono text-[9px] leading-tight outline-none focus:bg-background"
+												title="The s() token that triggers this pad from the code screen"
+											/>
+										</div>
+									);
+								})}
+							</div>
+						))}
+					</div>
+
+					{/* The browser: a sound loads into the SELECTED pad. */}
+					<div className="flex min-h-0 flex-1 flex-col gap-1">
+						<div className="flex items-center gap-1 rounded bg-input/40 px-1.5 text-[11px]">
+							<Search className="size-3 shrink-0 text-muted-foreground" />
+							<input
+								value={query}
+								onChange={(e) => setQuery(e.target.value)}
+								placeholder="Search sounds"
+								className="w-full bg-transparent py-0.5 outline-none"
+							/>
+						</div>
+						<div className="min-h-0 flex-1 overflow-y-auto rounded-md bg-input/20">
+							{sounds.length === 0 ? (
+								<div className="p-2 text-[11px] text-muted-foreground">{loading ? "Loading..." : "No sounds in this map."}</div>
+							) : shown.length === 0 ? (
+								<div className="p-2 text-[11px] text-muted-foreground">Nothing matches "{query}".</div>
+							) : (
+								<table className="w-full text-[11px]">
+									<tbody>
+										{shown.map((sound) => {
+											const playable = isPlayable(variationUrl(sound, 0));
+											return (
+												<tr
+													key={sound.name}
+													onClick={() => playable && void assign(sound)}
+													className={cn(
+														"cursor-pointer border-b border-input/30 last:border-0 hover:bg-input/40",
+														!playable && "cursor-default opacity-40",
+													)}
+													title={
+														playable
+															? `Load into ${padNoteName(PAD_BASE + selected)}`
+															: "[buffer~] reads WAV/AIFF only"
+													}
+												>
+													<td className="px-1.5 py-1 font-mono">{sound.name}</td>
+												</tr>
+											);
+										})}
+									</tbody>
+								</table>
+							)}
+						</div>
 					</div>
 				</div>
-			</div>
+			)}
 
 			<div className="flex items-center gap-2">
-				<span className="flex-1 truncate text-[10px] text-muted-foreground" title={status}>
-					{status}
-				</span>
-				<button
-					onClick={() => outlet(OUT.reveal_folder)}
-					disabled={!downloaded || !folder}
-					className="flex shrink-0 items-center gap-1 rounded bg-input/50 px-1.5 py-0.5 text-[10px] hover:brightness-110 disabled:opacity-40"
-					title={downloaded ? "Show the samples folder in Finder/Explorer" : "Load a sample first"}
+				<span
+					className={cn("flex-1 truncate text-[10px]", missing.length > 0 ? "text-amber-500" : "text-muted-foreground")}
+					title={view === "code" ? codeStatus : status}
 				>
-					<FolderOpen className="size-3" />
-					Show folder
-				</button>
+					{view === "code" ? codeStatus : status}
+				</span>
+				{view === "kit" && (
+					<button
+						onClick={() => outlet(OUT.reveal_folder)}
+						disabled={!downloaded || !folder}
+						className="flex shrink-0 items-center gap-1 rounded bg-input/50 px-1.5 py-0.5 text-[10px] hover:brightness-110 disabled:opacity-40"
+						title={downloaded ? "Show the samples folder in Finder/Explorer" : "Load a sample first"}
+					>
+						<FolderOpen className="size-3" />
+						Show folder
+					</button>
+				)}
 			</div>
 		</div>
 	);
+}
+
+/** The engine's NoteContext is empty here: pads are named by `s()`, not resolved to
+ *  pitches, so there is no scale or drum map. Stable, so the engine does not recompile. */
+const EMPTY_CTX = {} as const;
+
+/** A pad's default `s()` token from a sample name: the head before any `:` variation
+ *  (`bd:3` -> `bd`) and before any path, so `s("bd")` finds it. */
+function deriveName(sampleName: string): string {
+	return sampleName.split(/[\\/]/).pop()!.split(":")[0].trim() || sampleName;
 }
 
 function fmtMs(ms: number): string {

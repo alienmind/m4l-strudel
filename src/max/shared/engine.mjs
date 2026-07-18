@@ -95,6 +95,28 @@ export function hapToNote(hap, cps, ctx) {
 }
 
 /**
+ * A hap as a SAMPLE VOICE - keyed on the sample name `s`, NOT on a pitch.
+ *
+ * The code-driven Sampler plays pads by name (`s("bd sd, hh*8")`), so this path never
+ * asks hapPitch for a MIDI number: a plain `s("bd")` has none, and hapToNote would drop
+ * it. Returns null when the hap names no sample. `n` is the sample variation index,
+ * `speed` the playback rate (a drum pad leaves it at 1), `gain` becomes the velocity.
+ */
+export function hapToVoice(hap, cps) {
+	const v = hap.value ?? {};
+	if (v.s === undefined || v.s === null || v.s === "") return null;
+	const durCycles = hap.duration.valueOf();
+	return {
+		s: String(v.s),
+		n: typeof v.n === "number" ? Math.round(v.n) : 0,
+		velocity: hapVelocity(hap),
+		rate: typeof v.speed === "number" && v.speed !== 0 ? v.speed : 1,
+		durMs: Math.max(5, (durCycles / cps) * 1000),
+		beginCycle: hap.whole.begin.valueOf(),
+	};
+}
+
+/**
  * The clip exporter's view of a hap: times in CYCLES, because a clip is written
  * in beats, not milliseconds - one cycle is however many bars the user picked,
  * and nothing here needs to know the tempo.

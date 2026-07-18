@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from "vitest";
-import { bootScope, compile, queryWindow, hapToNote } from "../shared/engine.mjs";
+import { bootScope, compile, queryWindow, hapToNote, hapToVoice } from "../shared/engine.mjs";
 
 test("4 onsets/cycle, midichan carried", async () => {
 	await bootScope();
@@ -42,5 +42,37 @@ describe("the drum map, and what outranks it", () => {
 	test("without a drum map, n is a pitch again", async () => {
 		const pat = await compile('n("60 62")');
 		expect(queryWindow(pat, 0, 1, 0.5).map((h) => hapToNote(h, 0.5).pitch)).toEqual([60, 62]);
+	});
+});
+
+describe("the sampler voice sink: haps keyed by sample name, no pitch", () => {
+	beforeAll(() => bootScope());
+	const voices = async (code) => {
+		const pat = await compile(code);
+		return queryWindow(pat, 0, 1, 0.5).map((h) => hapToVoice(h, 0.5));
+	};
+
+	test("s() names survive with no drum map - the pitchless path", async () => {
+		// hapToNote would DROP these (no pitch); hapToVoice keeps them by name. Commas
+		// layer, so bd/hh/sd all land in one cycle - the polyphony the [poly~] gives free.
+		const got = await voices('s("bd sd, hh*2")');
+		expect(got.map((v) => v.s).sort()).toEqual(["bd", "hh", "hh", "sd"]);
+	});
+
+	test("n is the variation index, speed is the rate, gain is the velocity", async () => {
+		const [v] = await voices('s("bd:2").speed(2).gain(0.5)');
+		expect(v.s).toBe("bd");
+		expect(v.n).toBe(2);
+		expect(v.rate).toBe(2);
+		expect(v.velocity).toBe(Math.round(0.5 * 127));
+	});
+
+	test("a drum pad defaults to rate 1", async () => {
+		const [v] = await voices('s("bd")');
+		expect(v.rate).toBe(1);
+	});
+
+	test("a hap that names no sample is null, not a voice", async () => {
+		expect(await voices('note("c3")')).toEqual([null]);
 	});
 });
