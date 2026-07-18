@@ -3,7 +3,7 @@
 High-level history of m4l-strudel, grouped by milestone release. This is a 0.x
 project, so each minor version is a major milestone. Newest first.
 
-## 0.9.0 - 2026-07-18
+## 0.9.1 - 2026-07-19
 
 Pattern as a first-class signal, a bank-based sampler, and one consistent chrome.
 
@@ -25,7 +25,7 @@ Pattern as a first-class signal, a bank-based sampler, and one consistent chrome
 - A reference window listing which Strudel features each device supports.
 - Drag-a-sample-into-a-clip: tried (`DownloadURL`) and failed - CEF strips the
   payload; parked. "Show folder" is the answer.
-- Runs on m4l-jweb 0.9.0.
+- Runs on m4l-jweb 0.9.1.
 
 ## 0.8.x - 2026-07-13 to 2026-07-16
 
