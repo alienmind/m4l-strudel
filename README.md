@@ -14,9 +14,9 @@ The result is a set of **Max for Live devices** that bring [Strudel](https://str
 
 - **Generative sequencing in one line.** `note("c3 e3 g3 b3").sometimesBy(.3, x=>x.fast(2))` is a whole evolving part. Euclidean rhythms, polymeter, per-cycle alternation - things that are tedious to click into a piano roll are one expression in Strudel.
 - **The ultimate hybrid workflow.** By exposing Strudel's engine states directly to Live, you can map them to your **Ableton Push** or external MIDI controllers. Start and stop complex algorithmic sequences with physical hardware!
-- **A dedicated drum machine.** The new **Strudel MIDI Drums** device brings Strudel's generative drum language (`bd`, `sd`, `hh`) straight to your Ableton Drum Racks. It features a visual **Kit** mapper that natively persists in your Live set, letting you easily route algorithmic sequences to any custom kit!
+- **A dedicated drum machine.** The new **Strudel Drums MIDI** device brings Strudel's generative drum language (`bd`, `sd`, `hh`) straight to your Ableton Drum Racks. It features a visual **Kit** mapper that natively persists in your Live set, letting you easily route algorithmic sequences to any custom kit!
 
-![Strudel MIDI Drums Kit Mapping](doc/screenshot-midi-drums-mapping.png)
+![Strudel Drums MIDI Kit Mapping](doc/screenshot-midi-drums-mapping.png)
 
 - **It's really Live-native.** Patterns start on the bar, follow tempo automation, stop when you stop the transport, and notes land on the track the device sits on. Everything renders inside the device UI.
 - **From sketch to clip.** The MIDI device can freeze any pattern into a regular MIDI clip (and read clips back into mini-notation), so generative sketches become ordinary arrangeable material. This works **inside an Instrument Rack too** - the device finds its track by climbing out of the rack chain, so clip import/export lands on the track the rack sits on. Where a track genuinely cannot be reached, both clip buttons disable themselves with a tooltip rather than failing silently.
@@ -29,10 +29,10 @@ All four devices are ready to use.
 
 | Device | Type | What it does for you |
 |---|---|---|
-| **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Scale-aware (it follows Live 12's key). Converts patterns **to and from MIDI clips** on the track (in a Rack too). A **macro-mappable Play/Stop** parameter (reveal it with the **Macro** button) lets a Rack macro or a Push button start and stop the sequencer. |
-| **Strudel MIDI Drums** (`alienmind-strudel-midi-drums.amxd`) | MIDI effect | The exact same engine as Strudel MIDI, but purpose-built for driving Drum Racks. A dedicated mapping UI routes drum words (`bd`, `sd`, `hh`) to specific Drum Rack pads, and **the map travels with your set**. |
+| **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Scale-aware (it follows Live 12's key). Converts patterns **to and from MIDI clips** on the track (in a Rack too). A **macro-mappable Play/Stop** parameter (reveal it under **About > Advanced > Controls**) lets a Rack macro or a Push button start and stop the sequencer. |
+| **Strudel Drums MIDI** (`alienmind-strudel-drums-midi.amxd`) | MIDI effect | The exact same engine as Strudel MIDI, but purpose-built for driving Drum Racks. A dedicated mapping UI routes drum words (`bd`, `sd`, `hh`) to specific Drum Rack pads, and **the map travels with your set**. |
 | **Strudel Audio FX** (`alienmind-strudel-fx.amxd`) | Audio effect | Write **one line** of Strudel's effect vocabulary - `.lpf(800).hpf(120).crush(8).gain(1.2)` - and it applies to whatever audio is already on the track. Nine stages (filter, hpf, drive, crush, delay, reverb, gain), each a real Live parameter: automatable, MIDI-mappable, native dials in the device view, and two named Push banks (Tone / Space). **Patterns modulate too**: `.lpf(sine.range(200, 2000))` sweeps the cutoff once per bar through `live.remote~` - continuous modulation, no automation written, and the dial comes back the moment the line stops asking. |
-| **Strudel Sampler** (`alienmind-strudel-sampler.amxd`) | Instrument | A polyphonic, **code-driven** sampler over drum-machine **banks**. Write `s("bd sd, hh*8")`; a bank (a tidal-drum-machine, strudel's `bank()` prefix) picks which machine's `bd`/`sd`/`hh` play, and samples auto-download in the background from the same repos the browser uses. Sixteen voices; overlapping sounds ring out independently, and two instances keep separate samples. |
+| **Strudel Drums Sampler** (`alienmind-strudel-drums-sampler.amxd`) | Instrument | A polyphonic, **code-driven** sampler over drum-machine **banks**. Write `s("bd sd, hh*8")` (or a bare `bd sd, hh!6`); a bank (a tidal-drum-machine, strudel's `bank()` prefix) picks which machine's `bd`/`sd`/`hh` play, and samples auto-download in the background from the same repos the browser uses. Sixteen voices; overlapping sounds ring out independently, and two instances keep separate samples. **MIDI notes drive it too** (Drum Rack layout), so a sequencer in front plays the same bank. |
 | **Strudel Samples** (`alienmind-strudel-sample-browser.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo) and **audition samples through the track** - beat-synced to your project's launch quantization, looped in time, and heard through the track's own fader and effects. Auditioning downloads the file next to the device; drag it out into a Simpler, a Drum Rack or a track. |
 
 **Ships with an Instrument Rack preset** (`presets/AlienMind Strudel Rack.adg`): Strudel MIDI -> a native Ableton instrument -> Strudel Audio FX, wired and ready to drop from Live's browser.
@@ -46,7 +46,7 @@ If you are eager to jump in, here are a few valid patterns you can drop straight
 <c1 c1 <c2 c#2>>*16
 ```
 
-**Strudel MIDI Drums**
+**Strudel Drums MIDI**
 ```js
 s("bd hh sd hh")
 ```
@@ -79,7 +79,7 @@ pnpm test          # vitest: mini-notation parser + headless engine tests
 pnpm build         # → dist/m4l-strudel/alienmind-strudel-{midi,sample-browser,fx}.amxd
                     #   + dist/m4l-strudel.zip (release archive incl. installers)
 pnpm dev:midi       # browser dev for the MIDI device, mocked Live beside it
-pnpm dev:midi-drums # browser dev for the MIDI Drums device
+pnpm dev:drums-midi # browser dev for the Drums MIDI device
 pnpm dev:sample-browser # browser dev for the sample browser
 pnpm dev:fx         # browser dev for the Audio FX device
 ```

@@ -194,15 +194,16 @@ export default function App() {
 						Strudel Audio FX
 					</button>
 					<span className="text-[10px] text-muted-foreground">audio effect</span>
+				</div>
+				<div className="flex items-center gap-1">
+					{/* Knobs stays in the top bar (unlike the other devices' native panels, which
+					    moved to About): on the FX device the native knob panel IS the primary
+					    interaction, not an advanced extra. The ? sits rightmost, as everywhere. */}
+					<Button onClick={() => setKnobs(true)} title="Show the native knob panel">
+						Knobs
+					</Button>
 					<HelpButton onOpen={helpWindow.open} />
 				</div>
-				{/* Top-right, over the native "knobs" switch (surface.ts pins it to the
-				    same spot) so the control stays put when the views flip. Clicking it
-				    hides this web UI and shows the native knob panel; the native toggle
-				    there flips back. */}
-				<Button onClick={() => setKnobs(true)} title="Show the native knob panel">
-					Knobs
-				</Button>
 			</div>
 
 			<div className="flex items-center gap-1">

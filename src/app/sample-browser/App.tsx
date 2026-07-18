@@ -466,8 +466,8 @@ export default function App() {
 				</span>
 				{/* The stopgap for "where did my sample go": the page cannot open a file
 				    manager, so it asks the wrapper to. Enabled once a sample is on disk -
-				    before that the folder does not exist. Replaced, eventually, by dragging
-				    the row straight into Live (doc/SPIKE-DRAG-TO-CLIP.md). */}
+				    before that the folder does not exist. The drag-into-Live alternative was
+				    tried and failed (doc/DRAWER_OF_FAILED_IDEAS.md); this is the answer. */}
 				<Button
 					icon={FolderOpen}
 					onClick={() => outlet(OUT.reveal_folder)}
@@ -528,25 +528,21 @@ function useTransport() {
 /**
  * Put a downloaded sample onto a drag, in every shape a drop target might read.
  *
- * SPIKE UPDATE (doc/SPIKE-DRAG-TO-CLIP.md): unknown #1 is answered YES - [jweb]'s
- * embedded Chromium DOES hand an HTML5 drag to the host OS. Dragging a row into
- * notepad.exe pastes the `text/plain` payload, which proves the drag crosses the OS
- * boundary. What it delivered was a FORWARD-SLASH path, and Live's audio lane did not
- * accept it. Windows drop targets expect a NATIVE (backslash) path, so `text/plain` is
- * now the Windows path; the forward-slash `file://` URI stays on `text/uri-list` for
- * targets that want a URI, and the `DownloadURL` (Chromium convention) stays too. Which
- * one Live finally accepts is the remaining spike question.
+ * SPIKE CLOSED - FAILED (doc/DRAWER_OF_FAILED_IDEAS.md): [jweb]'s CEF hands an HTML5 drag
+ * to the OS as TEXT, but strips the `DownloadURL` payload, so no real file ever drops into
+ * Live's audio lane (and LOM has no create-audio-clip). Parked for good; **Show folder** is
+ * the shipping answer. This drag stays as a best-effort text handoff (a native Windows path
+ * on `text/plain`, the `file://` URI on `text/uri-list`) - harmless where it lands as text,
+ * never a clip.
  */
 function startFileDrag(e: React.DragEvent, folder: string, relPath: string): void {
 	const url = fileUrl(folder, relPath);
 	const abs = absPath(folder, relPath);
-	const name = relPath.split("/").pop() || "sample.wav";
 	e.dataTransfer.setData("text/uri-list", url);
 	// A native Windows path (backslashes), the shape a Windows file drop target reads.
 	// notepad accepted the forward-slash form; Live did not - a drop target is stricter
 	// than a text field, so hand it the OS-native path.
 	e.dataTransfer.setData("text/plain", winPath(abs));
-	e.dataTransfer.setData("DownloadURL", `audio/wav:${name}:${url}`);
 	e.dataTransfer.effectAllowed = "copy";
 }
 

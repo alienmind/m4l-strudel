@@ -51,7 +51,19 @@ export default function App() {
 	const studioWindow = useWindow(surface, "studio");
 
 	if (showAbout) {
-		return <AboutPanel amxdBuild={s.amxdBuild} onOpenStudio={studioWindow.open} onClose={() => setShowAbout(false)} />;
+		return (
+			<AboutPanel
+				amxdBuild={s.amxdBuild}
+				onOpenStudio={studioWindow.open}
+				// Reveal the native panel (the mappable Play/Stop). It replaces the web UI, and
+				// its own native Back switch returns - so close About on the way in.
+				onShowControls={() => {
+					setShowTransport(true);
+					setShowAbout(false);
+				}}
+				onClose={() => setShowAbout(false)}
+			/>
+		);
 	}
 
 	if (showClip) {
@@ -93,11 +105,8 @@ export default function App() {
 				<Button icon={FolderOpen} onClick={() => setShowClip(true)} title="Open Clip Import/Export controls">
 					Clip
 				</Button>
-				{/* Reveal the native transport panel, whose Play/Stop is a real Live parameter
-				    you can map a Rack macro (or a Push button) to. */}
-				<Button onClick={() => setShowTransport(true)} title="Show the native Play/Stop control - map a Rack macro or Push button to it">
-					Macro
-				</Button>
+				{/* The native Play/Stop panel (for mapping a Rack macro / Push button) moved to
+				    About > Advanced > Controls - an advanced, set-once affordance. */}
 				<HelpButton onOpen={helpWindow.open} />
 			</div>
 

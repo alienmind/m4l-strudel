@@ -8,9 +8,11 @@ than letting you find out by wondering why nothing happened.
 **The short version.** The *pattern language* is 100% supported: the real
 `@strudel/core` runs inside the device, so anything that produces notes works,
 including every transformation, and all of it exports to a MIDI clip. What is
-**not** supported is Strudel's *sound engine* - `.s("bd")`, sample playback,
-and the audio effects attached to a pattern. Those are Ableton's job here, and
-you reach them through an instrument on the track or the Audio FX device.
+**not** supported is Strudel's *synthesis* engine (superdough oscillators) and the
+pattern-attached audio effects - those are Ableton's job here, reached through an
+instrument on the track or the Audio FX device. **Sample playback IS supported**,
+by the **Drums Sampler**: `s("bd sd").bank("RolandTR909")` plays real drum-machine
+samples through a `[poly~]` keymap (not superdough) - see its section below.
 
 ## Patterns that work today
 
@@ -64,20 +66,17 @@ chain): see [doc/TODO.md](doc/TODO.md).
 ## The one that catches everyone
 
 ```js
-s("bd sd bd sd")     // silence. no notes, no error.
+s("bd sd bd sd")     // on a MIDI device: silence. no notes, no error.
 sound("bd*4")        // same.
 ```
 
-A pattern built with `s()` / `sound()` names a **sample**, not a note. On
-strudel.cc, Strudel's own audio engine (superdough) loads that sample and plays
-it. Inside a Max for Live device there is no such engine - and there cannot be
-one, because audio generated in the device's embedded browser view has no path
-into Live's signal chain (see [ARCHITECTURE.md](ARCHITECTURE.md) §4).
+A pattern built with `s()` / `sound()` names a **sample**, not a note. On the two
+**MIDI devices** there is no sample engine - audio generated in the embedded browser
+view has no path into Live's signal chain (see [ARCHITECTURE.md](ARCHITECTURE.md) §4) -
+so a pattern with no note in it produces **no MIDI**, and the device sits there looking
+broken. It is not broken; it is being asked for a sound a MIDI device cannot make.
 
-So a pattern with no note in it produces **no MIDI**, and the device sits there
-looking broken. It is not broken; it is being asked for a sound it cannot make.
-
-**What to write instead**, for a drum pattern into a Drum Rack:
+**On the MIDI devices, write notes instead** - for drums into a Drum Rack:
 
 ```
 bd sd bd sd          bare mini-notation - drum words map to Drum Rack pads
@@ -90,6 +89,9 @@ note("36 38 36 38")  the same thing, as code
 The **Kit** panel maps the words (`bd` = 36, `sd` = 38, `hh` = 42 ...) and you
 can edit it to match any rack. Copying a rhythm off strudel.cc means keeping the
 *structure* - `bd(3,8)`, `bd!3 sd`, `[bd hh]*2` - and dropping the `s()`.
+
+**Or use the Drums Sampler**, where `s("bd sd")` is exactly right: it plays the sample
+itself. See its section below.
 
 ---
 
@@ -188,6 +190,33 @@ parameters: automatable, MIDI-mappable, visible on Push.
 - **Modulated values** - `.lpf(sine.range(200, 2000))` describes continuous
   modulation, which needs a different machine than "type a number" (see
   [TODO.md](TODO.md)). Refused rather than silently applying a wrong constant.
+
+---
+
+## Strudel Drums Sampler
+
+The one device where `s()` is not a footgun but the whole point. It plays samples itself,
+from a **drum-machine bank**, so the pattern that is silent on the MIDI devices makes sound
+here.
+
+### Supported: `s()` and `bank()`
+
+| Feature | Example | What happens |
+|---|---|---|
+| **Sample names** | `s("bd sd, hh*8")` | Each name plays a drum sound from the selected bank; commas layer (polyphony). Bare `bd sd, hh!6` works too. |
+| **Bank** | `s("bd").bank("AkaiLinn")` | Picks the drum machine (strudel's `bank()` prefix). Overrides the bank dropdown, per-hap. |
+| **Everything structural** | `s("bd(3,8)")`, `s("[bd hh]*2")`, `s("<bd cp>")` | Full mini-notation and code - it is the same `@strudel/core`, just routed to samples instead of MIDI. |
+| **MIDI notes in** | (a sequencer in front) | Notes map to drum sounds by the Drum Rack layout (36 = `bd` ...) and play the bank. |
+
+The samples are the real **tidal-drum-machines** (the set behind strudel.cc's `bank()`),
+downloaded on first use. This is a `[poly~]` sample keymap, **not** superdough - so
+pitch/melodic `s()` of instruments and superdough-only controls do not apply; it is a drum
+sampler.
+
+### Not here
+
+`.lpf()`, `.room()`, `.crush()` and the rest of the audio-effect vocabulary belong to the
+Audio FX device, not the Sampler. Put an FX device (or Ableton's own) after it on the track.
 
 ---
 

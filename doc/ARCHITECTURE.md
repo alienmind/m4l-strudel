@@ -6,27 +6,26 @@ This document describes the high-level architecture, the build pipeline, the run
 
 ```
 ┌──────────────────────────── one repo ────────────────────────────┐
-│  src/app/midi/       the MIDI device's UI                         │
-│  src/app/midi-drums/ the Drums device's UI                        │
-│  src/app/sampler-    the sample browser's UI                      │
-│      browser/                                                     │
-│  src/app/fx/         the Audio FX device's UI                     │
-│  src/app/shared/     the engine hook + worker, both MIDI devices  │
-│  src/lib/mini/       the mini-notation parser + resolver          │
-│  src/lib/fx.ts       the effects-line reader                      │
-│  src/lib/samples.ts  the sample-map catalog (fetched in the page) │
-│  src/max/shared/     engine.mjs, transport.mjs (MIDI devices only)│
-│  wrapper/device.ts   [js] glue shared by all devices, ES5         │
-│  patcher/devices.mjs the manifest; patcher/chains.mjs: the        │
-│                      strudel-delay and strudel-room chains        │
-│  strudel/            upstream Strudel (git submodule)             │
+│  src/app/midi/          the MIDI device's UI                      │
+│  src/app/drums-midi/    the Drums MIDI device's UI                │
+│  src/app/drums-sampler/ the Drums Sampler device's UI             │
+│  src/app/sample-browser/ the sample browser's UI                  │
+│  src/app/fx/            the Audio FX device's UI                  │
+│  src/app/shared/        engine hook + worker + shared Button, etc │
+│  src/lib/mini/          the mini-notation parser + resolver       │
+│  src/lib/fx.ts          the effects-line reader                   │
+│  src/lib/samples.ts     the sample-map catalog (fetched in page)  │
+│  src/max/shared/        engine.mjs, transport.mjs (engine devices)│
+│  wrapper/device.ts      [js] glue shared by all devices, ES5      │
+│  patcher/devices.mjs    the manifest; patcher/chains.mjs: chains  │
+│  strudel/               upstream Strudel (git submodule)          │
 └──────────────────────────────┬────────────────────────────────────┘
                           pnpm build
                  (@m4l-jweb/build under the hood)
-   ┌────────────────┬─────────┴────────┬─────────────────┐
-   ▼                ▼                  ▼                 ▼
- -midi.amxd    -midi-drums.amxd  -sample-browser  -fx.amxd
- (MIDI,'mmmm') (MIDI,'mmmm')     .amxd (audio)     (audio,'aaaa')
+  ┌───────────┬───────────┬─────────┴──────┬──────────────┬─────────────┐
+  ▼           ▼           ▼                ▼              ▼             ▼
+-midi.amxd  -drums-midi  -drums-sampler  -sample-browser -fx.amxd
+(MIDI)      .amxd (MIDI)  .amxd (instr.)  .amxd (audio)   (audio)
 ```
 
 ## 1. The Build Pipeline
@@ -158,13 +157,21 @@ The sample browser browses, downloads, and previews Strudel sample maps.
 
 All file handling is asynchronous and will never hang the UI thread. The system is designed to degrade gracefully if offline (playing already downloaded samples seamlessly).
 
-### 4d. Strudel Sampler: a code-driven, bank-based sampler
+### 4d. Strudel Drums Sampler: a code-driven, bank-based sampler
 
-`alienmind-strudel-sampler` (`src/app/sampler/`) is the repo's first INSTRUMENT device (`type: "instrument"`), built on the library's `instrument` chain: a `[poly~]` of sample voices over a keymap of sixteen named `[buffer~]`s. It keeps its MIDI input ports (an instrument does) and loads samples via the `download` chain - the same acquire path the browser uses, fired automatically. It is NOT a MIDI pad rack: sounds are keyed by NAME, never by a MIDI note number.
+`alienmind-strudel-drums-sampler` (`src/app/drums-sampler/`) is the repo's first INSTRUMENT device (`type: "instrument"`), built on the library's `instrument` chain: a `[poly~]` of sample voices over a keymap of sixteen named `[buffer~]`s. It keeps its MIDI input ports (an instrument does) and loads samples via the `download` chain - the same acquire path the browser uses, fired automatically. It is NOT a pad rack: sounds are keyed by NAME, and the device is driven by CODE first.
 
-- **`s()` -> sound, via a bank.** The CODE screen runs a Strudel `s("bd sd, hh*8")` pattern through the shared engine (`voiceSink`, §3a). Each hap's sample name resolves against the selected BANK - a tidal-drum-machine, strudel's `bank()` prefix: `bd` with bank `RolandTR909` is the catalog key `RolandTR909_bd`. A `.bank("AkaiLinn")` in the pattern overrides the dropdown per-hap. The catalog is strudel's own generated `tidal-drum-machines.json` (`DRUM_MACHINES_URL` in `lib/samples.ts`); a free-form sample map is the other source, where a bare `s("name")` stands alone.
-- **Auto-download + a name->slot allocator.** The first time the pattern names a sound, it is fetched to disk (`fetchToFile`, cached) and read into a slot (`loadSample`); it sounds from the next cycle. Up to 16 distinct sounds are resident at once (one `[buffer~]` each); the 17th evicts the least-recently-used. A slot is reserved the moment its load starts, so two concurrent loads never grab the same one. `playVoice({ slot, rate, velocity, durationMs, channels })`; `[poly~]` (16 voices) allocates a free voice or steals the oldest, so overlapping sounds never cut each other.
+- **`s()` -> sound, via a bank.** The CODE screen runs a Strudel `s("bd sd, hh*8")` pattern through the shared engine (`voiceSink`, §3a) - bare mini-notation (`bd sd, hh!6`) is wrapped in `s(...)` by `asSampleCode`, not resolved to pitches. Each hap's sample name resolves against the selected BANK - a tidal-drum-machine, strudel's `bank()` prefix: `bd` with bank `RolandTR909` is the catalog key `RolandTR909_bd`. A `.bank("AkaiLinn")` in the pattern overrides the dropdown per-hap. The catalog is strudel's own generated `tidal-drum-machines.json` (`DRUM_MACHINES_URL` in `lib/samples.ts`, base rewritten ritchse->geikha for the moved repo).
+- **MIDI notes drive it too.** A note into the track maps to a drum sound by the Drum Rack / General MIDI convention (`NOTE_SOUND`: 36 = bd, 38 = sd, 42 = hh, ...) and plays the selected bank's sample for it - so a MIDI sequencer (or the Drums MIDI device) in front of the Sampler plays the same bank.
+- **Auto-download + a name->slot allocator.** The first time a sound is named, it is fetched to disk (`fetchToFile`, cached) and read into a slot (`loadSample`); it sounds from the next cycle. Up to 16 distinct sounds are resident at once (one `[buffer~]` each); the 17th evicts the least-recently-used. A slot is reserved the moment its load starts, so two concurrent loads never grab the same one. `playVoice({ slot, rate, velocity, durationMs, channels })`; `[poly~]` (16 voices) allocates a free voice or steals the oldest, so overlapping sounds never cut each other. The wrapper's samples-folder paths (`device_folder`, `reveal_folder`) are shared with the browser via `HAS_SAMPLES_FOLDER`, so "Show folder" works here too.
 - **Instance-scoped buffers.** The slot buffers are `---`-prefixed (device-scoped), so two Sampler instances in one set keep their own sounds - the same mechanism the browser preview relies on.
+
+### 4e. Shared device chrome
+
+Every device draws from one set of parts, so the five faces read as one product rather than five apps:
+
+- **`shared/Button.tsx`** - one black-and-white (grey) button. `active` is the only lift (a faint primary wash, e.g. Run while playing); there are no accent/primary/destructive colours any more. Primary actions sit in the top bar, the `?` (`HelpButton`) rightmost.
+- **`shared/AboutPanel.tsx`** - the title opens it. It carries an **Advanced** section with the device's set-once, native affordances so they do not clutter the top bar: **Full Studio** (the pattern devices' big editor window, `onOpenStudio`) and **Controls** (`onShowControls`, revealing the native panel - the MIDI device's mappable Play/Stop). The FX device is the exception: its native **Knobs** panel is the primary interaction, so it keeps that button in the top bar.
 
 ## 5. Strudel Integration
 
@@ -219,8 +226,8 @@ When testing manually, ensure:
   that points a clip slot at a WAV. It is a drag-and-drop operation in the
   application, not an API. The sample browser therefore goes as far as the API
   allows: the file is on disk at a known path, the row is a drag source, and
-  reveal-in-folder is the fallback (whether the drag lands is the open
-  [SPIKE-DRAG-TO-CLIP.md](SPIKE-DRAG-TO-CLIP.md)).
+  reveal-in-folder is the answer (the drag-into-Live spike was tried and failed - CEF
+  strips the `DownloadURL` payload; see [DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILED_IDEAS.md)).
 - **Live's Browser is unreachable from `[js]`** (the R2 spike, 2026-07-17).
   `new LiveAPI("live_app browser")` resolves to id 0 -
   `jsliveapi: component 'browser' is not an object`. The Browser (`load_item`,
@@ -276,8 +283,14 @@ re-check, and when:
 - **Sampler polyphony and scope** (if the `instrument` chain or the name->slot allocator
   changes): run a pattern layering several sounds - each rings out on its own voice, none
   stolen mid-tail; two Sampler instances in one set keep separate samples (`---`
-  device-scoped buffers). The 0.9.0 pad-rack shape was confirmed; the bank-based rewrite
-  needs a re-check (TESTING 3b).
+  device-scoped buffers). Confirmed 0.9.0 - the bank-based rewrite plays the selected
+  machine, `.bank()` overrides per-hap, auto-download works, and a MIDI sequencer drives it.
+- **Clip I/O from inside a Rack** (if `ownTrack()` or the clip paths change): a MIDI device
+  inside an Instrument Rack reads and writes clips on the Rack's track, same as on a bare
+  track, with no 1/s `jsliveapi` error. Confirmed 0.9.0.
+- **Macro-map the native Play/Stop** (if the transport param or the native panel change): a
+  Rack macro / Push button mapped to the transport starts and stops the sequencer, web
+  Run/Stop stays in sync. The panel is reached from About > Advanced > Controls. Confirmed 0.9.0.
 - **Push banks** (if the fx surface `banks` change): on a Push, the FX encoders page as
   **Tone** and **Space**, named - not "Bank 1"/"Bank 2". Confirmed 0.9.0.
 - **State-default seeding** (if the surface state slots or m4l-jweb's seeding change): a

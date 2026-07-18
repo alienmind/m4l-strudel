@@ -25,78 +25,46 @@ a new filename and drag that).
 
 ## Confirmed in 0.9.0
 
-Passed by hand and no longer open: state-default seeding on a fresh instance (and
-restore beating seed); Push banks paging as **Tone**/**Space** on hardware; presets
-reaching the User Library; the sampler's polyphony and per-instance sample scope (two
-instances, separate samples, overlapping notes not cut). The re-check recipe for each,
-should the code underneath change, is in [ARCHITECTURE.md](ARCHITECTURE.md) under
-"Verified in Live".
+Passed by hand and no longer open:
+
+- **State-default seeding** on a fresh instance (and restore beating seed).
+- **Push banks** paging as **Tone**/**Space** on hardware.
+- **Presets** reaching the User Library.
+- **Clip I/O from inside a Rack** - the `ownTrack()` `canonical_parent` climb reads and
+  writes clips from a MIDI device inside an Instrument Rack, same as on a bare track, and
+  the 1/s `jsliveapi` console error is gone.
+- **Macro-map the native Play/Stop** - the transport is a real, mappable Live parameter;
+  a Rack macro / Push button starts and stops the sequencer, and the web Run/Stop stays in
+  sync. (The panel now lives behind **About > Advanced > Controls** - see open check 1.)
+- **The bank-based Sampler** - `s("bd sd, hh*8")` plays the selected drum machine's
+  sounds, `.bank()` overrides per-hap, auto-download works, layered sounds are polyphonic
+  (16 voices), an unknown name is reported, and a MIDI sequencer in front drives it. The
+  old pad-highlight and per-instance polyphony/scope also passed.
+
+The re-check recipe for each, should the code underneath change, is in
+[ARCHITECTURE.md](ARCHITECTURE.md) under "Verified in Live". The **drag-to-clip** spike is
+closed as a failure and parked - see [DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILED_IDEAS.md).
 
 ---
 
-## 1. Clip I/O from inside a Rack
+## 1. Native controls moved into About (re-check)
 
-The recent `ownTrack()` fix climbs `canonical_parent` to the track, so a MIDI device
-INSIDE an Instrument Rack should still read and write clips (and the 1/s
-`jsliveapi: invalid property name` console error should be gone). Put Strudel MIDI in
-the shipped Rack and:
+The devices' native panels are now reached from **About > Advanced > Controls** instead of
+a top-bar button (the top bars are one consistent grey set now). Confirm:
 
-1. **Save to Clip** writes a clip onto the Rack's track (not an error, not the wrong
-   track).
-2. **Load from Clip** reads a clip on that track back into mini-notation.
-3. Both work the same on a bare track (no Rack) as before.
-4. Where a track truly cannot be reached, both clip buttons disable with a tooltip
-   rather than failing silently (hard to stage on purpose - mostly this is the "it
-   still works in a Rack" check).
+1. **Strudel MIDI**: click the title (About), then **Advanced > Controls** - the native
+   Play/Stop panel appears; the native **Back** switch returns to the editor. The
+   macro-map round trip still works from there.
+2. **Full Studio** is under the same **Advanced** section on the pattern devices (MIDI,
+   Drums MIDI, Drums Sampler) and still edits the same pattern as the device view.
+3. **Strudel Audio FX** keeps its **Knobs** button in the top bar (its native panel is the
+   primary interaction, not an advanced extra), and every device's **?** sits rightmost.
 
-## 2. Macro-map the native Play/Stop
+## 2. Sampler "Show folder" (wrapper fix)
 
-Strudel MIDI's transport is now a real, mappable Live parameter behind the **Macro**
-button. Confirm the round trip:
-
-1. Click **Macro** - the native panel with the Play/Stop control appears; **Back**
-   returns to the editor.
-2. Map a **Rack macro** (or a Push button / a MIDI control) to that Play/Stop control,
-   and confirm moving the macro starts and stops the sequencer.
-3. The web editor's own Run/Stop still works and stays in sync.
-
-## 3. Sampler pad highlight (re-check)
-
-Polyphony already passed; this is only the visual fix: play a chord across loaded pads -
-**every** struck pad must light, not just one.
-
-## 3b. Code-driven, bank-based Sampler (new)
-
-The Sampler is now a CODE-DRIVEN sampler over drum-machine BANKS: `s("bd sd")` names
-sounds, a bank (strudel's `bank()` prefix) picks which tidal-drum-machine plays them, and
-samples auto-download in the background on first reference. The name extraction and the
-`bank()` carry are unit-tested; only Live has the `[poly~]`, the disk and the network.
-Confirm:
-
-1. Device opens on the **CODE** screen with `s("bd sd, hh*8")` and a bank dropdown
-   (default RolandTR909). **Run** - after a beat (the first-reference download), the
-   pattern plays in time; the layered `hh*8` overlaps `bd sd` (polyphony, 16 voices).
-2. Change the **bank** dropdown to another machine - the same pattern now plays that
-   machine's `bd`/`sd`/`hh`. A `.bank("AkaiLinn")` written in the code overrides the
-   dropdown per-hap.
-3. A pattern naming >16 distinct sounds evicts the least-recently-used (no crash, no
-   stuck voice). An unknown sound - `s("nope")` - shows the amber "No sample for ..."
-   note, not silence with no explanation.
-4. **Sounds** screen: the bank's sounds show as tokens (`bd`, `sd`, ... with a variation
-   count); click auditions through the track. The **Sample maps** tab browses a free-form
-   repo (dirt-samples etc.), where a bare `s("name")` resolves against that map.
-5. First-reference latency: the very first hit of a sound is silent while it downloads,
-   then sounds from the next cycle. Re-references are instant (cached on disk).
-
-## 4. SPIKE - drag-to-clip (`DownloadURL` approach)
-
-[SPIKE-DRAG-TO-CLIP.md](SPIKE-DRAG-TO-CLIP.md) has the full plan. In short: audition a
-sample, then drag the row onto an audio track / a Simpler / a Drum Rack pad. With the
-`DownloadURL` change in place, success = a real audio file lands (a clip appears), and a
-WAV shows up in `%TEMP%`. Negative control: drag onto `notepad.exe` - if it still only
-pastes a text path, `[jweb]`'s CEF is stripping `DownloadURL` and the answer is NO.
-Reveal-in-folder is the fallback either way. (Not yet coded - the `DownloadURL` change
-is planned in the spike doc.)
+The Sampler now owns a samples folder (`drums-sampler` mode was not resolving, so the
+wrapper never sent its folder). Confirm: after **Run** downloads at least one sample,
+**Show folder** enables and opens the device's samples folder in Explorer/Finder.
 
 # The dependency note
 

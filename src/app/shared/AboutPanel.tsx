@@ -1,9 +1,10 @@
-import { ChevronLeft, Maximize2 } from "lucide-react";
+import { ChevronLeft, Maximize2, SlidersHorizontal } from "lucide-react";
 import { Button } from "./Button";
 
 export function AboutPanel({
 	amxdBuild,
 	onOpenStudio,
+	onShowControls,
 	onClose,
 }: {
 	amxdBuild: string;
@@ -11,6 +12,11 @@ export function AboutPanel({
 	 *  so it lives here rather than cluttering every device's top bar. Omitted (undefined)
 	 *  on devices that have no studio window (FX, the sample browser), which hide the row. */
 	onOpenStudio?: () => void;
+	/** Reveals the device's NATIVE controls panel (the mappable play/stop, or knobs),
+	 *  hiding the web UI - the native "Back" switch in that panel returns. Advanced, so it
+	 *  lives here. Omitted on devices with no native panel (FX keeps its own Knobs button in
+	 *  the top bar, where it is the primary interaction). */
+	onShowControls?: () => void;
 	onClose: () => void;
 }) {
 	return (
@@ -55,12 +61,23 @@ export function AboutPanel({
 					)}
 				</div>
 
-				{onOpenStudio && (
+				{(onOpenStudio || onShowControls) && (
 					<div className="flex w-full max-w-[200px] flex-col gap-1">
 						<span className="text-[9px] uppercase tracking-wide text-muted-foreground/70">Advanced</span>
-						<Button icon={Maximize2} onClick={onOpenStudio} title="Open the Full Studio - a bigger editor for the same pattern">
-							Full Studio
-						</Button>
+						{onShowControls && (
+							<Button
+								icon={SlidersHorizontal}
+								onClick={onShowControls}
+								title="Show the native controls (mappable Play/Stop) - the native Back switch returns"
+							>
+								Controls
+							</Button>
+						)}
+						{onOpenStudio && (
+							<Button icon={Maximize2} onClick={onOpenStudio} title="Open the Full Studio - a bigger editor for the same pattern">
+								Full Studio
+							</Button>
+						)}
 					</div>
 				)}
 

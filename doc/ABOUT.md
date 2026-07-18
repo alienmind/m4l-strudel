@@ -26,7 +26,8 @@ richer effects rack; see [doc/TODO.md](TODO.md).
 | Device | Type, drop it on | What it does for you |
 |---|---|---|
 | **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect, a **MIDI track**, before an instrument | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Also converts patterns **to and from MIDI clips** on the track. |
-| **Strudel MIDI Drums** (`alienmind-strudel-midi-drums.amxd`) | MIDI effect, a **MIDI track**, before a Drum Rack | The same generative power as Strudel MIDI, but focused purely on drums. It provides a visual **Kit** mapper to route drum words (`bd`, `sd`, `hh`) directly to specific Drum Rack pads. |
+| **Strudel Drums MIDI** (`alienmind-strudel-drums-midi.amxd`) | MIDI effect, a **MIDI track**, before a Drum Rack | The same generative power as Strudel MIDI, but focused purely on drums. It provides a visual **Kit** mapper to route drum words (`bd`, `sd`, `hh`) directly to specific Drum Rack pads. |
+| **Strudel Drums Sampler** (`alienmind-strudel-drums-sampler.amxd`) | Instrument, a **MIDI track** | A code-driven drum sampler. Write `s("bd sd, hh*8")`, pick a drum machine **bank**, and it plays that machine's sounds - samples download automatically. Sixteen voices of polyphony; a MIDI sequencer in front can drive it too. |
 | **Strudel Audio FX** (`alienmind-strudel-fx.amxd`) | Audio effect, any **audio track** | Type a single line of Strudel's DSP effect vocabulary (e.g., `.lpf(800).gain(1.2)`) and it generates a real Max signal chain on the track. Effects become native, automatable Live parameters. |
 | **Strudel Samples** (`alienmind-strudel-sample-browser.amxd`) | Audio effect, any **audio track** (audio passes through) | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo) and **audition samples through the track** - beat-synced to your project's launch quantization and looped in time. Auditioning downloads the file next to the device; drag the row out into a Simpler or Drum Rack. |
 
@@ -97,6 +98,15 @@ red outline plus a message under the editor means a parse or eval error.
 The **status line** at the bottom reports everything: engine ready, pattern
 running, eval errors, notes written/read.
 
+Two advanced controls live behind the device title (the **About** screen), under
+**Advanced**, so the top bar stays uncluttered:
+
+- **Controls** - reveals the native **Play/Stop** panel. That control is a real Live
+  parameter, so you can map a **Rack macro** or a **Push button** to it and start/stop the
+  sequencer from hardware. The native **Back** switch on the panel returns to the editor.
+- **Full Studio** - opens a larger floating editor over the same pattern (one pattern, one
+  scheduler; the window edits, the device plays).
+
 ### Typical flow
 
 1. Drop the device on a MIDI track, put an instrument after it.
@@ -127,20 +137,49 @@ Live **Run** mode is not limited to this table - it evaluates full Strudel.
 
 ---
 
-## Strudel MIDI Drums (`alienmind-strudel-midi-drums.amxd`)
+## Strudel Drums MIDI (`alienmind-strudel-drums-midi.amxd`)
 
-![Strudel MIDI Drums device](screenshot-midi-drums.png)
+![Strudel Drums MIDI device](screenshot-midi-drums.png)
 
 This device runs the exact same engine as Strudel MIDI, but is purpose-built for driving Drum Racks. Instead of writing absolute pitches or scale degrees, you write standard Strudel drum words (`bd`, `sd`, `hh`) which are automatically translated into Drum Rack pad triggers.
 
 ### Visual Kit Mapping
 
-![Strudel MIDI Drums Kit Mapping](screenshot-midi-drums-mapping.png)
+![Strudel Drums MIDI Kit Mapping](screenshot-midi-drums-mapping.png)
 
 Clicking the **Kit** button opens a dedicated visual mapper. This lets you route Strudel's vocabulary directly to your Ableton Drum Rack. For example, if you have a kick on pad C1, you simply assign `bd` to `36`. 
 
 - **Custom words**: You can type any non-note text string (e.g. `clap2`) and assign it to a pad.
 - **Persistence**: These mappings are stored natively, meaning your kit setup saves and loads automatically with your Ableton Live set.
+
+---
+
+## Strudel Drums Sampler (`alienmind-strudel-drums-sampler.amxd`)
+
+Where Drums MIDI sends notes to *your* Drum Rack, the Drums Sampler is a self-contained
+instrument: it plays the sounds itself, from a **drum-machine bank**, driven by Strudel
+code. Drop it on a MIDI track (it is an instrument - nothing after it needed).
+
+### How it works
+
+1. **Pick a bank** from the dropdown - a classic drum machine (RolandTR909, AkaiLinn, ...),
+   the same set strudel.cc calls with `bank()`.
+2. **Write a pattern** on the **CODE** screen: `s("bd sd, hh*8")`. The names are drum
+   sounds; the bank decides which machine's `bd`/`sd`/`hh` you hear. Commas layer for
+   polyphony. A bare `bd sd, hh!6` works too - it is wrapped in `s(...)` for you. Press
+   **Run**.
+3. Samples **download automatically** in the background the first time a sound is named
+   (from the same community repos the sample browser uses). The very first hit of a new
+   sound is silent while it fetches, then plays from the next cycle; after that it is
+   instant.
+
+- **Per-hap bank**: `s("bd sd").bank("AkaiLinn")` overrides the dropdown inside the pattern.
+- **MIDI in**: a MIDI sequencer (or the Drums MIDI device) in front of the Sampler plays
+  the bank too - notes map to drum sounds by the standard Drum Rack layout (C1 = `bd`, ...).
+- **Sounds screen**: browse the selected bank's sounds as tokens (with variation counts);
+  click one to audition it through the track.
+- **Sixteen voices**: overlapping sounds ring out independently; two instances keep
+  separate samples. **Full Studio** is under **About > Advanced**, as on the other devices.
 
 ---
 
