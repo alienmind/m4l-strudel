@@ -46,7 +46,7 @@ carry it?** Nothing but a test tells us.
 
 ## What we PLAN to implement
 
-Change `startFileDrag` (`src/app/sampler-browser/App.tsx`) to set `DownloadURL` with a
+Change `startFileDrag` (`src/app/sample-browser/App.tsx`) to set `DownloadURL` with a
 URL scheme the handoff actually accepts. In priority order:
 
 1. **Remote http(s) URL (primary).** Every sample in a Strudel map came FROM a remote

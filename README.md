@@ -33,7 +33,7 @@ All four devices are ready to use.
 | **Strudel MIDI Drums** (`alienmind-strudel-midi-drums.amxd`) | MIDI effect | The exact same engine as Strudel MIDI, but purpose-built for driving Drum Racks. A dedicated mapping UI routes drum words (`bd`, `sd`, `hh`) to specific Drum Rack pads, and **the map travels with your set**. |
 | **Strudel Audio FX** (`alienmind-strudel-fx.amxd`) | Audio effect | Write **one line** of Strudel's effect vocabulary - `.lpf(800).hpf(120).crush(8).gain(1.2)` - and it applies to whatever audio is already on the track. Nine stages (filter, hpf, drive, crush, delay, reverb, gain), each a real Live parameter: automatable, MIDI-mappable, native dials in the device view, and two named Push banks (Tone / Space). **Patterns modulate too**: `.lpf(sine.range(200, 2000))` sweeps the cutoff once per bar through `live.remote~` - continuous modulation, no automation written, and the dial comes back the moment the line stops asking. |
 | **Strudel Sampler** (`alienmind-strudel-sampler.amxd`) | Instrument | A polyphonic drum-rack instrument: eight pads, one sample per pad, played by MIDI notes (C1..G1) into the track. Load a sound per pad from any Strudel sample map; overlapping notes ring out on independent voices, and two instances keep separate samples. |
-| **Strudel Samples** (`alienmind-strudel-sampler-browser.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo) and **audition samples through the track** - beat-synced to your project's launch quantization, looped in time, and heard through the track's own fader and effects. Auditioning downloads the file next to the device; drag it out into a Simpler, a Drum Rack or a track. |
+| **Strudel Samples** (`alienmind-strudel-sample-browser.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo) and **audition samples through the track** - beat-synced to your project's launch quantization, looped in time, and heard through the track's own fader and effects. Auditioning downloads the file next to the device; drag it out into a Simpler, a Drum Rack or a track. |
 
 **Ships with an Instrument Rack preset** (`presets/AlienMind Strudel Rack.adg`): Strudel MIDI -> a native Ableton instrument -> Strudel Audio FX, wired and ready to drop from Live's browser.
 
@@ -66,7 +66,7 @@ You can download the pre-built `.amxd` devices ready for Ableton Live from:
 
 Once downloaded, simply extract the ZIP file and copy the `.amxd` devices into your Ableton **User Library** (e.g. `User Library/Max For Live/m4l-strudel/`).
 
-Each `.amxd` is fully **self-contained** - its own React UI bundle (the Strudel engine only travels inside the MIDI devices, the only ones that need it) unpacks itself on first load. Drag from Live's browser onto a MIDI track (midi, midi-drums) or an audio track (sampler-browser, fx) and go. Nothing ships loose beside the devices, and nothing runs a Node process.
+Each `.amxd` is fully **self-contained** - its own React UI bundle (the Strudel engine only travels inside the MIDI devices, the only ones that need it) unpacks itself on first load. Drag from Live's browser onto a MIDI track (midi, midi-drums) or an audio track (sample-browser, fx) and go. Nothing ships loose beside the devices, and nothing runs a Node process.
 
 *(For developers building from source, you can use `pnpm install:device` to automatically copy the compiled devices to your local Ableton User Library).*
 
@@ -76,11 +76,11 @@ Each `.amxd` is fully **self-contained** - its own React UI bundle (the Strudel 
 pnpm install
 git submodule update --init   # strudel/ - the engine is bundled from here
 pnpm test          # vitest: mini-notation parser + headless engine tests
-pnpm build         # → dist/m4l-strudel/alienmind-strudel-{midi,sampler-browser,fx}.amxd
+pnpm build         # → dist/m4l-strudel/alienmind-strudel-{midi,sample-browser,fx}.amxd
                     #   + dist/m4l-strudel.zip (release archive incl. installers)
 pnpm dev:midi       # browser dev for the MIDI device, mocked Live beside it
 pnpm dev:midi-drums # browser dev for the MIDI Drums device
-pnpm dev:sampler-browser # browser dev for the sample browser
+pnpm dev:sample-browser # browser dev for the sample browser
 pnpm dev:fx         # browser dev for the Audio FX device
 ```
 

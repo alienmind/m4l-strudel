@@ -11,7 +11,7 @@ import {
 	withDeadline,
 	type Sound,
 } from "@/lib/samples";
-import { PRESET_MAPS } from "../sampler-browser/banks";
+import { PRESET_MAPS } from "../sample-browser/banks";
 import { AboutPanel } from "../shared/AboutPanel";
 import { PatternEditor } from "../shared/PatternEditor";
 import { useStrudelEngine, type VoiceEvent } from "../shared/useStrudelEngine";

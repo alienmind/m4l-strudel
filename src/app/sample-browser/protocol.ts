@@ -1,5 +1,5 @@
 /**
- * protocol.ts (sampler-browser) - every selector that crosses this device's bridge.
+ * protocol.ts (sample-browser) - every selector that crosses this device's bridge.
  *
  * There is almost nothing left to declare, and that is the whole story of this
  * release. This device used to own a private protocol - `catalog`, `downloaded`,

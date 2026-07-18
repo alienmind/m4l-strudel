@@ -7,7 +7,7 @@
  * those, as one ES5 script, so it can see and extend them.
  *
  * What is genuinely ours:
- *   1. The device mode (midi | sampler-browser), which gates the two below.
+ *   1. The device mode (midi | sample-browser), which gates the two below.
  *   2. clip_available: a poll, because LiveAPI has no observer for "any clip on
  *      this track", so the UI can disable From Clip when there is nothing to read.
  *   3. Live 12's global root_note/scale_name, forwarded to the UI.
@@ -26,7 +26,7 @@
  * Device mode. Set from the object box by the manifest's `mode` field.
  *
  * TRAP: jsarguments[0] is the SCRIPT NAME, not the first argument. Reading index
- * 0 sets the mode to "wrapper.js", and every `MODE === "sampler-browser"` test is then
+ * 0 sets the mode to "wrapper.js", and every `MODE === "sample-browser"` test is then
  * silently false forever - which is exactly the bug this project shipped for
  * months. Scan for a known token rather than trusting an index.
  */
@@ -34,7 +34,7 @@
 // type, and the fx entry declares none of its own. Before it was listed here every
 // fx instance warned "no device mode" and fell back to midi - harmless but noisy,
 // and it ran the midi-only clip poll on a device with no clips to read.
-var MODES = ["midi", "sampler-browser", "audio"];
+var MODES = ["midi", "sample-browser", "audio"];
 function resolveStrudelMode(): string {
 	for (var i = 0; i < jsarguments.length; i++) {
 		var a = String(jsarguments[i]);
@@ -48,7 +48,7 @@ function resolveStrudelMode(): string {
 
 /** The packaged core also computes a MODE; ours is the authoritative one. */
 var STRUDEL_MODE = resolveStrudelMode();
-var IS_SAMPLER_BROWSER = STRUDEL_MODE === "sampler-browser";
+var IS_SAMPLE_BROWSER = STRUDEL_MODE === "sample-browser";
 
 post("strudel: mode " + STRUDEL_MODE + "\n");
 
@@ -156,7 +156,7 @@ var quantObs: LiveAPI | null = null;
 var liveQuant: unknown = 4; // Live's default: 1 Bar
 
 function setupBrowserObservers(): void {
-	if (!IS_SAMPLER_BROWSER) return;
+	if (!IS_SAMPLE_BROWSER) return;
 	try {
 		quantObs = new LiveAPI(onQuant, "live_set");
 		quantObs.property = "clip_trigger_quantization";
@@ -174,7 +174,7 @@ function onQuant(a: unknown[]): void {
 }
 
 function sendQuant(): void {
-	if (IS_SAMPLER_BROWSER) outlet(0, "quantization", liveQuant);
+	if (IS_SAMPLE_BROWSER) outlet(0, "quantization", liveQuant);
 }
 
 /**
@@ -186,7 +186,7 @@ function sendQuant(): void {
  * of [js] it stays whole.
  */
 function sendFolder(): void {
-	if (!IS_SAMPLER_BROWSER) return;
+	if (!IS_SAMPLE_BROWSER) return;
 	var folder = deviceFolder(); // the packaged core's - the same resolution the download used
 	if (folder) outlet(0, "device_folder", folder);
 	else post("strudel: no device folder yet (unsaved patcher?) - the sample links will be off\n");
@@ -208,7 +208,7 @@ function sendFolder(): void {
  * disk, so by the time it is clicked the folder is there.
  */
 function reveal_folder(): void {
-	if (!IS_SAMPLER_BROWSER) return;
+	if (!IS_SAMPLE_BROWSER) return;
 	var folder = deviceFolder();
 	if (!folder) {
 		post("strudel: cannot reveal folder - the patcher is unsaved, so it has no path yet\n");
@@ -239,5 +239,5 @@ function onUiReady(): void {
 	sendQuant(); // ...same: the page cannot have heard the first one
 	sendFolder();
 	lastClipAvail = -1;
-	if (!IS_SAMPLER_BROWSER) checkClipAvailable();
+	if (!IS_SAMPLE_BROWSER) checkClipAvailable();
 }

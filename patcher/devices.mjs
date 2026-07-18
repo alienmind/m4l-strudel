@@ -48,10 +48,10 @@ export default [
 		 * `slots` names the [buffer~]s. One is right for a preview - it is one voice,
 		 * auditioning one sample at a time. A drum rack is what would want eight.
 		 */
-		name: "alienmind-strudel-sampler-browser",
-		ui: "sampler-browser",
+		name: "alienmind-strudel-sample-browser",
+		ui: "sample-browser",
 		type: "audio",
-		mode: "sampler-browser",
+		mode: "sample-browser",
 		chains: ["samples", "download"],
 		slots: ["preview"],
 		unmatchedTo: "js",
