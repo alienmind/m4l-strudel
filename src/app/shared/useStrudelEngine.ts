@@ -484,7 +484,11 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 		// it DID understand and leaves the rest, which turns a typo into a pattern
 		// that plays something else entirely - "bd!4" once became "36!67", 67 kicks
 		// a cycle. A red error the user can ignore is not enough; do not run it.
-		if (!isBareMini(text) || errors.length === 0) {
+		//
+		// The voice sink is exempt: its bare tokens are SAMPLE NAMES, not pitches, so the
+		// note-mini parser's "errors" (it cannot resolve `bd`) do not apply - asSampleCode
+		// wraps the raw text in s(), and an unknown sound is reported by the sink, not here.
+		if (sink === "voice" || !isBareMini(text) || errors.length === 0) {
 			workerRef.current?.postMessage({ t: "code", code: text, ctx: noteCtx, liveScale, sink });
 			setLive(true);
 			setPlayParam(true);

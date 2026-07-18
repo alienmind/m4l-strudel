@@ -5,6 +5,7 @@ import { isBareMini } from "@/lib/strudelCode";
 import { useNativePanel, useParam, useStateSync, useWindow } from "@m4l-jweb/surface/react";
 import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
+import { Button } from "../shared/Button";
 import { ClipPanel } from "../shared/ClipPanel";
 import { HelpButton } from "../shared/HelpButton";
 import { tokenAtCaret } from "@/lib/reference";
@@ -50,7 +51,7 @@ export default function App() {
 	const studioWindow = useWindow(surface, "studio");
 
 	if (showAbout) {
-		return <AboutPanel amxdBuild={s.amxdBuild} onClose={() => setShowAbout(false)} />;
+		return <AboutPanel amxdBuild={s.amxdBuild} onOpenStudio={studioWindow.open} onClose={() => setShowAbout(false)} />;
 	}
 
 	if (showClip) {
@@ -70,69 +71,34 @@ export default function App() {
 
 	return (
 		<div className="device flex h-full w-full flex-col gap-1 overflow-hidden bg-background p-1.5 text-foreground">
-			<div className="flex items-center justify-between leading-none bg-input/20 px-1 py-0.5 rounded">
-				<button 
+			{/* TOP BAR: title + the primary buttons, grey and consistent with the other
+			    devices. The pattern options (octave, shift, scale) moved to the small bottom
+			    row - they are set once, not reached for while playing. Studio moved to About. */}
+			<div className="flex items-center gap-1 text-[11px]">
+				<button
 					onClick={() => setShowAbout(true)}
-					className="text-xs font-semibold tracking-tight hover:text-primary transition-colors cursor-pointer"
+					className="shrink-0 text-xs font-semibold tracking-tight hover:text-primary transition-colors cursor-pointer"
 				>
 					Strudel MIDI
 				</button>
-				
-				<div className="flex items-center gap-1.5 text-[10px] leading-none">
-					<label className="flex items-center gap-1">
-						<select
-							value={s.conv}
-							onChange={(e) => s.setConv(e.target.value as "strudel" | "scientific")}
-							className="rounded bg-input/50 px-1 py-0.5 outline-none"
-						>
-							<option value="strudel">c5=60</option>
-							<option value="scientific">c4=60</option>
-						</select>
-					</label>
-					<label className="flex items-center gap-0.5">
-						Shift
-						<input
-							type="number"
-							min={-4}
-							max={4}
-							value={s.octaveOffset}
-							onChange={(e) => s.setOctaveOffset(Number(e.target.value))}
-							className="w-8 rounded bg-input/50 px-1 py-0.5 outline-none"
-						/>
-					</label>
-					<label
-						className="flex items-center gap-1"
-						title="Read bare numbers as degrees of Live's global scale. Off: a number is a raw MIDI pitch."
-					>
-						<input
-							type="checkbox"
-							checked={s.liveScale}
-							onChange={(e) => s.setLiveScale(e.target.checked)}
-							className="size-3 accent-primary"
-						/>
-						Scale
-					</label>
-					{/* Room to write. The window edits the same `code` slot this view binds -
-					    it does NOT run an engine, so the transport stays here. */}
-					<button
-						onClick={studioWindow.open}
-						title="Open the Full Studio - a bigger editor for the same pattern"
-						className="rounded bg-input/50 px-1 py-0.5 hover:bg-input"
-					>
-						Studio
-					</button>
-					{/* Reveal the native transport panel, whose Play/Stop is a real Live
-					    parameter you can map a Rack macro (or a Push button) to. The native
-					    "Back" switch in that panel flips back here. */}
-					<button
-						onClick={() => setShowTransport(true)}
-						title="Show the native Play/Stop control - map a Rack macro or Push button to it"
-						className="rounded bg-input/50 px-1 py-0.5 hover:bg-input"
-					>
-						Macro
-					</button>
-					<HelpButton onOpen={helpWindow.open} />
-				</div>
+				<Button
+					className="ml-auto"
+					icon={s.live ? Square : Play}
+					active={s.live}
+					onClick={s.live ? s.hush : s.run}
+					title={s.live ? "Stop the running pattern" : "Evaluate and run this pattern, locked to Live's transport (Ctrl+Enter)"}
+				>
+					{s.live ? "Stop" : "Run"}
+				</Button>
+				<Button icon={FolderOpen} onClick={() => setShowClip(true)} title="Open Clip Import/Export controls">
+					Clip
+				</Button>
+				{/* Reveal the native transport panel, whose Play/Stop is a real Live parameter
+				    you can map a Rack macro (or a Push button) to. */}
+				<Button onClick={() => setShowTransport(true)} title="Show the native Play/Stop control - map a Rack macro or Push button to it">
+					Macro
+				</Button>
+				<HelpButton onOpen={helpWindow.open} />
 			</div>
 
 			<PatternEditor
@@ -150,61 +116,58 @@ export default function App() {
 				</span>
 			)}
 
-			<div className="flex items-center gap-1.5">
-				{s.live ? (
-					<button
-						className="flex flex-1 items-center justify-center gap-1 rounded-md bg-destructive px-2 py-1 text-sm font-semibold text-destructive-foreground hover:brightness-110"
-						onClick={s.hush}
-						title="Stop the running pattern"
-					>
-						<Square className="size-3.5" />
-						Stop
-					</button>
-				) : (
-					<button
-						className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1 text-sm font-semibold text-primary-foreground hover:brightness-110"
-						onClick={s.run}
-						title="Evaluate and run this pattern, locked to Live's transport (Ctrl+Enter)"
-					>
-						<Play className="size-3.5" />
-						Run
-					</button>
-				)}
-				<button
-					className="flex items-center justify-center gap-1 rounded-md bg-accent px-3 py-1 text-sm font-semibold text-accent-foreground hover:brightness-110"
-					onClick={() => setShowClip(true)}
-					title="Open Clip Import/Export controls"
-				>
-					<FolderOpen className="size-3.5" />
-					Clip
-				</button>
-			</div>
-
 			{s.warning && (
-				<span
-					className="truncate text-[10px] leading-none text-amber-500"
-					title={s.warning}
-				>
+				<span className="truncate text-[10px] leading-none text-amber-500" title={s.warning}>
 					{s.warning}
 				</span>
 			)}
 
-			<div className="flex items-center justify-between gap-2 leading-none">
-				<span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-					<span
-						className={cn(!scale.known && "text-destructive")}
-						title={
-							scale.known
-								? "Live's global scale - bare numbers in the pattern are degrees of it"
-								: `Live's scale "${s.scale.name}" is not one this device knows - degrees fall back to Major`
-						}
-					>
-						{scale.text}
-					</span>
-					<span>{codeMode ? "code" : `${s.noteCount} notes`}</span>
+			{/* BOTTOM ROW: the pattern options at a small size, then status. */}
+			<div className="flex items-center gap-1.5 text-[10px] leading-none text-muted-foreground">
+				<select
+					value={s.conv}
+					onChange={(e) => s.setConv(e.target.value as "strudel" | "scientific")}
+					className="rounded bg-input/50 px-1 py-0.5 outline-none"
+					title="Which octave is middle C - the two DAW conventions differ"
+				>
+					<option value="strudel">c5=60</option>
+					<option value="scientific">c4=60</option>
+				</select>
+				<label className="flex items-center gap-0.5">
+					Shift
+					<input
+						type="number"
+						min={-4}
+						max={4}
+						value={s.octaveOffset}
+						onChange={(e) => s.setOctaveOffset(Number(e.target.value))}
+						className="w-8 rounded bg-input/50 px-1 py-0.5 outline-none"
+					/>
+				</label>
+				<label
+					className="flex items-center gap-1"
+					title="Read bare numbers as degrees of Live's global scale. Off: a number is a raw MIDI pitch."
+				>
+					<input
+						type="checkbox"
+						checked={s.liveScale}
+						onChange={(e) => s.setLiveScale(e.target.checked)}
+						className="size-3 accent-primary"
+					/>
+					Scale
+				</label>
+				<span
+					className={cn("truncate", !scale.known && "text-destructive")}
+					title={
+						scale.known
+							? "Live's global scale - bare numbers in the pattern are degrees of it"
+							: `Live's scale "${s.scale.name}" is not one this device knows - degrees fall back to Major`
+					}
+				>
+					{scale.text}
 				</span>
-				
-				<span className="truncate text-[10px] text-muted-foreground">{s.status}</span>
+				<span className="shrink-0">{codeMode ? "code" : `${s.noteCount} notes`}</span>
+				<span className="ml-auto truncate" title={s.status}>{s.status}</span>
 				<span className="shrink-0 font-mono text-[9px] text-muted-foreground/70">{s.debug}</span>
 			</div>
 		</div>

@@ -22,6 +22,7 @@ import {
 } from "@/lib/samples";
 import { IN, OUT } from "./protocol";
 import { AboutPanel } from "../shared/AboutPanel";
+import { Button } from "../shared/Button";
 import { CustomMapPanel } from "./CustomMapPanel";
 import { PRESET_MAPS } from "./banks";
 
@@ -364,15 +365,7 @@ export default function App() {
 						className="w-full bg-transparent py-0.5 outline-none"
 					/>
 				</div>
-				{playing && (
-					<button
-						onClick={stop}
-						className="flex shrink-0 items-center gap-1 rounded bg-input/50 px-1.5 py-0.5 hover:brightness-110"
-						title="Stop the preview"
-					>
-						<Square className="size-3" />
-					</button>
-				)}
+				{playing && <Button icon={Square} onClick={stop} title="Stop the preview" />}
 			</div>
 
 			<div ref={listRef} className="min-h-12 flex-1 overflow-y-auto rounded-md bg-input/20">
@@ -475,19 +468,18 @@ export default function App() {
 				    manager, so it asks the wrapper to. Enabled once a sample is on disk -
 				    before that the folder does not exist. Replaced, eventually, by dragging
 				    the row straight into Live (doc/SPIKE-DRAG-TO-CLIP.md). */}
-				<button
+				<Button
+					icon={FolderOpen}
 					onClick={() => outlet(OUT.reveal_folder)}
 					disabled={!downloaded || !folder}
-					className="flex shrink-0 items-center gap-1 rounded bg-input/50 px-1.5 py-0.5 text-[10px] hover:brightness-110 disabled:opacity-40"
 					title={
 						downloaded
 							? "Show the samples folder in Finder/Explorer"
 							: "Audition a sample first - the folder appears once something is downloaded"
 					}
 				>
-					<FolderOpen className="size-3" />
 					Show folder
-				</button>
+				</Button>
 			</div>
 		</div>
 	);

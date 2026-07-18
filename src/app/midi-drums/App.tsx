@@ -6,6 +6,7 @@ import surface from "./surface";
 import { DrumRack } from "./DrumRack";
 import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
+import { Button } from "../shared/Button";
 import { ClipPanel } from "../shared/ClipPanel";
 import { HelpButton } from "../shared/HelpButton";
 import { tokenAtCaret } from "@/lib/reference";
@@ -40,7 +41,7 @@ export default function App() {
 	const codeMode = !isBareMini(s.text);
 
 	if (showAbout) {
-		return <AboutPanel amxdBuild={s.amxdBuild} onClose={() => setShowAbout(false)} />;
+		return <AboutPanel amxdBuild={s.amxdBuild} onOpenStudio={studioWindow.open} onClose={() => setShowAbout(false)} />;
 	}
 
 	if (showClip) {
@@ -102,47 +103,31 @@ export default function App() {
 
 	return (
 		<div className="device flex h-full w-full flex-col gap-1 overflow-hidden bg-background p-1.5 text-foreground">
-			<div className="flex items-center justify-between leading-none bg-input/20 px-1 py-0.5 rounded">
-				<button 
+			{/* TOP BAR: title + the primary buttons, grey and consistent with the other
+			    devices. Octave/shift moved to the small bottom row; Studio moved to About. */}
+			<div className="flex items-center gap-1 text-[11px]">
+				<button
 					onClick={() => setShowAbout(true)}
-					className="text-xs font-semibold tracking-tight hover:text-primary transition-colors cursor-pointer"
+					className="shrink-0 text-xs font-semibold tracking-tight hover:text-primary transition-colors cursor-pointer"
 				>
-					Strudel MIDI Drums
+					Strudel Drums MIDI
 				</button>
-				
-				<div className="flex items-center gap-1.5 text-[10px] leading-none">
-					<label className="flex items-center gap-1">
-						<select
-							value={s.conv}
-							onChange={(e) => s.setConv(e.target.value as "strudel" | "scientific")}
-							className="rounded bg-input/50 px-1 py-0.5 outline-none"
-						>
-							<option value="strudel">c5=60</option>
-							<option value="scientific">c4=60</option>
-						</select>
-					</label>
-					<label className="flex items-center gap-0.5">
-						Shift
-						<input
-							type="number"
-							min={-4}
-							max={4}
-							value={s.octaveOffset}
-							onChange={(e) => s.setOctaveOffset(Number(e.target.value))}
-							className="w-8 rounded bg-input/50 px-1 py-0.5 outline-none"
-						/>
-					</label>
-					{/* Room to write. The window edits the same `code` slot this view binds -
-					    it does NOT run an engine, so the transport stays here. */}
-					<button
-						onClick={studioWindow.open}
-						title="Open the Full Studio - a bigger editor for the same pattern"
-						className="rounded bg-input/50 px-1 py-0.5 hover:bg-input"
-					>
-						Studio
-					</button>
-					<HelpButton onOpen={helpWindow.open} />
-				</div>
+				<Button
+					className="ml-auto"
+					icon={s.live ? Square : Play}
+					active={s.live}
+					onClick={s.live ? s.hush : s.run}
+					title={s.live ? "Stop the running pattern" : "Evaluate and run this pattern, locked to Live's transport (Ctrl+Enter)"}
+				>
+					{s.live ? "Stop" : "Run"}
+				</Button>
+				<Button icon={FolderOpen} onClick={() => setShowClip(true)} title="Open Clip Import/Export controls">
+					Clip
+				</Button>
+				<Button icon={Drum} onClick={() => setShowDrums(true)} title="Map drum words (bd, sd, hh) onto Drum Rack pads">
+					Kit
+				</Button>
+				<HelpButton onOpen={helpWindow.open} />
 			</div>
 
 			<PatternEditor
@@ -160,59 +145,36 @@ export default function App() {
 				</span>
 			)}
 
-			<div className="flex items-center gap-1.5">
-				{s.live ? (
-					<button
-						className="flex flex-1 items-center justify-center gap-1 rounded-md bg-destructive px-2 py-1 text-sm font-semibold text-destructive-foreground hover:brightness-110"
-						onClick={s.hush}
-						title="Stop the running pattern"
-					>
-						<Square className="size-3.5" />
-						Stop
-					</button>
-				) : (
-					<button
-						className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1 text-sm font-semibold text-primary-foreground hover:brightness-110"
-						onClick={s.run}
-						title="Evaluate and run this pattern, locked to Live's transport (Ctrl+Enter)"
-					>
-						<Play className="size-3.5" />
-						Run
-					</button>
-				)}
-				<button
-					className="flex items-center justify-center gap-1 rounded-md bg-accent px-3 py-1 text-sm font-semibold text-accent-foreground hover:brightness-110"
-					onClick={() => setShowClip(true)}
-					title="Open Clip Import/Export controls"
-				>
-					<FolderOpen className="size-3.5" />
-					Clip
-				</button>
-				<button
-					onClick={() => setShowDrums(true)}
-					className="flex items-center justify-center gap-1 rounded-md bg-accent px-3 py-1 text-sm font-semibold text-accent-foreground hover:brightness-110"
-					title="Map drum words (bd, sd, hh) onto Drum Rack pads"
-				>
-					<Drum className="size-3.5" />
-					Kit
-				</button>
-			</div>
-
 			{s.warning && (
-				<span
-					className="truncate text-[10px] leading-none text-amber-500"
-					title={s.warning}
-				>
+				<span className="truncate text-[10px] leading-none text-amber-500" title={s.warning}>
 					{s.warning}
 				</span>
 			)}
 
-			<div className="flex items-center justify-between gap-2 leading-none">
-				<span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-					<span>{codeMode ? "code" : `${s.noteCount} notes`}</span>
-				</span>
-				
-				<span className="truncate text-[10px] text-muted-foreground">{s.status}</span>
+			{/* BOTTOM ROW: the pattern options at a small size, then status. */}
+			<div className="flex items-center gap-1.5 text-[10px] leading-none text-muted-foreground">
+				<select
+					value={s.conv}
+					onChange={(e) => s.setConv(e.target.value as "strudel" | "scientific")}
+					className="rounded bg-input/50 px-1 py-0.5 outline-none"
+					title="Which octave is middle C - the two DAW conventions differ"
+				>
+					<option value="strudel">c5=60</option>
+					<option value="scientific">c4=60</option>
+				</select>
+				<label className="flex items-center gap-0.5">
+					Shift
+					<input
+						type="number"
+						min={-4}
+						max={4}
+						value={s.octaveOffset}
+						onChange={(e) => s.setOctaveOffset(Number(e.target.value))}
+						className="w-8 rounded bg-input/50 px-1 py-0.5 outline-none"
+					/>
+				</label>
+				<span className="shrink-0">{codeMode ? "code" : `${s.noteCount} notes`}</span>
+				<span className="ml-auto truncate" title={s.status}>{s.status}</span>
 				<span className="shrink-0 font-mono text-[9px] text-muted-foreground/70">{s.debug}</span>
 			</div>
 		</div>
