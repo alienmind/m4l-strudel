@@ -48,7 +48,7 @@ import {
 	setLiveScale,
 } from "../../max/shared/engine.mjs";
 import { LiveTransport } from "../../max/shared/transport.mjs";
-import { asStrudelCode } from "../../lib/strudelCode";
+import { asStrudelCode, asSampleCode } from "../../lib/strudelCode";
 
 let pattern = null;
 let running = false;
@@ -181,7 +181,9 @@ onmessage = async (e) => {
 			setLiveScale(m.liveScale);
 			engineCtx = m.ctx;
 			sink = m.sink === "voice" ? "voice" : "note";
-			pattern = await compile(asStrudelCode(m.code, m.ctx));
+			// The sampler wraps bare mini as s("...") (sample names); the MIDI devices wrap it
+			// as note("...") with tokens resolved to pitches.
+			pattern = await compile(sink === "voice" ? asSampleCode(m.code) : asStrudelCode(m.code, m.ctx));
 			running = true;
 			syncClockMode();
 			postMessage({ t: "evalok" });

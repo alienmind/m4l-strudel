@@ -37,10 +37,12 @@ export type Status =
 	| "syntax";
 
 /** The UI folders, which are what a help window is opened from. */
-export type Device = "fx" | "midi" | "midi-drums";
+export type Device = "fx" | "midi" | "midi-drums" | "drums-sampler";
 
-/** The two devices that take a pattern. They support the same language. */
-export const PATTERN_DEVICES: Device[] = ["midi", "midi-drums"];
+/** The devices that take a pattern. They support the same mini-notation and code. The
+ *  sampler is one - its tokens are sample names rather than pitches, but the STRUCTURE
+ *  (`*`, `!`, `[]`, `<>`, `,`, `.slow`, ...) is identical. */
+export const PATTERN_DEVICES: Device[] = ["midi", "midi-drums", "drums-sampler"];
 
 export interface RefEntry {
 	/** What you type: ".lpf(800)", "<a b>", "sine". */
@@ -283,11 +285,20 @@ export const REFERENCE: RefEntry[] = [
 	{
 		name: 's("bd sd")',
 		category: "Patterns",
-		summary: "Sample names. Looked up in the drum map to find a MIDI note.",
-		example: 's("bd sd hh hh")',
+		summary: "Sample names. On MIDI they resolve through the drum map; on the Sampler they play the selected bank's samples.",
+		example: 's("bd sd, hh*8")',
 		status: "live",
 		only: PATTERN_DEVICES,
-		note: "A name with no mapping stays silent, as it must. Edit the map to give it a note.",
+		note: "Sampler: a name with no sample in the bank reports itself. On MIDI, an unmapped name stays silent.",
+	},
+	{
+		name: '.bank("RolandTR909")',
+		category: "Patterns",
+		summary: "Pick the drum machine a sample name plays from (strudel's bank prefix).",
+		example: 's("bd sd").bank("AkaiLinn")',
+		status: "live",
+		only: ["drums-sampler"],
+		note: "Overrides the Sampler's bank dropdown, per-hap. `bd` with bank RolandTR909 is the sample RolandTR909_bd.",
 	},
 	{
 		name: 'note("c e g")',
@@ -324,6 +335,7 @@ export const DEVICE_BLURB: Record<Device, string> = {
 	fx: "Strudel's effect vocabulary, as a one-line chain. No patterns here - this device shapes audio that is already playing.",
 	midi: "Strudel patterns, out as MIDI. Mini-notation and full Strudel code both work.",
 	"midi-drums": "Strudel patterns, out as MIDI, with sample names resolved through the drum map.",
+	"drums-sampler": "Strudel s() patterns, played from a drum-machine bank. Sample names, not pitches; commas layer for polyphony.",
 };
 
 /** The entries that apply to a device. Every entry declares its own, so this is a fact, not a guess. */

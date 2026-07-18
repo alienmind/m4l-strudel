@@ -1,10 +1,16 @@
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Maximize2 } from "lucide-react";
+import { Button } from "./Button";
 
 export function AboutPanel({
 	amxdBuild,
+	onOpenStudio,
 	onClose,
 }: {
 	amxdBuild: string;
+	/** Opens the Full Studio - a bigger editor for the same pattern. An ADVANCED feature,
+	 *  so it lives here rather than cluttering every device's top bar. Omitted (undefined)
+	 *  on devices that have no studio window (FX, the sample browser), which hide the row. */
+	onOpenStudio?: () => void;
 	onClose: () => void;
 }) {
 	return (
@@ -48,6 +54,15 @@ export function AboutPanel({
 						</div>
 					)}
 				</div>
+
+				{onOpenStudio && (
+					<div className="flex w-full max-w-[200px] flex-col gap-1">
+						<span className="text-[9px] uppercase tracking-wide text-muted-foreground/70">Advanced</span>
+						<Button icon={Maximize2} onClick={onOpenStudio} title="Open the Full Studio - a bigger editor for the same pattern">
+							Full Studio
+						</Button>
+					</div>
+				)}
 
 				<div className="text-[10px] text-muted-foreground mt-auto pb-2">
 					Copyright Alienmind, 2026

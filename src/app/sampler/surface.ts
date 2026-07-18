@@ -13,8 +13,8 @@
  *
  * NO `?` window: a sample browser needs no Strudel reference.
  */
-import { defineSurface, state } from "@m4l-jweb/surface";
-import { transportParams, codeSlot } from "../shared/surface";
+import { defineSurface, state, window } from "@m4l-jweb/surface";
+import { transportParams, codeSlot, helpQuerySlot } from "../shared/surface";
 
 /** What a fresh Sampler opens with: a two-layer drum line naming the default sounds,
  *  played from the default bank below. */
@@ -32,5 +32,15 @@ export default defineSurface({
 		/** The selected drum-machine bank (the `bank()` prefix), saved with the set so the
 		 *  pattern reopens against the same machine. A pattern's own `.bank()` overrides it. */
 		bank: state<string>({ default: INITIAL_BANK }),
+		/** What the caret is on, so the floating help can follow the typing. */
+		helpQuery: helpQuerySlot(),
+	},
+
+	windows: {
+		/** The `?` reference - what the Sampler understands of Strudel. */
+		help: window({ title: "Strudel Reference", width: 420, height: 620, entry: "Help", alwaysOnTop: true }),
+		/** The Full Studio - a bigger editor for the same pattern, reached from About > Advanced.
+		 *  Binds the `code` slot only; the device view stays the sole engine. */
+		studio: window({ title: "Strudel Studio", width: 720, height: 560, entry: "StudioWindow", alwaysOnTop: true }),
 	},
 });

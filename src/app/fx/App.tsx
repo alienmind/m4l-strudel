@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { uiReady } from "@m4l-jweb/bridge";
 import { useNativePanel, useParam, useStateSync, useWindow } from "@m4l-jweb/surface/react";
+import { Button } from "../shared/Button";
 import { HelpButton } from "../shared/HelpButton";
 import { tokenAtCaret } from "@/lib/reference";
 import { cn } from "@/lib/utils";
@@ -199,13 +200,9 @@ export default function App() {
 				    same spot) so the control stays put when the views flip. Clicking it
 				    hides this web UI and shows the native knob panel; the native toggle
 				    there flips back. */}
-				<button
-					onClick={() => setKnobs(true)}
-					className="rounded bg-accent px-1.5 py-0.5 text-[10px] text-accent-foreground hover:brightness-110"
-					title="Show the native knob panel"
-				>
+				<Button onClick={() => setKnobs(true)} title="Show the native knob panel">
 					Knobs
-				</button>
+				</Button>
 			</div>
 
 			<div className="flex items-center gap-1">
@@ -239,14 +236,12 @@ export default function App() {
 						fx.error && "ring-1 ring-destructive",
 					)}
 				/>
-				<button
+				<Button
+					icon={Plus}
 					onClick={() => setShowAdd(true)}
 					disabled={unusedParams.length === 0}
-					className="flex items-center justify-center rounded-md bg-accent p-1.5 text-accent-foreground hover:brightness-110 disabled:opacity-40"
 					title="Add another effect to the chain"
-				>
-					<Plus className="size-4" />
-				</button>
+				/>
 			</div>
 
 			{note && (

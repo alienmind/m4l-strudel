@@ -38,3 +38,16 @@ export function asStrudelCode(text: string, ctx: NoteContext): string {
 	const resolved = resolveMini(text.trim(), ctx);
 	return `note("${resolved.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
 }
+
+/**
+ * The Sampler's dialect: bare mini-notation is wrapped in `s("...")`, NOT `note(...)`.
+ *
+ * Its tokens are SAMPLE NAMES, not pitches - `bd sd, hh!6` names sounds - so they must NOT
+ * be resolved to MIDI numbers the way asStrudelCode does; the raw text goes straight into
+ * `s()`. Full Strudel code (`s("bd").bank("RolandTR909")`, anything with a quote or a
+ * method call) passes through untouched, exactly like the note dialect.
+ */
+export function asSampleCode(text: string): string {
+	if (!isBareMini(text)) return text;
+	return `s("${text.trim().replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`;
+}
