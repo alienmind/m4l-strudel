@@ -21,8 +21,13 @@ export const IN = {
 	clip_available: "clip_available",
 	/** wrapper -> UI: clip contents. args: `<loopEnd> <n> <pitch start dur>...`. */
 	notes: "notes",
-	/** wrapper -> UI: From Clip failed. args: `<reason>`. */
+	/** wrapper -> UI: From Clip failed. args: `<reason>` - `no_clip` (track has none),
+	 *  `no_selection`, or `no_track` (STRUCTURAL: no reachable track - clip I/O impossible
+	 *  here, e.g. the device is somewhere a track cannot be resolved from). */
 	read_error: "read_error",
+	/** wrapper -> UI: To Clip failed. args: `<reason>` - `no_track` (structural, as above),
+	 *  `no_slot` (track full), or `add_failed`. `no_track` disables clip I/O in the UI. */
+	write_error: "write_error",
 	/** wrapper -> UI: Live 12 global scale. args: `<rootNote> <scaleName>`. */
 	scale: "scale",
 } as const;

@@ -69,6 +69,11 @@ export interface EngineOptions {
 	 * no longer the same object (the drums device declares a drumMap state slot), and
 	 * a bundle holding two Surfaces that both declare `play` would have them fight
 	 * over one bridge selector. See shared/surface.ts.
+	 *
+	 * Typed to the transport params alone - the one thing this engine reads is `play`. A
+	 * device that declares MORE parameters (the midi device adds a `transport` view-switch)
+	 * passes its surface through here as this narrower view; `Surface` is invariant in its
+	 * parameter map, so that widening is a cast at the call site, not a silent coercion.
 	 */
 	surface: Surface<typeof transportParams>;
 	/** The pattern the device opens with - its own idiom, not a shared one. */
@@ -116,6 +121,9 @@ export interface EngineState {
 	status: string;
 	/** Whether the device's track has a clip that From Clip could read. */
 	clipAvailable: boolean;
+	/** Whether clip I/O is possible at all here - false once the wrapper reports it cannot
+	 *  reach a track (`no_track`). Disables both clip buttons rather than failing silently. */
+	clipSupported: boolean;
 	toMidi: () => void;
 	fromMidi: () => void;
 	/** An amber note - the device's own, or the MAX_CYCLES cap, or null. */
@@ -182,6 +190,12 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 	// Outside Max (browser dev) there is no wrapper to report availability, so
 	// default to enabled there and let the wrapper drive it inside Live.
 	const [clipAvailable, setClipAvailable] = useState(!inJweb);
+	// Whether clip I/O is even POSSIBLE here. It is, until the wrapper reports `no_track`
+	// (a read or write from somewhere no track can be resolved) - then clip import/export
+	// is disabled with a reason, per the "disable on first fail" fallback. In a Rack a
+	// track IS reachable (the wrapper climbs canonical_parent to it), so this stays true
+	// there; it only trips where clip I/O genuinely cannot work.
+	const [clipSupported, setClipSupported] = useState(true);
 
 	const [amxdBuild, setAmxdBuild] = useState("?");
 	// Live's transport tempo. The ref feeds the worker (no re-render on every tick);
@@ -270,8 +284,24 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 			setText(mini);
 			setStatus(`Read ${n} notes → ${barsRead} bar(s) (Structure is flattened)`);
 		});
-		bindInlet(IN.read_error, () => {
-			setStatus("No clip found on this track - create or play a MIDI clip first");
+		bindInlet(IN.read_error, (reason) => {
+			if (String(reason) === "no_track") {
+				setClipSupported(false);
+				setStatus("MIDI clips unavailable here - this device cannot reach a track");
+			} else {
+				setStatus("No clip found on this track - create or play a MIDI clip first");
+			}
+		});
+		bindInlet(IN.write_error, (reason) => {
+			const r = String(reason);
+			if (r === "no_track") {
+				setClipSupported(false);
+				setStatus("MIDI clips unavailable here - this device cannot reach a track");
+			} else if (r === "no_slot") {
+				setStatus("No empty clip slot on this track - free a slot and try again");
+			} else {
+				setStatus("Could not write the clip - see the Max console");
+			}
 		});
 	}, [grid, conv, octaveOffset, beatsPerBar]);
 
@@ -478,6 +508,7 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 		errors,
 		status,
 		clipAvailable,
+		clipSupported,
 		toMidi,
 		fromMidi,
 		warning,

@@ -88,4 +88,37 @@ export default [
 		remotes: 9,
 		unmatchedTo: "js",
 	},
+	{
+		/**
+		 * Strudel Sampler - a polyphonic drum-rack instrument. Eight pads, one
+		 * dedicated sample per pad, played by MIDI notes coming into the track.
+		 *
+		 * This is the first INSTRUMENT device in the repo: type "instrument" keeps the
+		 * MIDI input ports the audio devices drop, and the `instrument` chain builds a
+		 * [poly~] of sample voices over a KEYMAP of eight named [buffer~]s (one per
+		 * pad). A note names its sample by slot INDEX and Max allocates a free voice,
+		 * so overlapping hits never cut each other - the polyphony a drum rack needs.
+		 *
+		 * Chains, and why each is here:
+		 *   instrument  the [poly~] voices, the eight [buffer~]/info~ slots, and the
+		 *               voice_play / buffer_load / buffer_ready plumbing the app calls
+		 *               through playVoice() / loadSample().
+		 *   midiin      inbound MIDI as `notein <pitch> <velocity>` - how a pad is
+		 *               struck. type "instrument" keeps the ports; this chain routes
+		 *               them to the app (onNote()).
+		 *   download    [maxurl] writes a picked sample to disk (fetchToFile), the same
+		 *               acquire-by-audition path the sample browser uses.
+		 *
+		 * `slots` names the eight pad buffers, `---`-scoped per device so two instances
+		 * in one set keep their own samples. `voices` defaults to 8 in the chain, one
+		 * per pad, so it is left unset here.
+		 */
+		name: "alienmind-strudel-sampler",
+		ui: "sampler",
+		type: "instrument",
+		mode: "sampler",
+		chains: ["instrument", "midiin", "download"],
+		slots: ["pad1", "pad2", "pad3", "pad4", "pad5", "pad6", "pad7", "pad8"],
+		unmatchedTo: "js",
+	},
 ];
