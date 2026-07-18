@@ -158,13 +158,13 @@ The sample browser browses, downloads, and previews Strudel sample maps.
 
 All file handling is asynchronous and will never hang the UI thread. The system is designed to degrade gracefully if offline (playing already downloaded samples seamlessly).
 
-### 4d. Strudel Sampler: a polyphonic drum-rack instrument
+### 4d. Strudel Sampler: a code-driven, bank-based sampler
 
-`alienmind-strudel-sampler` (`src/app/sampler/`) is the repo's first INSTRUMENT device (`type: "instrument"`), built on the library's `instrument` chain: a `[poly~]` of sample voices over a keymap of eight named `[buffer~]`s, one per pad. It keeps its MIDI input ports (an instrument does), takes note input via the `midiin` chain, and loads samples via the `download` chain - the same acquire-by-audition path the browser uses.
+`alienmind-strudel-sampler` (`src/app/sampler/`) is the repo's first INSTRUMENT device (`type: "instrument"`), built on the library's `instrument` chain: a `[poly~]` of sample voices over a keymap of sixteen named `[buffer~]`s. It keeps its MIDI input ports (an instrument does) and loads samples via the `download` chain - the same acquire path the browser uses, fired automatically. It is NOT a MIDI pad rack: sounds are keyed by NAME, never by a MIDI note number.
 
-- **Eight pads, C1..G1.** Pad `i` is MIDI note `36 + i` (Live's Drum Rack layout). A sound is loaded per pad from any Strudel sample map (browse -> `fetchToFile` -> `loadSample(slot, path)`); the pad remembers the sample's measured duration and channel count.
-- **Note -> voice.** External MIDI (`onNote`) maps a pitch to a pad and calls `playVoice({ slot, rate: 1, velocity, durationMs, channels })`; `[poly~]` allocates a free voice or steals the oldest, so overlapping notes never cut each other. The pad grid also click-auditions. v1 responds to external MIDI only; a Strudel pattern driving the pads is deferred (see TODO).
-- **Instance-scoped buffers.** The pad buffers are `---`-prefixed (device-scoped), so two Sampler instances in one set keep their own sounds - the same mechanism the browser preview relies on.
+- **`s()` -> sound, via a bank.** The CODE screen runs a Strudel `s("bd sd, hh*8")` pattern through the shared engine (`voiceSink`, §3a). Each hap's sample name resolves against the selected BANK - a tidal-drum-machine, strudel's `bank()` prefix: `bd` with bank `RolandTR909` is the catalog key `RolandTR909_bd`. A `.bank("AkaiLinn")` in the pattern overrides the dropdown per-hap. The catalog is strudel's own generated `tidal-drum-machines.json` (`DRUM_MACHINES_URL` in `lib/samples.ts`); a free-form sample map is the other source, where a bare `s("name")` stands alone.
+- **Auto-download + a name->slot allocator.** The first time the pattern names a sound, it is fetched to disk (`fetchToFile`, cached) and read into a slot (`loadSample`); it sounds from the next cycle. Up to 16 distinct sounds are resident at once (one `[buffer~]` each); the 17th evicts the least-recently-used. A slot is reserved the moment its load starts, so two concurrent loads never grab the same one. `playVoice({ slot, rate, velocity, durationMs, channels })`; `[poly~]` (16 voices) allocates a free voice or steals the oldest, so overlapping sounds never cut each other.
+- **Instance-scoped buffers.** The slot buffers are `---`-prefixed (device-scoped), so two Sampler instances in one set keep their own sounds - the same mechanism the browser preview relies on.
 
 ## 5. Strudel Integration
 
@@ -273,10 +273,11 @@ re-check, and when:
   not restore the default. Multi-space runs in a pattern must survive verbatim.
 - **One scheduler** (if the Studio window changes): however many views are open,
   exactly ONE stream of notes. The device view alone receives `tick`.
-- **Sampler polyphony and scope** (if the `instrument` chain or the pad wiring
-  changes): load a sample per pad, play a chord across pads - each hit rings out on its
-  own voice, none stolen mid-tail; two Sampler instances in one set keep separate
-  samples (`---` device-scoped buffers). Confirmed 0.9.0.
+- **Sampler polyphony and scope** (if the `instrument` chain or the name->slot allocator
+  changes): run a pattern layering several sounds - each rings out on its own voice, none
+  stolen mid-tail; two Sampler instances in one set keep separate samples (`---`
+  device-scoped buffers). The 0.9.0 pad-rack shape was confirmed; the bank-based rewrite
+  needs a re-check (TESTING 3b).
 - **Push banks** (if the fx surface `banks` change): on a Push, the FX encoders page as
   **Tone** and **Space**, named - not "Bank 1"/"Bank 2". Confirmed 0.9.0.
 - **State-default seeding** (if the surface state slots or m4l-jweb's seeding change): a

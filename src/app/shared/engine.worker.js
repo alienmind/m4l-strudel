@@ -135,6 +135,7 @@ const transport = new LiveTransport({
 				if (!voice) continue;
 				voices.push({
 					s: voice.s,
+					bank: voice.bank,
 					n: voice.n,
 					velocity: voice.velocity,
 					rate: voice.rate,

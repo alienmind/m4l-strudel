@@ -72,6 +72,16 @@ describe("the sampler voice sink: haps keyed by sample name, no pitch", () => {
 		expect(v.rate).toBe(1);
 	});
 
+	test("bank() rides along, for the sampler to prefix (RolandTR909_bd)", async () => {
+		const got = await voices('s("bd sd").bank("RolandTR909")');
+		expect(got.map((v) => [v.s, v.bank])).toEqual([
+			["bd", "RolandTR909"],
+			["sd", "RolandTR909"],
+		]);
+		// No bank on the pattern: the app falls back to its dropdown, so this stays null.
+		expect((await voices('s("bd")'))[0].bank).toBe(null);
+	});
+
 	test("a hap that names no sample is null, not a voice", async () => {
 		expect(await voices('note("c3")')).toEqual([null]);
 	});
