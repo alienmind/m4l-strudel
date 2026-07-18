@@ -16,31 +16,31 @@ Live is [TESTING.md](TESTING.md). Ideas tried and abandoned are in
 ## For 0.9.0
 
 All 0.9.0 Live checks are **confirmed** (clip I/O in a Rack, macro-map Play/Stop, the
-bank-based Sampler, native controls + Full Studio in About, Sampler "Show folder"). See
-[TESTING.md](TESTING.md) "Confirmed in 0.9.0" and ARCHITECTURE's "Verified in Live". The
-only open 0.9.0 chore is the screenshots.
-
-### 1. Recapture the screenshots
-
-The UI changed shape (shared grey buttons, the Sampler's two screens, the reorganised MIDI
-bottom row) and two devices were renamed (**Drums MIDI**, **Drums Sampler**). The
-`doc/screenshot-*.png` referenced by README/ABOUT are now stale - retake them from Live:
-the four device faces, the Sampler's CODE and SOUNDS screens, the Drums MIDI Kit, and the
-overview. Keep the filenames so the doc links still resolve.
-
-
+bank-based Sampler, native controls + Full Studio in About). [TESTING.md](TESTING.md) is
+clean; the standing re-check recipes live in ARCHITECTURE's "Verified in Live".
 
 ---
 
 ## Deferred to 1.0.0
 
-### 3. Sampler Device needs to be able to render a WAV
+### 3. "Open folder" is not functional on any device
+
+The **Show folder** button (sample browser and the Drums Sampler) does nothing in Live -
+the wrapper now sends the device folder so the button ENABLES, but the reveal itself is
+dead. It goes out as `messnamed("max", "launchbrowser", "file://<dir>")` (wrapper
+`reveal_folder`), and that does not open the OS file manager here. Find the reveal that
+works - a different Max object (`; max launchbrowser` variants, `sprintf` to an OS
+`open`/`explorer` shell, or a `[dropfile]`/`[folder]` approach) - and confirm it opens
+Finder/Explorer on the samples folder. Until then, samples are still on disk at the path
+the status line implies, just not one click away.
+
+### 4. Sampler Device needs to be able to render a WAV
 And ideally, this needs to be able to be saved to clip
 Same functionality as the MIDI clip save.
 This does not necesarily needs Superdough (see next items), instead
 we render the polysynth device output to disk and then reimport back as audio.
 
-### 4. Strudel's own audio in the track (Route B first)
+### 5. Strudel's own audio in the track (Route B first)
 
 Check ([m4l-jweb ENHANCEMENTS.md](../../m4l-jweb/doc/ENHANCEMENTS.md)),
 Offline rendering of audio - `OfflineAudioContext` renders cycle N+1 with the real superdough (bit-identical sound), `saveToFile()` (to be built upstream) writes the WAV,
@@ -52,7 +52,7 @@ This is also what the **Sampler's "render to WAV + drop an audio clip"** ask nee
 MIDI device writes a MIDI clip; a sampler's output is audio). It is deferred here on
 purpose: it needs the offline render above plus an upstream `saveToFile()`, neither built.
 
-### 5. Cross-device coordination in the Rack (enhancement)
+### 6. Cross-device coordination in the Rack (enhancement)
 
 Today the Rack's devices are independent: the pattern is typed in Strudel MIDI, the fx
 line in the FX device. A single expression spanning both - `note("c3 e3").lpf(800)` split
