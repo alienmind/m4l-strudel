@@ -23,7 +23,7 @@
  * or rename the branch), not a dead repo.
  *
  * REPOS is static and lives at the top on purpose: paste a new `owner/repo` in, re-run,
- * and see whether it is worth adding. Keep it in step with src/app/sampler-browser/banks.ts.
+ * and see whether it is worth adding. Keep it in step with src/app/sample-browser/banks.ts.
  */
 
 const REPOS = [

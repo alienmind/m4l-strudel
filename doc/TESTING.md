@@ -65,6 +65,20 @@ button. Confirm the round trip:
 Polyphony already passed; this is only the visual fix: play a chord across loaded pads -
 **every** struck pad must light, not just one.
 
+## 3b. Code-driven Sampler playback (new)
+
+The Sampler now has a CODE screen that runs an `s(...)` pattern through the shared engine,
+routing each hap to a `[poly~]` voice by pad name (unit-tested for the note extraction,
+but only Live has the `[poly~]`). Confirm:
+
+1. On the **Kit** screen, load samples onto pads named `bd`, `sd`, `hh` (the default
+   names, or edit them).
+2. On the **CODE** screen, `s("bd sd, hh*8")` and **Run** - the pads play in time, locked
+   to the transport, and the layered `hh*8` overlaps the `bd sd` line (polyphony).
+3. An unknown token - `s("nope")` - shows the amber "No pad named ..." note, not silence
+   with no explanation.
+4. External MIDI (notes 36..43) still strikes the pads alongside a running pattern.
+
 ## 4. SPIKE - drag-to-clip (`DownloadURL` approach)
 
 [SPIKE-DRAG-TO-CLIP.md](SPIKE-DRAG-TO-CLIP.md) has the full plan. In short: audition a

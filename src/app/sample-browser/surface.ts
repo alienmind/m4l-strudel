@@ -1,5 +1,5 @@
 /**
- * surface.ts (sampler-browser) - no Live parameters, and no reference window.
+ * surface.ts (sample-browser) - no Live parameters, and no reference window.
  *
  * The browser has nothing to automate: picking a map and auditioning a sample are
  * choices, not performance controls, and Live only automates numbers. Kept as an empty

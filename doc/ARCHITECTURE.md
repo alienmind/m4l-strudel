@@ -25,7 +25,7 @@ This document describes the high-level architecture, the build pipeline, the run
                  (@m4l-jweb/build under the hood)
    ┌────────────────┬─────────┴────────┬─────────────────┐
    ▼                ▼                  ▼                 ▼
- -midi.amxd    -midi-drums.amxd  -sampler-browser  -fx.amxd
+ -midi.amxd    -midi-drums.amxd  -sample-browser  -fx.amxd
  (MIDI,'mmmm') (MIDI,'mmmm')     .amxd (audio)     (audio,'aaaa')
 ```
 
@@ -194,7 +194,7 @@ When testing manually, ensure:
 │   │   ├── fx/                # the Audio FX device: App.tsx, protocol.ts, surface.ts
 │   │   ├── midi/              # the MIDI device: App.tsx, useStrudel.ts
 │   │   ├── midi-drums/        # the Drums device: App.tsx, useStrudel.ts, DrumMapPanel.tsx
-│   │   ├── sampler-browser/   # the sample browser: App.tsx, protocol.ts, surface.ts
+│   │   ├── sample-browser/   # the sample browser: App.tsx, protocol.ts, surface.ts
 │   │   └── shared/            # shared engine and UI: PatternEditor.tsx, protocol.ts, engine.worker.js, surface.ts
 │   ├── lib/
 │   │   ├── mini/              # the mini-notation parser & resolver logic

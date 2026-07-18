@@ -80,7 +80,7 @@ describe("the reference describes THESE devices", () => {
 		// The sample browser has NO reference and no `?` button: it takes no Strudel at
 		// all, so "which features are supported" is a question it cannot be asked. Help
 		// there answered nothing and implied a box to type into that does not exist.
-		expect(referenceFor("sampler-browser")).toEqual([]);
+		expect(referenceFor("sample-browser")).toEqual([]);
 	});
 
 	it("every entry declares its devices - the field that stops help from leaking", () => {
