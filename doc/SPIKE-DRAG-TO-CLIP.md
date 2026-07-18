@@ -1,132 +1,122 @@
 # SPIKE: drag a sample from the browser into a Live clip
 
-**Status: not started. This is a plan, not a result.**
+**Status: REOPENED (2026-07-18). A new, untested approach - `DownloadURL` - with a
+concrete plan below. The earlier attempt was inconclusive, not a true negative.**
 
-The sample browser downloads a file and wants to hand it to a track. The user's ask is
-the natural one: "let me drag any row into the clip I want it in." This document is the
-investigation that has to happen before we can promise that, because **we do not yet know
-whether it is possible from a Max for Live device at all**, and one popular framing of it
-(intercept what Splice drops) does not actually answer the question. Both halves are
-below.
-
----
-
-## What we already know, and why it forces a spike
-
-**1. The LOM cannot create an audio clip from a file.** `ClipSlot.create_clip(length)` is
-**MIDI only** - it makes an empty MIDI clip. There is no `create_audio_clip`, and no
-property you can set to point an empty slot at a WAV. For *audio*, putting a file into a
-clip is a drag-and-drop gesture in the application, and Ableton exposes no scripting path
-to it. (Confirmed against the Live 12 LOM. If a future version adds one, this whole spike
-is mooted and the feature becomes a one-line LOM call.)
-
-So the ONLY mechanism that places our file into a clip is a real drag-and-drop. Which
-raises the two unknowns this spike exists to settle.
-
-**2. Does `[jweb]` even emit an OS drag?** Our row is HTML with `draggable`, and it sets
-`text/uri-list`, `text/plain` and `DownloadURL` on the drag (see `startFileDrag` in
-`src/app/sampler-browser/App.tsx`). Inside a browser that is a real drag. But `[jweb]` is
-**embedded** Chromium inside a Max object, and an embedded webview does not necessarily
-promote an HTML5 drag to a native OS drag session that another application (Live's track
-lane) can receive. Many embeds swallow it. **If this fails, no payload format matters** -
-the drag never leaves the view - and the answer is "not from the page."
-
-**3. If it does emit one, which format does Live's audio lane accept?** Live's own
-browser and third-party plugins drop files onto tracks; the drop target reads *some* set
-of clipboard/drag types. We do not know which, and it may be a platform file-promise
-(`NSFilenamesPboardType` on macOS, `CF_HDROP` on Windows) that a webview cannot synthesise
-from JavaScript at all.
+The sample browser downloads a WAV to disk and the natural ask is "let me drag the row
+straight into a clip / a Simpler / an audio track." Live accepts a native OS file drop
+(`CF_HDROP` on Windows) - exactly what `explorer.exe` produces when you drag a `.wav`.
+The question this spike settles: **can `[jweb]` produce that native file drop?**
 
 ---
 
-## The "intercept Splice" idea: what it can and cannot tell us
+## What we already know
 
-The proposal was: put a listener on an audio track, drop a sample from the Splice plugin,
-and see what we can intercept. It is a reasonable instinct, and it is worth being precise
-about what it yields, because the literal version does not answer question 3.
+- **The LOM cannot create an audio clip from a file.** `ClipSlot.create_clip(length)`
+  is MIDI-only; there is no `create_audio_clip`. Putting audio into a clip is a
+  drag-and-drop gesture in the application, with no scripting path. So a real OS drag is
+  the ONLY route better than reveal-in-folder. (Live 12.)
+- **`[jweb]` DOES promote an HTML5 drag to an OS drag.** Tested 2026-07 (Windows):
+  dragging a row into `notepad.exe` pastes the payload, so the drag crosses the
+  embedded-Chromium/OS boundary. What landed was the `text/plain` STRING (a path). Live's
+  audio lane rejects a string path - it wants a file.
+- **Our earlier `DownloadURL` test was VOID.** `startFileDrag` did set `DownloadURL`, but
+  with a `file://` URL. Chromium's download-to-temp handoff does not fire for `file://`
+  (security), so that payload could never have worked, even in a full browser. We never
+  actually exercised the mechanism. That is why this spike reopens.
 
-**What is NOT observable.** When Splice drops a file on a track, the drag payload travels
-at the **OS level**, between Splice's own native window and Live's drop target. A Max for
-Live device is not in that path - it has no hook for "a drag entered/left/dropped on this
-track," and it cannot read the drag pasteboard of a gesture happening in another
-application's windows. So we cannot sniff the MIME types Splice used. That is the part the
-interception framing implies but cannot deliver.
+## The mechanism we will test: `DownloadURL`
 
-**What IS observable, via the LOM - and it is genuinely useful.** After a successful drop,
-Live has created an **audio clip**, and an audio clip exposes **`Clip.file_path`** (a
-readable property). So a small observer device CAN see the aftermath:
+`DownloadURL` is a Chromium drag type of the form `mime:filename:url`. When the drop
+lands OUTSIDE the browser window, the browser process:
 
-- observe each `ClipSlot.has_clip` on the target track (or the track's `clip_slots`),
-- when one flips to 1, read the new `Clip.file_path` and `Clip.length`.
+1. downloads the `url` to the OS temp folder (`%TEMP%`), then
+2. synthesizes a native `CF_HDROP` pointing at that temp file, and
+3. hands it to the drop target.
 
-This does not reveal the drag protocol, but it establishes the **destination API** we
-would drive or verify against, and it confirms end to end that "a dropped file becomes a
-clip pointing at that file." It is the measuring instrument for the real experiment, not
-the experiment itself.
+To Ableton it looks exactly like a file from `explorer.exe`, because - by the time
+Ableton sees it - it IS a real file coming from the OS. This is the same trick that lets
+you drag a Gmail attachment onto your desktop.
 
----
+**The load-bearing unknown:** this behaviour lives in Chrome's *browser shell*, and
+`[jweb]` is an **embedded Chromium (CEF)**, not Chrome. Embedded webviews (Electron,
+WebView2, JUCE, CEF hosts) frequently DO NOT implement the `DownloadURL` desktop-drop
+handoff. So the spike's real question is narrow and empirical: **does Max's `[jweb]`
+carry it?** Nothing but a test tells us.
 
-## The spike, staged. Stop at the first stage that fails.
+## What we PLAN to implement
 
-Each stage is cheap and answers one question. Do them in order; a failure early makes the
-later ones moot.
+Change `startFileDrag` (`src/app/sampler-browser/App.tsx`) to set `DownloadURL` with a
+URL scheme the handoff actually accepts. In priority order:
 
-**Stage A - can a `[jweb]` drag leave the view at all?**
-Build the smallest possible test: a page in a `[jweb]` with one `draggable` div that sets
-`text/uri-list` to a known local file. Drag it onto:
-  1. a text editor / the OS desktop (does ANY app receive it?),
-  2. Live's own browser or a track.
-Watch with a drag-inspector if one is handy, but the binary result is enough: does the
-drop land anywhere outside the view? **If no: the page cannot be the drag source. Skip to
-"If the page cannot drag."**
+1. **Remote http(s) URL (primary).** Every sample in a Strudel map came FROM a remote
+   URL (`variationUrl(sound, n)` - a raw GitHub / dough-samples URL). Pass THAT as the
+   `DownloadURL` target:
 
-**Stage B - build the LOM aftermath observer.**
-A throwaway device on an audio track that logs `file_path` and `length` whenever a clip
-appears in any slot. Then drag a file in *by hand* from Live's browser and from Splice.
-Confirm both produce a clip and a readable `file_path`. This gives us the oracle: for
-Stage C we will know, from the LOM, whether OUR drag produced the same result.
+   ```js
+   // remote http(s) URL we already fetched the sample from
+   const remote = variationUrl(sound, n);         // https://.../808_0.wav
+   const name   = "808_0.wav";
+   e.dataTransfer.setData("DownloadURL", `audio/wav:${name}:${remote}`);
+   ```
 
-**Stage C - does Live accept OUR drag, and in which format?**
-With Stage A passing and Stage B watching, drag a real row from the sample browser onto
-the track. Vary the payload in `startFileDrag`, one format at a time:
-  - `text/uri-list` with `file://...`
-  - `text/plain` with the raw absolute path
-  - `DownloadURL`
-  - (macOS/Windows file-promise types, IF the webview exposes any way to set them - it
-    likely does not from JS, which is itself a finding)
-The observer from Stage B tells us which, if any, created a clip. **The first format that
-makes a clip is the answer**, and the feature is done.
+   Ready synchronously at dragstart (it is just a string), no Blob, no base64. Chromium
+   re-downloads it to temp on drop and hands Ableton the temp file.
 
----
+2. **Base64 `data:` URI (fallback, for local/custom samples with no remote URL).** Read
+   the file's bytes, base64 them into a `data:audio/wav;base64,...` URI, and use that as
+   the `DownloadURL` target. Robust for SMALL files (drum one-shots), because a data URI
+   needs no second fetch and no CORS. NOT for large files (base64 of a many-MB file
+   blocks the UI thread). Reading the local bytes inside `[jweb]` may itself be
+   restricted (`fetch("file://...")`) - to be probed as part of the spike.
+   - Avoid a `blob:` object URL: Chromium is known to struggle to resolve `blob:` into a
+     native temp file during the async native-drop handoff. Data URI or remote URL only.
 
-## Outcomes, and the fallback for each
+3. Keep `text/uri-list` and `text/plain` set as they are, harmlessly, for targets that
+   read a string (a text field, some plugins). Live's audio lane is not one of them, so
+   they are not what this spike rides on.
 
-| Finding | What it means | What we ship |
-|---|---|---|
-| Stage A fails | `[jweb]` does not emit OS drags | No drag from the page. Fall back to the **"Show folder"** button (already built - see below); the user drags from the OS file manager, which we know Live accepts. |
-| A passes, C finds a format | Live reads that drag type | Keep the row draggable, pin the winning format, delete the losers. Feature done. |
-| A passes, C finds nothing | The view drags, but not in any type Live's audio lane reads (likely a native file-promise a webview cannot synthesise) | Same fallback: the "Show folder" button. Record the negative result here so nobody re-runs it. |
+Reveal-in-folder stays as the guaranteed fallback either way.
 
-**The "Show folder" button already exists, as the honest floor under this feature.** It is
-in the footer, enabled once a sample is on disk. The page cannot open a file manager
-itself, so it sends `reveal_folder` to the wrapper, which calls
-`messnamed("max", "launchbrowser", "file:///.../samples/")` - the JS form of a `; max
-launchbrowser` message box, addressed to the Max application. **It has its own open
-question:** `launchbrowser` is named for the web browser, and whether the OS default
-handler for a `file://` *directory* is the native file manager (Finder/Explorer) or a
-browser directory listing is unverified in Live. If it opens a browser, the fix is a
-different Max object, not a different app; either way the file is exactly where the button
-points. Verify it in the same session as Stage A.
+## Test protocol
 
----
+Build + `install:device`, then in Live:
 
-## Notes for whoever runs this
+1. **Primary (remote URL).** Audition a sample so it is on disk and its row is a drag
+   source. Drag the row onto:
+   - an empty **audio track** lane (should create an audio clip),
+   - a **Simpler**, and
+   - a **Drum Rack** pad.
+   Success = a clip/sample appears, referencing a file. Watch `%TEMP%` for the downloaded
+   WAV to confirm the handoff fired.
+2. **Fallback (data URI).** Repeat with the base64 path forced, to see whether a data URI
+   lands where a remote URL might be blocked by CORS or offline.
+3. **Negative control.** Drag onto `notepad.exe`: with `DownloadURL` working we expect a
+   FILE behaviour differing from the plain `text/plain` paste we saw before; if it still
+   only pastes text, `[jweb]`'s CEF is stripping `DownloadURL` (the likely failure mode).
 
-- The device folder, and therefore the file's absolute path, only exists once the patcher
-  has been saved - `deviceFolder()` derives it from `this.patcher.filepath`. Test in a
-  saved set, not an `Untitled`.
-- Do Stage A on BOTH macOS and Windows before concluding. Embedded-webview drag behaviour
-  is a per-platform, per-Chromium-version thing; a pass on one is not a pass on the other.
-- If Stage C ever needs a native file-promise, that is a wrapper/Max question (can `[js]`
-  or a helper object start an OS drag with `CF_HDROP`/`NSFilenamesPboardType`?), not an app
-  one - and it probably belongs upstream in m4l-jweb, not here.
+## Possible outcomes and what each means
+
+- **Works with the remote URL.** Ship it: the row becomes a real drag-to-clip source.
+  Note the caveat below about the temp-file location.
+- **Works only with the data URI.** Ship the data-URI path for small samples (all drum
+  one-shots qualify); fall back to reveal-in-folder for anything large.
+- **Neither works, `notepad` still only gets text.** `[jweb]`'s CEF does not implement
+  the `DownloadURL` handoff. THEN the earlier verdict stands and this is genuinely a dead
+  end from the page - move this entry to `DRAWER_OF_FAILED_IDEAS.md` and keep
+  reveal-in-folder as the shipping answer.
+
+## Caveats to remember when reading the result
+
+- **Temp-file location.** `DownloadURL` downloads to `%TEMP%`, so the created clip
+  references a temp file, NOT our device-folder copy. The user should "Collect All and
+  Save" to fold it into the project, or we later re-point the clip. Worth surfacing in
+  the UI if this ships.
+- **CORS.** For the remote-URL path, Chromium must be allowed to fetch the sample to temp.
+  Public sample repos (raw GitHub, dough-samples) are open; a locked-down custom map
+  could fail, which is what the data-URI fallback is for.
+- **Firefox N/A.** `DownloadURL` is Chromium-only. `[jweb]` is Chromium, so this is moot
+  here, but do not expect the same code to work in a Firefox-based host.
+- **Async generation rule.** The `DownloadURL` value must be READY at `dragstart` - you
+  cannot compute it while the mouse button is held. The remote URL is a plain string
+  (fine); the data URI must be pre-computed when the sample loads, not on the drag.

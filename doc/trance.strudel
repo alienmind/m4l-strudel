@@ -1,0 +1,69 @@
+// Some fast trance
+// Original content by Switch_Angel https://www.youtube.com/watch?v=GWXCCBsOMSg
+// She's just amazing
+setCpm(150/4)
+//samples('local:')
+
+setGainCurve(x => Math.pow(x,2))
+
+register('trancegate', (density, seed, length, x) => {
+    return x.struct(rand.mul(density).round().seg(16).rib(seed, length)).fill().clip(.7)
+})
+
+// quantize notes to given values: pat.grab("e:f#:c")
+register('grab', function (scale, pat) {
+    // Supports ':' list syntax in mininotation
+    scale = (Array.isArray(scale) ? scale.flat() : [scale]).flatMap((val) =>
+      typeof val === 'number' ? val : noteToMidi(val) - 48
+    );
+  
+    return pat.withHap((hap) => {
+      const isObject = typeof hap.value === 'object';
+      let note = isObject ? hap.value.n : hap.value;
+      if (typeof note === 'number') {
+        note = note;
+      }
+      if (typeof note === 'string') {
+        note = noteToMidi(note);
+      }
+  
+      if (isObject) {
+        delete hap.value.n; // remove n so it won't cause trouble
+      }
+      const octave = (note / 12) >> 0;
+      const transpose = octave * 12;
+  
+      const goal = note - transpose;
+      note =
+        scale.reduce((prev, curr) => {
+          return Math.abs(curr - goal) < Math.abs(prev - goal) ? curr : prev;
+        }) + transpose;
+  
+      return hap.withValue(() => (isObject ? {...hap.value, note} : note));
+    });
+});
+
+// lpf between 0 and 1
+register('rlpf', (x,pat) => {return pat.lpf(pure(x).mul(12).pow(4))})
+
+//hpf between 0 and 1
+register('rhpf', (x,pat) => {return pat.hpf(pure(x).mul(12).pow(4))})
+
+$: n("<3@3 4 5 @3 6>*2".add(-14)).scale("g:minor").
+  s("supersaw").
+  trancegate(1.5,45,1).
+  orbit(2).
+  rlpf(slider(0.571,0,1)).
+  lpenv(2).
+  gain(0.5)
+
+$: s("~ hh ~ hh").fast(2).gain(0.5)
+
+$: n("0@2 <-7 [-5 -2]>@3 <0 -3 2 1>@3".add(7))
+  .scale("g:minor")
+  .s("supersaw").trancegate(1.4,45,1).orbit(3)
+  .delay(.7).pan(rand)
+  .rlpf(slider(0.285)).lpenv(2)
+
+
+$: s("sbd!4").almostNever(ply("2 | 4"))._scope()

@@ -23,42 +23,63 @@ a new filename and drag that).
 
 ---
 
-## 1. State defaults on a FRESH instance (m4l-jweb seeding)
+## Confirmed in 0.9.0
 
-The build now seeds every state slot's `[dict]` with its declared default
-(`@embed 1` + embedded data). Two things to confirm:
+Passed by hand and no longer open: state-default seeding on a fresh instance (and
+restore beating seed); Push banks paging as **Tone**/**Space** on hardware; presets
+reaching the User Library; the sampler's polyphony and per-instance sample scope (two
+instances, separate samples, overlapping notes not cut). The re-check recipe for each,
+should the code underneath change, is in [ARCHITECTURE.md](ARCHITECTURE.md) under
+"Verified in Live".
 
-1. **Fresh instance reads its default.** Drag a NEW Strudel MIDI onto a track: the
-   editor must show the built-in demo pattern (not blank). Drag a new FX device: no
-   black screen, empty line. The Max console `get_state` lines must show the
-   defaults, not `{}`.
-2. **Restore beats seed.** Type a pattern, save the set, close, reopen: your pattern
-   must come back, not the default. A default that wins over a restore is worse than
-   the empty dict it replaced.
+---
 
-## 2. Push banks on hardware
+## 1. Clip I/O from inside a Rack
 
-The fx surface declares two banks, and the build now writes them into the patcher
-(`parameterbanks`). On a Push: the FX device's encoders must page as **Tone**
-(cutoff, hpfreq, drive, crush) and **Space** (delay, delaytime, delayfeedback, room,
-gain) - named pages, not "Bank 1"/"Bank 2" declaration-order pagination.
+The recent `ownTrack()` fix climbs `canonical_parent` to the track, so a MIDI device
+INSIDE an Instrument Rack should still read and write clips (and the 1/s
+`jsliveapi: invalid property name` console error should be gone). Put Strudel MIDI in
+the shipped Rack and:
 
-## 3. Presets reach the User Library
+1. **Save to Clip** writes a clip onto the Rack's track (not an error, not the wrong
+   track).
+2. **Load from Clip** reads a clip on that track back into mini-notation.
+3. Both work the same on a bare track (no Rack) as before.
+4. Where a track truly cannot be reached, both clip buttons disable with a tooltip
+   rather than failing silently (hard to stage on purpose - mostly this is the "it
+   still works in a Rack" check).
 
-After R4-c commits `presets/m4l-strudel Rack.adg`: `pnpm build` must list it as a
-preset, and `pnpm install:device` must place it next to the devices in
-`User Library/Max For Live/m4l-strudel/`. Dragging the rack from Live's browser must
-load all its devices.
+## 2. Macro-map the native Play/Stop
 
-## 4. SPIKE - drag-to-clip
+Strudel MIDI's transport is now a real, mappable Live parameter behind the **Macro**
+button. Confirm the round trip:
 
-[SPIKE-DRAG-TO-CLIP.md](SPIKE-DRAG-TO-CLIP.md): audition a sample in the browser,
-then try to drag the row into a Simpler / a Drum Rack / an audio track. The answer
-(which payload format, if any, Live accepts from `[jweb]`'s Chromium) is the
-deliverable; the reveal-in-folder fallback already ships either way.
+1. Click **Macro** - the native panel with the Play/Stop control appears; **Back**
+   returns to the editor.
+2. Map a **Rack macro** (or a Push button / a MIDI control) to that Play/Stop control,
+   and confirm moving the macro starts and stops the sequencer.
+3. The web editor's own Run/Stop still works and stays in sync.
+
+## 3. Sampler pad highlight (re-check)
+
+Polyphony already passed; this is only the visual fix: play a chord across loaded pads -
+**every** struck pad must light, not just one.
+
+## 4. SPIKE - drag-to-clip (`DownloadURL` approach)
+
+[SPIKE-DRAG-TO-CLIP.md](SPIKE-DRAG-TO-CLIP.md) has the full plan. In short: audition a
+sample, then drag the row onto an audio track / a Simpler / a Drum Rack pad. With the
+`DownloadURL` change in place, success = a real audio file lands (a clip appears), and a
+WAV shows up in `%TEMP%`. Negative control: drag onto `notepad.exe` - if it still only
+pastes a text path, `[jweb]`'s CEF is stripping `DownloadURL` and the answer is NO.
+Reveal-in-folder is the fallback either way. (Not yet coded - the `DownloadURL` change
+is planned in the spike doc.)
 
 # The dependency note
 
-`package.json` points `@m4l-jweb/*` at `^0.9.0`. **m4l-jweb 0.9.x has to be published
-before a fresh clone or CI can install** - until then, the local
-`link:../m4l-jweb/packages/*` is what makes both repos build together.
+`package.json` points `@m4l-jweb/*` at `^0.9.0`, and m4l-jweb 0.9.0 is published to
+npm - a fresh clone or CI installs the published packages, no local link needed.
+
+(In-progress cross-repo work bumps to a not-yet-published 0.9.1 and temporarily
+consumes it via `link:../m4l-jweb/packages/*` on disk; that link is dropped and
+0.9.1 published once the round is confirmed working.)
