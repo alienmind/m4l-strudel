@@ -29,7 +29,7 @@ The result is a set of **Max for Live devices** that bring [Strudel](https://str
 
 ## What's in the box
 
-All four devices are ready to use.
+All five devices are ready to use.
 
 | Device | Type | What it does for you |
 |---|---|---|
@@ -72,7 +72,7 @@ You can download the pre-built `.amxd` devices ready for Ableton Live from:
 
 Once downloaded, simply extract the ZIP file and copy the `.amxd` devices into your Ableton **User Library** (e.g. `User Library/Max For Live/m4l-strudel/`).
 
-Each `.amxd` is fully **self-contained** - its own React UI bundle (the Strudel engine only travels inside the MIDI devices, the only ones that need it) unpacks itself on first load. Drag from Live's browser onto a MIDI track (midi, midi-drums) or an audio track (sample-browser, fx) and go. Nothing ships loose beside the devices, and nothing runs a Node process.
+Each `.amxd` is fully **self-contained** - its own React UI bundle (the Strudel engine only travels inside the devices that run patterns: the two MIDI devices and the Drums Sampler) unpacks itself on first load. Drag from Live's browser onto a MIDI track (Strudel MIDI, Drums MIDI, Drums Sampler) or an audio track (Strudel Samples, Audio FX) and go. Nothing ships loose beside the devices, and nothing runs a Node process.
 
 *(For developers building from source, you can use `pnpm install:device` to automatically copy the compiled devices to your local Ableton User Library).*
 
