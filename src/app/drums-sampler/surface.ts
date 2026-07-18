@@ -42,5 +42,8 @@ export default defineSurface({
 		/** The Full Studio - a bigger editor for the same pattern, reached from About > Advanced.
 		 *  Binds the `code` slot only; the device view stays the sole engine. */
 		studio: window({ title: "Strudel Studio", width: 720, height: 560, entry: "StudioWindow", alwaysOnTop: true }),
+		/** strudel.cc itself, in a floating window (About > Advanced). The bundled page just
+		 *  navigates to the site - a plain browser tab's worth of the web playground. */
+		strudel: window({ title: "strudel.cc", width: 1100, height: 760, entry: "StrudelSite" }),
 	},
 });

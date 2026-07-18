@@ -253,6 +253,7 @@ export default function App() {
 	const engine = useStrudelEngine({ surface, initialText: INITIAL_TEXT, ctx: EMPTY_CTX, voiceSink });
 	const helpWindow = useWindow(surface, "help");
 	const studioWindow = useWindow(surface, "studio");
+	const strudelWindow = useWindow(surface, "strudel");
 	const [, setHelpQuery] = useStateSync(surface, "helpQuery");
 
 	// A bank change can satisfy a name that was missing a moment ago; clear the report.
@@ -306,7 +307,7 @@ export default function App() {
 	}, [dmSounds, bankName]);
 
 	if (showAbout) {
-		return <AboutPanel amxdBuild={__APP_VERSION__} onOpenStudio={studioWindow.open} onClose={() => setShowAbout(false)} />;
+		return <AboutPanel amxdBuild={__APP_VERSION__} onOpenStudio={studioWindow.open} onOpenStrudel={strudelWindow.open} onClose={() => setShowAbout(false)} />;
 	}
 
 	const codeStatus =
