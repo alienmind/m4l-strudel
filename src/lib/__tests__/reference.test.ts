@@ -73,7 +73,7 @@ describe("the reference describes THESE devices", () => {
 	it("every device's help is non-empty and about that device", () => {
 		// A device whose `only` nobody wrote would show a blank window - the failure
 		// that a required field makes impossible to reach by accident.
-		for (const d of ["fx", "midi", "midi-drums"] as const) {
+		for (const d of ["fx", "midi", "midi-drums", "drums-sampler"] as const) {
 			expect(referenceFor(d).length, `${d} has no reference entries at all`).toBeGreaterThan(0);
 			expect(DEVICE_BLURB[d], `${d} has no blurb`).toBeTruthy();
 		}
