@@ -65,6 +65,42 @@ export function githubUrl(pseudo: string, subpath = ""): string {
 	return `https://raw.githubusercontent.com/${p}/${subpath}`;
 }
 
+/**
+ * The tidal-drum-machines catalog - strudel's own `bank()` universe.
+ *
+ * A single strudel.json whose keys are `<Machine>_<sound>` (`AkaiLinn_bd`,
+ * `RolandTR909_hh`), the shape strudel's `bank()` control resolves against:
+ * `s("bd").bank("RolandTR909")` looks up `RolandTR909_bd`. This is the generated
+ * catalog strudel.cc itself loads (felixroos/dough-samples); its `_base` points at the
+ * machine WAVs in geikha/tidal-drum-machines. loadSampleMap() reads it like any other
+ * map - the names just happen to carry a bank prefix, which banksOf()/soundKey() split.
+ */
+export const DRUM_MACHINES_URL = "https://raw.githubusercontent.com/felixroos/dough-samples/main/tidal-drum-machines.json";
+
+/** The sample name a bank + sound resolve to: strudel's `<bank>_<sound>` convention. */
+export function soundKey(bank: string, sound: string): string {
+	return `${bank}_${sound}`;
+}
+
+/** The distinct BANKS (machine prefixes) in a drum-machine catalog, sorted. A key is
+ *  `<Machine>_<sound>`; the bank is everything before the LAST underscore, because a
+ *  sound name never contains one but a machine name can (`RolandTR808`, none do today,
+ *  but split on the last `_` keeps `AkaiMPC60_bd` -> `AkaiMPC60`). */
+export function banksOf(sounds: Sound[]): string[] {
+	const set = new Set<string>();
+	for (const s of sounds) {
+		const cut = s.name.lastIndexOf("_");
+		if (cut > 0) set.add(s.name.slice(0, cut));
+	}
+	return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+/** The sound token of a `<bank>_<sound>` key (`AkaiLinn_bd` -> `bd`). */
+export function soundToken(name: string): string {
+	const cut = name.lastIndexOf("_");
+	return cut > 0 ? name.slice(cut + 1) : name;
+}
+
 /** The URL a pseudo-URL's catalog JSON actually lives at. */
 export function catalogUrl(pseudo: string): string {
 	const url = pseudo.trim();

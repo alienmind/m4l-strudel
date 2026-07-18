@@ -108,6 +108,10 @@ export function hapToVoice(hap, cps) {
 	const durCycles = hap.duration.valueOf();
 	return {
 		s: String(v.s),
+		// The strudel `bank()` prefix, when the pattern set one (`s("bd").bank("RolandTR909")`).
+		// The app falls back to its bank dropdown when this is absent; together they resolve
+		// the sound to a `<bank>_<s>` sample name.
+		bank: v.bank !== undefined && v.bank !== null && v.bank !== "" ? String(v.bank) : null,
 		n: typeof v.n === "number" ? Math.round(v.n) : 0,
 		velocity: hapVelocity(hap),
 		rate: typeof v.speed === "number" && v.speed !== 0 ? v.speed : 1,

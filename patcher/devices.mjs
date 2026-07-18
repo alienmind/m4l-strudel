@@ -90,35 +90,44 @@ export default [
 	},
 	{
 		/**
-		 * Strudel Sampler - a polyphonic drum-rack instrument. Eight pads, one
-		 * dedicated sample per pad, played by MIDI notes coming into the track.
+		 * Strudel Sampler - a polyphonic, CODE-DRIVEN sampler over drum-machine BANKS.
 		 *
-		 * This is the first INSTRUMENT device in the repo: type "instrument" keeps the
-		 * MIDI input ports the audio devices drop, and the `instrument` chain builds a
-		 * [poly~] of sample voices over a KEYMAP of eight named [buffer~]s (one per
-		 * pad). A note names its sample by slot INDEX and Max allocates a free voice,
-		 * so overlapping hits never cut each other - the polyphony a drum rack needs.
+		 * Not a MIDI pad rack: it PROCESSES Strudel code. `s("bd sd, hh*8")` names sounds,
+		 * a BANK (a tidal-drum-machine, the strudel `bank()` prefix) picks which machine's
+		 * `bd`/`sd`/`hh` play, and the samples are fetched from the same community repos the
+		 * sample browser uses - automatically, in the background, on first reference. Sounds
+		 * are keyed by NAME, never by a MIDI note number.
+		 *
+		 * type "instrument" keeps the MIDI input ports the audio devices drop, and the
+		 * `instrument` chain builds a [poly~] of sample voices over a KEYMAP of named
+		 * [buffer~]s. A voice names its sample by slot INDEX and Max allocates a free voice,
+		 * so overlapping sounds never cut each other - the polyphony a sampler needs.
 		 *
 		 * Chains, and why each is here:
-		 *   instrument  the [poly~] voices, the eight [buffer~]/info~ slots, and the
-		 *               voice_play / buffer_load / buffer_ready plumbing the app calls
-		 *               through playVoice() / loadSample().
-		 *   midiin      inbound MIDI as `notein <pitch> <velocity>` - how a pad is
-		 *               struck. type "instrument" keeps the ports; this chain routes
-		 *               them to the app (onNote()).
-		 *   download    [maxurl] writes a picked sample to disk (fetchToFile), the same
-		 *               acquire-by-audition path the sample browser uses.
+		 *   instrument  the [poly~] voices, the [buffer~]/info~ slots, and the voice_play /
+		 *               buffer_load / buffer_ready plumbing the app calls through playVoice()
+		 *               / loadSample().
+		 *   midiin      inbound MIDI as `notein <pitch> <velocity>`. type "instrument" keeps
+		 *               the ports; the chain routes them to the app.
+		 *   download    [maxurl] writes a referenced sample to disk (fetchToFile), the same
+		 *               acquire path the sample browser uses - here fired automatically when
+		 *               the pattern first names a sound.
 		 *
-		 * `slots` names the eight pad buffers, `---`-scoped per device so two instances
-		 * in one set keep their own samples. `voices` defaults to 8 in the chain, one
-		 * per pad, so it is left unset here.
+		 * SIXTEEN slots (with a matching 16-voice [poly~]): a full drum machine has 11-13
+		 * distinct sounds, so 8 forced eviction mid-pattern. `slots` are `---`-scoped per
+		 * device so two instances keep their own buffers. The app owns which sound occupies
+		 * which slot (a small name -> slot allocator, LRU past 16).
 		 */
 		name: "alienmind-strudel-sampler",
 		ui: "sampler",
 		type: "instrument",
 		mode: "sampler",
 		chains: ["instrument", "midiin", "download"],
-		slots: ["pad1", "pad2", "pad3", "pad4", "pad5", "pad6", "pad7", "pad8"],
+		slots: [
+			"slot1", "slot2", "slot3", "slot4", "slot5", "slot6", "slot7", "slot8",
+			"slot9", "slot10", "slot11", "slot12", "slot13", "slot14", "slot15", "slot16",
+		],
+		voices: 16,
 		unmatchedTo: "js",
 	},
 ];

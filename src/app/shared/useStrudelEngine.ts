@@ -46,6 +46,9 @@ interface EngineNote {
  */
 export interface VoiceEvent {
 	s: string;
+	/** The strudel `bank()` prefix from the pattern, or null - the Sampler falls back to
+	 *  its selected bank and resolves `<bank>_<s>` to a drum-machine sample. */
+	bank: string | null;
 	n: number;
 	velocity: number;
 	rate: number;

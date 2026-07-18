@@ -65,19 +65,28 @@ button. Confirm the round trip:
 Polyphony already passed; this is only the visual fix: play a chord across loaded pads -
 **every** struck pad must light, not just one.
 
-## 3b. Code-driven Sampler playback (new)
+## 3b. Code-driven, bank-based Sampler (new)
 
-The Sampler now has a CODE screen that runs an `s(...)` pattern through the shared engine,
-routing each hap to a `[poly~]` voice by pad name (unit-tested for the note extraction,
-but only Live has the `[poly~]`). Confirm:
+The Sampler is now a CODE-DRIVEN sampler over drum-machine BANKS: `s("bd sd")` names
+sounds, a bank (strudel's `bank()` prefix) picks which tidal-drum-machine plays them, and
+samples auto-download in the background on first reference. The name extraction and the
+`bank()` carry are unit-tested; only Live has the `[poly~]`, the disk and the network.
+Confirm:
 
-1. On the **Kit** screen, load samples onto pads named `bd`, `sd`, `hh` (the default
-   names, or edit them).
-2. On the **CODE** screen, `s("bd sd, hh*8")` and **Run** - the pads play in time, locked
-   to the transport, and the layered `hh*8` overlaps the `bd sd` line (polyphony).
-3. An unknown token - `s("nope")` - shows the amber "No pad named ..." note, not silence
-   with no explanation.
-4. External MIDI (notes 36..43) still strikes the pads alongside a running pattern.
+1. Device opens on the **CODE** screen with `s("bd sd, hh*8")` and a bank dropdown
+   (default RolandTR909). **Run** - after a beat (the first-reference download), the
+   pattern plays in time; the layered `hh*8` overlaps `bd sd` (polyphony, 16 voices).
+2. Change the **bank** dropdown to another machine - the same pattern now plays that
+   machine's `bd`/`sd`/`hh`. A `.bank("AkaiLinn")` written in the code overrides the
+   dropdown per-hap.
+3. A pattern naming >16 distinct sounds evicts the least-recently-used (no crash, no
+   stuck voice). An unknown sound - `s("nope")` - shows the amber "No sample for ..."
+   note, not silence with no explanation.
+4. **Sounds** screen: the bank's sounds show as tokens (`bd`, `sd`, ... with a variation
+   count); click auditions through the track. The **Sample maps** tab browses a free-form
+   repo (dirt-samples etc.), where a bare `s("name")` resolves against that map.
+5. First-reference latency: the very first hit of a sound is silent while it downloads,
+   then sounds from the next cycle. Re-references are instant (cached on disk).
 
 ## 4. SPIKE - drag-to-clip (`DownloadURL` approach)
 
