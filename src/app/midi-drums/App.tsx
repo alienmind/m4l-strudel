@@ -52,6 +52,7 @@ export default function App() {
 				grid={s.grid} setGrid={s.setGrid}
 				toMidi={s.toMidi} fromMidi={s.fromMidi}
 				clipAvailable={s.clipAvailable}
+				clipSupported={s.clipSupported}
 				onClose={() => setShowClip(false)}
 			/>
 		);

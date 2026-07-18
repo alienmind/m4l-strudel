@@ -12,6 +12,7 @@ export function ClipPanel({
 	toMidi,
 	fromMidi,
 	clipAvailable,
+	clipSupported,
 	onClose,
 }: {
 	beatsPerCycle: number;
@@ -25,8 +26,14 @@ export function ClipPanel({
 	toMidi: () => void;
 	fromMidi: () => void;
 	clipAvailable: boolean;
+	/** Whether clip I/O is possible here at all. False disables BOTH buttons - the
+	 *  wrapper reported it cannot reach a track (e.g. the device is somewhere no track
+	 *  resolves). A Rack is fine; the wrapper climbs to the track. */
+	clipSupported: boolean;
 	onClose: () => void;
 }) {
+	/** Both buttons need a track. When there is none, say so once, on both. */
+	const noTrack = "This device can't reach a track from here - MIDI clip import/export is unavailable";
 	return (
 		<div className="flex h-full w-full flex-col gap-2 overflow-hidden bg-background p-1.5 text-foreground">
 			<div className="flex items-center gap-2 border-b border-input pb-1 mb-1 leading-none">
@@ -105,9 +112,10 @@ export function ClipPanel({
 
 				<div className="grid grid-cols-2 gap-2 mt-auto">
 					<button
-						className="flex items-center justify-center gap-2 rounded-md bg-accent px-2 py-2 text-xs font-semibold text-accent-foreground hover:brightness-110"
+						className="flex items-center justify-center gap-2 rounded-md bg-accent px-2 py-2 text-xs font-semibold text-accent-foreground hover:brightness-110 disabled:opacity-40"
 						onClick={toMidi}
-						title="Write the pattern as a MIDI clip on this track"
+						disabled={!clipSupported}
+						title={clipSupported ? "Write the pattern as a MIDI clip on this track" : noTrack}
 					>
 						<ArrowDownToLine className="size-3.5" />
 						Save to Clip
@@ -115,11 +123,13 @@ export function ClipPanel({
 					<button
 						className="flex items-center justify-center gap-2 rounded-md bg-accent px-2 py-2 text-xs font-semibold text-accent-foreground hover:brightness-110 disabled:opacity-40"
 						onClick={fromMidi}
-						disabled={!clipAvailable}
+						disabled={!clipSupported || !clipAvailable}
 						title={
-							clipAvailable
-								? "Read the playing (or first) clip on this track into mini-notation"
-								: "No clip on this track"
+							!clipSupported
+								? noTrack
+								: clipAvailable
+									? "Read the playing (or first) clip on this track into mini-notation"
+									: "No clip on this track"
 						}
 					>
 						<ArrowUpFromLine className="size-3.5" />

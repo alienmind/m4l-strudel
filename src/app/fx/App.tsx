@@ -261,6 +261,7 @@ export default function App() {
 				</span>
 			)}
 
+
 			{/* No HTML sliders here any more: the seven parameters render as native
 			    live.dial objects in the device view (surface.ts `layout.native`),
 			    beside this [jweb]. They follow automation and Push, and a dial turn

@@ -10,9 +10,11 @@ import {
 } from "@/lib/mini/scales";
 import { isBareMini } from "@/lib/strudelCode";
 import { miniNoteTokens } from "@/lib/mini/resolve";
+import type { Surface } from "@m4l-jweb/surface";
 import { useStrudelEngine, type EngineState } from "../shared/useStrudelEngine";
 import { INITIAL_TEXT } from "./surface";
 import { IN } from "../shared/protocol";
+import { transportParams } from "../shared/surface";
 import surface from "./surface";
 
 /**
@@ -56,7 +58,10 @@ export function useStrudel(): StrudelState {
 	const liveScaleName = useMemo(() => strudelScaleName(scale), [scale]);
 
 	const engine = useStrudelEngine({
-		surface,
+		// This device's surface declares MORE than the transport (a `transport` view-switch
+		// for the native Play/Stop panel). The engine only reads `play`; `Surface` is
+		// invariant in its param map, so pass it through as the narrower transport view.
+		surface: surface as unknown as Surface<typeof transportParams>,
 		initialText: INITIAL_TEXT,
 		ctx,
 		liveScale: liveScaleName,

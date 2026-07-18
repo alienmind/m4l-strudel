@@ -13,11 +13,20 @@
  * silently replaces the first, and a Play toggle stops following Live with no error
  * anywhere. One Surface per device, built from these.
  */
-import { state, toggle } from "@m4l-jweb/surface";
+import { button, state } from "@m4l-jweb/surface";
 
-/** The transport toggle: automatable, so a pattern can be run from an arrangement. */
+/**
+ * The transport control: play/stop, as a REAL Live parameter - automatable, and
+ * macro-mappable so a Rack macro (or a Push button) can start and stop the sequencer.
+ *
+ * A `button` (live.text "Play/Stop"), not a `toggle`: same on/off value, but it carries
+ * a visible label and reads as a button when it is drawn natively. It is invisible until
+ * a surface places it in a `layout.native` (the midi device reveals it in a native panel
+ * behind a switch, the way the FX device reveals its knobs) - a parameter with no
+ * presentation rect cannot be clicked to map, which is why "hidden" made it unmappable.
+ */
 export const transportParams = {
-	play: toggle({ default: false, short: "Play" }),
+	play: button({ default: false, label: "Play/Stop", short: "Play" }),
 };
 
 /**

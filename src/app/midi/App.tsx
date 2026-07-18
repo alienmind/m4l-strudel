@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FolderOpen, Play, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isBareMini } from "@/lib/strudelCode";
-import { useStateSync, useWindow } from "@m4l-jweb/surface/react";
+import { useNativePanel, useParam, useStateSync, useWindow } from "@m4l-jweb/surface/react";
 import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
 import { ClipPanel } from "../shared/ClipPanel";
@@ -30,6 +30,19 @@ export default function App() {
 
 	const [showAbout, setShowAbout] = useState(false);
 	const [showClip, setShowClip] = useState(false);
+
+	// THE TRANSPORT PANEL. `transport` is a native view-switch (surface.ts): on shows the
+	// native panel that holds the macro-mappable Play/Stop parameter, off shows this
+	// editor. Layered, not side-by-side (runtime reposition of native objects does not
+	// work in a frozen M4L device), so the app hides one and shows the other - exactly the
+	// FX device's knob-panel mechanism. The panel exists so a Rack macro has a visible
+	// control to map to; the parameter is invisible, and so unmappable, without it.
+	const [showTransport, setShowTransport] = useParam(surface, "transport");
+	const applyPanel = useNativePanel(surface);
+	useEffect(() => {
+		applyPanel(showTransport ? "native" : "web");
+	}, [showTransport, applyPanel]);
+
 	const helpWindow = useWindow(surface, "help");
 	// The floating reference follows the caret. It is a different Chromium context, so a
 	// state slot is the only way to tell it what you are typing about.
@@ -49,6 +62,7 @@ export default function App() {
 				grid={s.grid} setGrid={s.setGrid}
 				toMidi={s.toMidi} fromMidi={s.fromMidi}
 				clipAvailable={s.clipAvailable}
+				clipSupported={s.clipSupported}
 				onClose={() => setShowClip(false)}
 			/>
 		);
@@ -106,6 +120,16 @@ export default function App() {
 						className="rounded bg-input/50 px-1 py-0.5 hover:bg-input"
 					>
 						Studio
+					</button>
+					{/* Reveal the native transport panel, whose Play/Stop is a real Live
+					    parameter you can map a Rack macro (or a Push button) to. The native
+					    "Back" switch in that panel flips back here. */}
+					<button
+						onClick={() => setShowTransport(true)}
+						title="Show the native Play/Stop control - map a Rack macro or Push button to it"
+						className="rounded bg-input/50 px-1 py-0.5 hover:bg-input"
+					>
+						Macro
 					</button>
 					<HelpButton onOpen={helpWindow.open} />
 				</div>

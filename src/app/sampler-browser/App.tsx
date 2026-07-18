@@ -536,20 +536,31 @@ function useTransport() {
 /**
  * Put a downloaded sample onto a drag, in every shape a drop target might read.
  *
- * WHICH shape Live's audio track wants is the open question - see doc/SPIKE-DRAG-TO-CLIP.md
- * - and it is quite possible [jweb]'s embedded Chromium does not hand an HTML5 drag to the
- * host OS at all, in which case none of these arrive. So this is the app's honest best
- * effort, pending the spike: the canonical file URL, the raw path, and a `DownloadURL`
- * (the Chromium convention, `mime:name:url`). The spike decides whether any of it lands.
+ * SPIKE UPDATE (doc/SPIKE-DRAG-TO-CLIP.md): unknown #1 is answered YES - [jweb]'s
+ * embedded Chromium DOES hand an HTML5 drag to the host OS. Dragging a row into
+ * notepad.exe pastes the `text/plain` payload, which proves the drag crosses the OS
+ * boundary. What it delivered was a FORWARD-SLASH path, and Live's audio lane did not
+ * accept it. Windows drop targets expect a NATIVE (backslash) path, so `text/plain` is
+ * now the Windows path; the forward-slash `file://` URI stays on `text/uri-list` for
+ * targets that want a URI, and the `DownloadURL` (Chromium convention) stays too. Which
+ * one Live finally accepts is the remaining spike question.
  */
 function startFileDrag(e: React.DragEvent, folder: string, relPath: string): void {
 	const url = fileUrl(folder, relPath);
 	const abs = absPath(folder, relPath);
 	const name = relPath.split("/").pop() || "sample.wav";
 	e.dataTransfer.setData("text/uri-list", url);
-	e.dataTransfer.setData("text/plain", abs);
+	// A native Windows path (backslashes), the shape a Windows file drop target reads.
+	// notepad accepted the forward-slash form; Live did not - a drop target is stricter
+	// than a text field, so hand it the OS-native path.
+	e.dataTransfer.setData("text/plain", winPath(abs));
 	e.dataTransfer.setData("DownloadURL", `audio/wav:${name}:${url}`);
 	e.dataTransfer.effectAllowed = "copy";
+}
+
+/** An absolute path in native Windows form: backslashes, no leading slash. */
+function winPath(abs: string): string {
+	return abs.replace(/\//g, "\\").replace(/^\\+/, "");
 }
 
 /** The device's folder is absolute and may contain spaces; a URL must encode them. */

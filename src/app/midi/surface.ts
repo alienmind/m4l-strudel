@@ -4,7 +4,7 @@
  * Just the transport toggle. Live's scale is not a parameter of this device - it
  * belongs to the SET, and is read through a LiveAPI observer (see wrapper/device.ts).
  */
-import { defineSurface, window } from "@m4l-jweb/surface";
+import { button, defineSurface, window } from "@m4l-jweb/surface";
 import { codeSlot, helpQuerySlot, transportParams } from "../shared/surface";
 
 /**
@@ -19,7 +19,31 @@ import { codeSlot, helpQuerySlot, transportParams } from "../shared/surface";
 export const INITIAL_TEXT = "<c1 c1 <c2 c#2>>*16";
 
 export default defineSurface({
-	params: transportParams,
+	params: {
+		...transportParams,
+		/**
+		 * THE VIEW SWITCH - a native `live.text` button pinned top-right (over the web UI's
+		 * own reveal button), the way the FX device's `knobs` switch works. On = the native
+		 * transport panel (where the macro-mappable Play/Stop lives), off = the web editor.
+		 * The panel exists ONLY so the transport parameter has somewhere visible to be
+		 * clicked when mapping a Rack macro; the pattern editor stays the default view.
+		 */
+		transport: button({ default: false, label: "Back", short: "Back" }),
+	},
+
+	/**
+	 * The native transport panel: just the Play/Stop parameter, revealed behind the
+	 * `transport` switch. `panel: true` layers it over the (full-width) web UI and the app
+	 * flips between them (useNativePanel); one row, since it holds a single control.
+	 */
+	layout: {
+		native: {
+			params: ["play"],
+			rows: 1,
+			panel: true,
+			switch: "transport",
+		},
+	},
 
 	/** The pattern, saved with the set and shared with the Studio window. */
 	state: {
