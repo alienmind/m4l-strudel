@@ -29,7 +29,7 @@ The result is a set of **Max for Live devices** that bring [Strudel](https://str
 
 ## What's in the box
 
-All five devices are ready to use.
+All six devices are ready to use.
 
 | Device | Type | What it does for you |
 |---|---|---|
@@ -37,6 +37,7 @@ All five devices are ready to use.
 | **Strudel Drums MIDI** (`alienmind-strudel-drums-midi.amxd`) | MIDI effect | The exact same engine as Strudel MIDI, but purpose-built for driving Drum Racks. A dedicated mapping UI routes drum words (`bd`, `sd`, `hh`) to specific Drum Rack pads, and **the map travels with your set**. |
 | **Strudel Audio FX** (`alienmind-strudel-fx.amxd`) | Audio effect | Write **one line** of Strudel's effect vocabulary - `.lpf(800).hpf(120).crush(8).gain(1.2)` - and it applies to whatever audio is already on the track. Nine stages (filter, hpf, drive, crush, delay, reverb, gain), each a real Live parameter: automatable, MIDI-mappable, native dials in the device view, and two named Push banks (Tone / Space). **Patterns modulate too**: `.lpf(sine.range(200, 2000))` sweeps the cutoff once per bar through `live.remote~` - continuous modulation, no automation written, and the dial comes back the moment the line stops asking. |
 | **Strudel Drums Sampler** (`alienmind-strudel-drums-sampler.amxd`) | Instrument | A polyphonic, **code-driven** sampler over drum-machine **banks**. Write `s("bd sd, hh*8")` (or a bare `bd sd, hh!6`); a bank (a tidal-drum-machine, strudel's `bank()` prefix) picks which machine's `bd`/`sd`/`hh` play, and samples auto-download in the background from the same repos the browser uses. Sixteen voices; overlapping sounds ring out independently, and two instances keep separate samples. **MIDI notes drive it too** (Drum Rack layout), so a sequencer in front plays the same bank. |
+| **Strudel Superdough** (`alienmind-strudel-superdough.amxd`) | Instrument | **ALL of Strudel as the track's audio.** Write anything strudel.cc plays - multi-line `$:`, samples, synths, orbits, superdough's real effects - and the device renders it **offline with the real superdough engine** into a loop that plays through the track's fader, sends and recording, locked to Live's transport. Edits fade in at the next loop boundary; random patterns render one realization per loop with a visible notice. It is superdough itself, not a port - what you hear is what the site plays. |
 | **Strudel Samples** (`alienmind-strudel-sample-browser.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo) and **audition samples through the track** - beat-synced to your project's launch quantization, looped in time, and heard through the track's own fader and effects. Auditioning downloads the file next to the device; drag it out into a Simpler, a Drum Rack or a track. |
 
 **Ships with an Instrument Rack preset** (`presets/AlienMind Strudel Rack.adg`): Strudel MIDI -> a native Ableton instrument -> Strudel Audio FX, wired and ready to drop from Live's browser.
@@ -88,6 +89,7 @@ pnpm dev:midi       # browser dev for the MIDI device, mocked Live beside it
 pnpm dev:drums-midi # browser dev for the Drums MIDI device
 pnpm dev:sample-browser # browser dev for the sample browser
 pnpm dev:fx         # browser dev for the Audio FX device
+pnpm dev:superdough # browser dev for the Superdough render device
 ```
 
 For full details on building these devices with the underlying framework from scratch, read [doc/M4L-JWEB-GUIDE.md](doc/M4L-JWEB-GUIDE.md). Detailed architecture diagrams and concepts are found in [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md).

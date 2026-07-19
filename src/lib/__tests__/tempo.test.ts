@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CPS, detectCps, suggestBeatsPerCycle } from "../tempo";
+import { DEFAULT_CPS, detectCps, suggestBeatsPerCycle, beatsPerCycleForTempoLock } from "../tempo";
 
 describe("detectCps", () => {
 	it("defaults to Strudel's rate when no tempo is set", () => {
@@ -42,5 +42,29 @@ describe("suggestBeatsPerCycle", () => {
 
 	it("falls back to 4 for nonsense input", () => {
 		expect(suggestBeatsPerCycle(0, 120)).toBe(4);
+	});
+});
+
+describe("beatsPerCycleForTempoLock", () => {
+	it("is one bar at the default rate", () => {
+		expect(beatsPerCycleForTempoLock(DEFAULT_CPS)).toBe(4);
+	});
+
+	it("is half a bar for a pattern twice as fast", () => {
+		expect(beatsPerCycleForTempoLock(1)).toBe(2); // 4 * 0.5 / 1
+	});
+
+	it("is two bars for a pattern half as fast", () => {
+		expect(beatsPerCycleForTempoLock(0.25)).toBe(8);
+	});
+
+	it("does NOT depend on tempo (unlike suggestBeatsPerCycle)", () => {
+		// Tempo-independent by design: the render cps scales with bpm instead, so the
+		// WAV is always this many beats long at whatever the transport tempo is.
+		expect(beatsPerCycleForTempoLock(DEFAULT_CPS)).toBe(4);
+	});
+
+	it("falls back to 4 for nonsense input", () => {
+		expect(beatsPerCycleForTempoLock(0)).toBe(4);
 	});
 });

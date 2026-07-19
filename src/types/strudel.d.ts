@@ -81,6 +81,8 @@ declare module "superdough" {
 	export function setSuperdoughAudioController(controller: unknown | null): void;
 	/** Clear global reverb/delay/etc. state between renders. */
 	export function resetGlobalEffects(): void;
+	/** Drop the cross-context node pool - required between OfflineAudioContexts (see offline.ts). */
+	export function clearNodePools(): void;
 	/** Load a sample map (e.g. "github:tidalcycles/dirt-samples") into the sound map. */
 	export function samples(sampleMap: string | object, baseUrl?: string, options?: object): Promise<void>;
 }

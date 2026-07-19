@@ -37,7 +37,7 @@ export type Status =
 	| "syntax";
 
 /** The UI folders, which are what a help window is opened from. */
-export type Device = "fx" | "midi" | "midi-drums" | "drums-sampler";
+export type Device = "fx" | "midi" | "midi-drums" | "drums-sampler" | "superdough";
 
 /** The devices that take a pattern. They support the same mini-notation and code. The
  *  sampler is one - its tokens are sample names rather than pitches, but the STRUCTURE
@@ -336,10 +336,16 @@ export const DEVICE_BLURB: Record<Device, string> = {
 	midi: "Strudel patterns, out as MIDI. Mini-notation and full Strudel code both work.",
 	"midi-drums": "Strudel patterns, out as MIDI, with sample names resolved through the drum map.",
 	"drums-sampler": "Strudel s() patterns, played from a drum-machine bank. Sample names, not pitches; commas layer for polyphony.",
+	superdough:
+		"ALL of Strudel, rendered with the real superdough into the track's audio. Everything strudel.cc plays - multi-line $:, samples, synths, effects.",
 };
 
 /** The entries that apply to a device. Every entry declares its own, so this is a fact, not a guess. */
 export function referenceFor(device: string): RefEntry[] {
+	// The superdough device is not a subset: the code goes to the real superdough
+	// verbatim, so the honest reference is the whole list - the per-device `only`
+	// filter answers "which subset", and here the answer is "all of it".
+	if (device === "superdough") return REFERENCE;
 	return REFERENCE.filter((e) => e.only.includes(device as Device));
 }
 

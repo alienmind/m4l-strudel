@@ -11,13 +11,18 @@ import { bootScope, compile } from "@/max/shared/engine.mjs";
 import { renderCycles } from "@/lib/render/offline";
 import { installRenderScope } from "@/lib/render/scope";
 // Load the default strudel sample map so s("bd sd") resolves, exactly as the repl does.
-import { samples } from "superdough";
+// setGainCurve is injected into the render scope (scope.ts cannot import the superdough
+// barrel itself - it must stay loadable under node for the unit tests).
+import { samples, setGainCurve } from "superdough";
 
 const cpsInput = () => document.getElementById("cps") as HTMLInputElement;
 
 // Full-Strudel scope shims (setCpm/setCps/slider/_scope). setCpm/setCps in the code
 // auto-fill the cps box so a pasted strudel.cc pattern renders at its own tempo.
-installRenderScope({ onCps: (cps) => { if (Number.isFinite(cps) && cps > 0) cpsInput().value = String(cps); } });
+installRenderScope({
+  setGainCurve,
+  onCps: (cps) => { if (Number.isFinite(cps) && cps > 0) cpsInput().value = String(cps); },
+});
 
 const logEl = document.getElementById("log")!;
 const log = (msg: string, cls = "") => {

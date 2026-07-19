@@ -7,6 +7,7 @@ export function AboutPanel({
 	onShowControls,
 	onOpenStrudel,
 	onClose,
+	debug,
 }: {
 	amxdBuild: string;
 	/** Opens the Full Studio - a bigger editor for the same pattern. An ADVANCED feature,
@@ -22,6 +23,9 @@ export function AboutPanel({
 	 *  Studio. Present on the pattern devices; omitted elsewhere. */
 	onOpenStrudel?: () => void;
 	onClose: () => void;
+	/** Debug-only render/transport readout (superdough). Shown in a small mono block so it
+	 *  is available when needed but out of the way of the device view. */
+	debug?: string;
 }) {
 	return (
 		<div className="flex h-full w-full flex-col gap-1 overflow-hidden bg-background p-1.5 text-foreground">
@@ -92,6 +96,12 @@ export function AboutPanel({
 								</Button>
 							)}
 						</div>
+					</div>
+				)}
+
+				{debug && (
+					<div className="w-full max-w-[220px] whitespace-pre-wrap break-words rounded border border-input bg-input/20 p-2 text-left font-mono text-[9px] leading-tight text-muted-foreground">
+						{debug}
 					</div>
 				)}
 

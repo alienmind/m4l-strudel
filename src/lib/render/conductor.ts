@@ -14,6 +14,19 @@ The flow per edit (evaluate):
 Deterministic patterns render ONE full period and loop it. Random / history-dependent
 patterns cannot be honestly looped, so they drop to ROLLING mode: render one cycle at a
 time, each cycle a fresh realization. The status carries which mode is in effect.
+
+Rolling is PACED BY THE TRANSPORT, not by the render pipeline: the next cycle's render
+kicks off when tick() sees the loop boundary pass, never straight from ready(). Chaining
+off ready() (render -> load -> ready -> render...) runs the pipeline as fast as it can -
+many times realtime - so renders race unboundedly ahead of playback, realizations are
+armed and replaced unheard, and the disk churns for nothing. One render per audible loop
+is the honest rate.
+
+With the transport STOPPED there are no tick boundaries, but the groove keeps looping
+self-clocked - so rolling paces itself with a loop-period timer instead. Strudel's rand
+family is cycle-seeded (a pure function of time), so advancing the render window IS the
+randomness; holding the window still plays one realization forever, which is what a
+stopped-transport rolling pattern sounded like before this timer existed.
 */
 
 /** Opaque compiled pattern - the conductor never inspects it, only passes it to render. */
@@ -78,7 +91,15 @@ export class SuperdoughConductor {
   private lastPattern: CompiledPattern | null = null;
   private lastCps = 0.5;
   private lastCycles = 1;
+  private lastBeatsPerCycle = 4;
   private nextBegin = 0;
+  /**
+   * Per-instance WAV filename prefix. Two instances of the device share one folder
+   * (relative saveToFile paths resolve next to the .amxd), so bare `rndA.wav` names
+   * would have them clobber each other's renders. The buffers are `---`-scoped; the
+   * files must be scoped too.
+   */
+  private filePrefix: string;
   private status: ConductorStatus = { phase: "idle", mode: null, message: "idle", slot: null };
 
   // Transport lock. The slot currently audible (the last one armed), plus the loop geometry
@@ -88,9 +109,12 @@ export class SuperdoughConductor {
   private loopSeconds = 2;
   private playing = false;
   private lastBeats = 0;
+  /** Rolling's transport-stopped pacer: one render per loop period, self-timed. */
+  private rollTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(deps: ConductorDeps) {
+  constructor(deps: ConductorDeps, opts: { filePrefix?: string } = {}) {
     this.deps = deps;
+    this.filePrefix = opts.filePrefix ?? "";
   }
 
   getStatus(): ConductorStatus {
@@ -133,6 +157,7 @@ export class SuperdoughConductor {
     this.lastPattern = pat;
     this.lastCps = cps;
     this.lastCycles = cycles;
+    this.lastBeatsPerCycle = beatsPerCycle;
     this.nextBegin = 0;
 
     const mode = deterministic ? "loop" : "rolling";
@@ -141,11 +166,11 @@ export class SuperdoughConductor {
       message: deterministic ? `loop: ${cycles} cycle(s)` : "random pattern: rendering ahead, each cycle is one realization",
     });
 
-    return this.renderChunk(gen, beatsPerCycle);
+    return this.renderChunk(gen);
   }
 
-  /** Render + save + load one chunk into the next slot. Shared by evaluate() and rolling advance(). */
-  private async renderChunk(gen: number, beatsPerCycle: number): Promise<string | null> {
+  /** Render + save + load one chunk into the next slot. Shared by evaluate() and the rolling advance. */
+  private async renderChunk(gen: number): Promise<string | null> {
     if (!this.lastPattern) return null;
     const slot = SLOTS[this.slotIndex % SLOTS.length];
 
@@ -160,7 +185,9 @@ export class SuperdoughConductor {
     }
     if (gen !== this.generation) return null;
 
-    const path = `${slot}.wav`; // flat filename in the device folder (see saveToFile)
+    // Flat filename in the device folder (neither [js] File nor [maxurl] creates
+    // subdirectories), prefixed per instance so two devices in one set do not collide.
+    const path = `${this.filePrefix}${slot}.wav`;
     this.setStatus({ phase: "saving", message: "saving", slot });
     try {
       await this.deps.saveToFile(path, chunk.wav);
@@ -176,7 +203,7 @@ export class SuperdoughConductor {
     this.nextBegin += this.lastCycles;
     this.pendingSlot = slot;
 
-    const lengthBeats = this.lastCycles * beatsPerCycle;
+    const lengthBeats = this.lastCycles * this.lastBeatsPerCycle;
     // Remember this loop's geometry so tick() can map a beat position to a groove position.
     // Both slots share the length in loop mode; in rolling mode each cycle is one beatsPerCycle.
     this.loopBeats = lengthBeats;
@@ -194,10 +221,11 @@ export class SuperdoughConductor {
   }
 
   /**
-   * Max reported a slot's buffer finished loading. Arm it (swap at the next boundary). In
-   * rolling mode this is also the cue to render the next cycle ahead.
+   * Max reported a slot's buffer finished loading. Arm it (swap at the next boundary).
+   * The next rolling render is NOT kicked from here - tick() paces it off the loop
+   * boundary, one render per audible loop (see the header note on rolling).
    */
-  ready(slot: string, beatsPerCycle = 4): void {
+  ready(slot: string): void {
     if (slot !== this.pendingSlot) return; // a stale or unknown slot
     this.pendingSlot = null;
     this.deps.renderArm(slot);
@@ -207,10 +235,42 @@ export class SuperdoughConductor {
     // stopped, the self-clock fallback owns position.
     if (this.playing) this.deps.renderSync?.(slot, this.phaseMs(this.lastBeats));
     this.setStatus({ phase: "armed", message: this.rolling ? "rolling" : "looping", slot });
-    if (this.rolling) {
-      // Kick the next cycle's render into the other slot, staying one ahead.
-      void this.renderChunk(this.generation, beatsPerCycle);
+    // Transport stopped: no tick boundary will ever fire, so rolling paces itself off
+    // the loop period (the groove free-runs at exactly that rate). Playing: tick() owns
+    // the pace, and the timer must not double-kick beside it.
+    if (this.rolling && !this.playing) this.scheduleRollTimer();
+  }
+
+  /** One self-timed rolling advance per loop period, only while the transport is stopped. */
+  private scheduleRollTimer(): void {
+    this.clearRollTimer();
+    const gen = this.generation;
+    this.rollTimer = setTimeout(() => {
+      this.rollTimer = null;
+      if (gen !== this.generation || !this.rolling || this.pendingSlot || this.playing) return;
+      void this.renderChunk(gen);
+    }, this.loopSeconds * 1000);
+  }
+
+  private clearRollTimer(): void {
+    if (this.rollTimer) {
+      clearTimeout(this.rollTimer);
+      this.rollTimer = null;
     }
+  }
+
+  /**
+   * Stop: supersede any in-flight render and forget the audible slot so tick() stops
+   * re-syncing it. The caller fades Max out with renderStop(); a later evaluate()
+   * starts a fresh generation.
+   */
+  stop(): void {
+    this.generation++;
+    this.clearRollTimer();
+    this.pendingSlot = null;
+    this.activeSlot = null;
+    this.rolling = false;
+    this.setStatus({ phase: "idle", mode: null, message: "stopped", slot: null });
   }
 
   /**
@@ -227,6 +287,22 @@ export class SuperdoughConductor {
     const jumped = playing && Math.abs(beats - this.lastBeats) > jumpThreshold;
     if ((started || jumped) && this.activeSlot) {
       this.deps.renderSync?.(this.activeSlot, this.phaseMs(beats));
+    }
+    // Rolling advance, paced by the transport: when the loop boundary passes (the beat
+    // count enters a new loop), render the NEXT cycle into the idle slot - exactly one
+    // render per audible loop. A relocate crosses a boundary too; rendering the next
+    // window from wherever the transport landed is the honest response to a seek.
+    if (this.rolling && playing && this.activeSlot && !this.pendingSlot && this.loopBeats > 0) {
+      const loopOf = (b: number) => Math.floor(b / this.loopBeats);
+      if (this.playing && loopOf(beats) !== loopOf(this.lastBeats)) {
+        void this.renderChunk(this.generation);
+      }
+    }
+    // Transport edges hand the rolling pace over: starting, the tick boundary owns it
+    // (kill the timer so it cannot double-kick); stopping, the self-timer takes it back.
+    if (this.rolling && this.activeSlot) {
+      if (playing && !this.playing) this.clearRollTimer();
+      else if (!playing && this.playing && !this.pendingSlot) this.scheduleRollTimer();
     }
     this.playing = playing;
     this.lastBeats = beats;

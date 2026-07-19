@@ -34,7 +34,7 @@
 // type, and the fx entry declares none of its own. Before it was listed here every
 // fx instance warned "no device mode" and fell back to midi - harmless but noisy,
 // and it ran the midi-only clip poll on a device with no clips to read.
-var MODES = ["midi", "sample-browser", "drums-sampler", "audio"];
+var MODES = ["midi", "sample-browser", "drums-sampler", "audio", "superdough"];
 function resolveStrudelMode(): string {
 	for (var i = 0; i < jsarguments.length; i++) {
 		var a = String(jsarguments[i]);
@@ -53,6 +53,11 @@ var IS_SAMPLE_BROWSER = STRUDEL_MODE === "sample-browser";
  *  browser does (fetch-to-disk, reveal folder), so it shares those paths. It does NOT
  *  poll for clips - it is an instrument with none. */
 var IS_DRUMS_SAMPLER = STRUDEL_MODE === "drums-sampler";
+/** The superdough render device: an instrument with no clips, no pitches (the code goes
+ *  to superdough verbatim, so Live's scale means nothing to it) and no samples folder of
+ *  its own. It wants NONE of the observers below - running the midi defaults on it was
+ *  what produced the "no valid object set" noise in the Max console. */
+var IS_SUPERDOUGH = STRUDEL_MODE === "superdough";
 /** The devices that own a samples folder on disk (download chain). */
 var HAS_SAMPLES_FOLDER = IS_SAMPLE_BROWSER || IS_DRUMS_SAMPLER;
 
@@ -108,6 +113,9 @@ var liveRoot: unknown = 0;
 var liveScale = "Major";
 
 function setupScaleObservers(): void {
+	// The superdough device never resolves a pitch - its code is full Strudel that goes
+	// to superdough verbatim - so Live's scale is not its business.
+	if (IS_SUPERDOUGH) return;
 	// Recreate unconditionally: an observer built in a loading context is dead,
 	// and a `if (obs) return` guard would make that permanent.
 	try {
@@ -228,6 +236,47 @@ function reveal_folder(): void {
 }
 
 /* ------------------------------------------------------------------ *
+ * Knob renaming (superdough, H.7 "dynamic renaming") - SPIKE
+ *
+ * The superdough device's eight native dials are a GENERIC pool ("S1".."S8"); the
+ * code's slider() occurrences bind to them by order. The app sends
+ * `knob_label <index> <name>` after each compile so the dial can carry the semantic
+ * name ("lpf", "trancegate") on the panel, in a Rack macro picker and on Push.
+ *
+ * UNVERIFIED Max claim, deliberately spike-shaped: whether a live.dial's shortname
+ * can be changed at runtime in a frozen M4L device. We reach the box the same way
+ * the packaged wrapper's native_hide does (this.patcher.getnamed("param-s<n>")) and
+ * try the two write forms; the Max console logs which (if either) took. If neither
+ * does, the dials stay "S1".."S8" - cosmetic only, nothing else rides on this.
+ * ------------------------------------------------------------------ */
+
+function knob_label(): void {
+	if (!IS_SUPERDOUGH) return;
+	var index = Number(arguments[0]);
+	var label = Array.prototype.slice.call(arguments, 1).join(" ");
+	if (!(index >= 0 && index < 8) || !label) return;
+	var varname = "param-s" + (index + 1);
+	try {
+		var obj = this.patcher.getnamed(varname);
+		if (!obj) {
+			post("strudel: knob_label " + varname + " -> getnamed() null\n");
+			return;
+		}
+		var before = obj.getattr("_parameter_shortname");
+		if (String(before) === label) return; // already carries this name
+		if (typeof obj.setattr === "function") {
+			obj.setattr("_parameter_shortname", label);
+		} else {
+			obj.message("_parameter_shortname", label);
+		}
+		var after = obj.getattr("_parameter_shortname");
+		post("strudel: knob_label " + varname + " '" + before + "' -> '" + after + "'" + (String(after) === label ? "" : " (rename did NOT take)") + "\n");
+	} catch (e) {
+		post("strudel: knob_label " + varname + " error: " + (e as Error).message + "\n");
+	}
+}
+
+/* ------------------------------------------------------------------ *
  * Hooks called by the packaged wrapper
  * ------------------------------------------------------------------ */
 
@@ -241,11 +290,12 @@ function onDeviceReady(): void {
 /** The UI announced itself; the packaged core has already sent mode/build/tempo. */
 function onUiReady(): void {
 	outlet(0, "mode", STRUDEL_MODE); // the real mode, not the packaged default
-	sendScale(); // the observers fired before this page existed
+	if (!IS_SUPERDOUGH) sendScale(); // the observers fired before this page existed
 	sendQuant(); // ...same: the page cannot have heard the first one
 	sendFolder();
 	lastClipAvail = -1;
 	// The Sampler is an instrument with no clips, so it does not poll for them (it shares
-	// the browser's samples-folder paths, not the MIDI devices' clip paths).
-	if (!HAS_SAMPLES_FOLDER) checkClipAvailable();
+	// the browser's samples-folder paths, not the MIDI devices' clip paths). The superdough
+	// device is an instrument with no clips either - probing one throws LiveAPI noise.
+	if (!HAS_SAMPLES_FOLDER && !IS_SUPERDOUGH) checkClipAvailable();
 }
