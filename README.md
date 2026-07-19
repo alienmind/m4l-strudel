@@ -10,6 +10,8 @@ The result is a set of **Max for Live devices** that bring [Strudel](https://str
 > 
 > **Note:** The pattern language is fully supported, but Strudel's *sound engine* is not. For a full list of what is supported and how it differs from the web version, see [doc/STRUDEL-SUPPORT.md](doc/STRUDEL-SUPPORT.md).
 
+> ⚠️ **Highly Experimental Limitation:** This is not ready for real music production, just a fun experiment. Sound can be choppy and timing is unreliable. The main instrument (Superdough) has a lag of 1 pattern before producing any changes, does not accept real time changes on any knobs (they all have a loop delay), and is not yet MIDI aware.
+
 ## What this project does
 
 - **Generative sequencing in one line.** `note("c3 e3 g3 b3").sometimesBy(.3, x=>x.fast(2))` is a whole evolving part. Euclidean rhythms, polymeter, per-cycle alternation - things that are tedious to click into a piano roll are one expression in Strudel.
@@ -29,20 +31,24 @@ The result is a set of **Max for Live devices** that bring [Strudel](https://str
 
 ## What's in the box
 
-All six devices are ready to use.
+The main monolithic deliverable is one instrument called **Strudel Superdough** (`alienmind-strudel-superdough`) that understands the full Strudel language (with some exceptions, see [STRUDEL-SUPPORT.md](doc/STRUDEL-SUPPORT.md)) and is capable of sequencing notes, producing sounds and effects natively using the superdough engine, in sync with Ableton's transport clock. **Caveat:** It is highly experimental, not yet MIDI aware, has a lag of 1 pattern before producing any changes, and does not accept real-time changes on knobs (they apply on the next loop).
+
+We deliver a set of experimental devices (MIDI control, instrument, audio effect) and **two exemplary racks**:
+- **AlienMind Strudel Bass Rack.adg** - A Strudel MIDI instrument that understands mini notation + stock Ableton bass plugin + Audio FX plugin that translates Strudel audio expressions to native Ableton effects.
+- **AlienMind Strudel Superdough Rack.adg** - A full rack with 3 Strudel instruments (MIDI control, superdough engine, hybrid sfx unit) that showcase the full chain. It's highly experimental; MIDI notes are not processed by superdough.
+
+We also deliver **additional utility instruments** that showcase different capabilities, and are just some tools in the toolset for any curious and adventurous producer:
 
 | Device | Type | What it does for you |
 |---|---|---|
-| **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it - tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Scale-aware (it follows Live 12's key). Converts patterns **to and from MIDI clips** on the track (in a Rack too). A **macro-mappable Play/Stop** parameter (reveal it under **About > Advanced > Controls**) lets a Rack macro or a Push button start and stop the sequencer. |
-| **Strudel Drums MIDI** (`alienmind-strudel-drums-midi.amxd`) | MIDI effect | The exact same engine as Strudel MIDI, but purpose-built for driving Drum Racks. A dedicated mapping UI routes drum words (`bd`, `sd`, `hh`) to specific Drum Rack pads, and **the map travels with your set**. |
-| **Strudel Audio FX** (`alienmind-strudel-fx.amxd`) | Audio effect | Write **one line** of Strudel's effect vocabulary - `.lpf(800).hpf(120).crush(8).gain(1.2)` - and it applies to whatever audio is already on the track. Nine stages (filter, hpf, drive, crush, delay, reverb, gain), each a real Live parameter: automatable, MIDI-mappable, native dials in the device view, and two named Push banks (Tone / Space). **Patterns modulate too**: `.lpf(sine.range(200, 2000))` sweeps the cutoff once per bar through `live.remote~` - continuous modulation, no automation written, and the dial comes back the moment the line stops asking. |
-| **Strudel Drums Sampler** (`alienmind-strudel-drums-sampler.amxd`) | Instrument | A polyphonic, **code-driven** sampler over drum-machine **banks**. Write `s("bd sd, hh*8")` (or a bare `bd sd, hh!6`); a bank (a tidal-drum-machine, strudel's `bank()` prefix) picks which machine's `bd`/`sd`/`hh` play, and samples auto-download in the background from the same repos the browser uses. Sixteen voices; overlapping sounds ring out independently, and two instances keep separate samples. **MIDI notes drive it too** (Drum Rack layout), so a sequencer in front plays the same bank. |
-| **Strudel Superdough** (`alienmind-strudel-superdough.amxd`) | Instrument | **ALL of Strudel as the track's audio.** Write anything strudel.cc plays - multi-line `$:`, samples, synths, orbits, superdough's real effects - and the device renders it **offline with the real superdough engine** into a loop that plays through the track's fader, sends and recording, locked to Live's transport. Edits fade in at the next loop boundary; random patterns render one realization per loop with a visible notice. It is superdough itself, not a port - what you hear is what the site plays. |
-| **Strudel Samples** (`alienmind-strudel-sample-browser.amxd`) | Audio effect | Browse Strudel's sample-map universe (dirt-samples, dough-samples, shabda, any `strudel.json` repo) and **audition samples through the track** - beat-synced to your project's launch quantization, looped in time, and heard through the track's own fader and effects. Auditioning downloads the file next to the device; drag it out into a Simpler, a Drum Rack or a track. |
+| **Strudel Superdough** (`alienmind-strudel-superdough.amxd`) | Instrument | **ALL of Strudel as the track's audio.** The main monolithic instrument described above. Renders offline with the real superdough engine into a loop that plays locked to Live's transport. Edits fade in at the next loop boundary; random patterns render one realization per loop with a visible notice. |
+| **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Allows you to sequence notes and pass it to any instrument. It also allows you to translate Strudel patterns to the piano roll and vice versa. It streams live MIDI tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Scale-aware (follows Live 12's key). |
+| **Strudel Drums MIDI** (`alienmind-strudel-drums-midi.amxd`) | MIDI effect | Allows you to map drum patterns that would normally sound as sounds into MIDI notes that can be sequenced to a drum rack. A dedicated mapping UI routes drum words (`bd`, `sd`, `hh`) to specific Drum Rack pads, and the map travels with your set. |
+| **Strudel Drums Sampler** (`alienmind-strudel-drums-sampler.amxd`) | Instrument | Allows you to actually play sounds from the hundreds of Strudel drum machines available in the standard sound packs. It's a polyphonic instrument and accepts MIDI in. Write `s("bd sd, hh*8")`, and a bank picks which machine plays. Sounds auto-download in the background. |
+| **Strudel Audio FX** (`alienmind-strudel-fx.amxd`) | Audio effect | Write **one line** of Strudel's effect vocabulary - `.lpf(800).hpf(120).crush(8).gain(1.2)` - and it applies to whatever audio is already on the track. Nine stages, each a real Live parameter: automatable, MIDI-mappable, native dials. Patterns modulate too (`.lpf(sine.range(200, 2000))`). |
+| **Strudel Samples** (`alienmind-strudel-sample-browser.amxd`) | Audio effect | Allows you to explore the collections of community samples, and play them in sync with your beat. Auditioning downloads the file next to the device; drag it out into a Simpler, a Drum Rack or a track. |
 
-**Ships with an Instrument Rack preset** (`presets/AlienMind Strudel Rack.adg`): Strudel MIDI -> a native Ableton instrument -> Strudel Audio FX, wired and ready to drop from Live's browser.
-
-![The shipped Instrument Rack: sequencer -> instrument -> effects](doc/strudel-rack.png)
+![The shipped Instrument Racks: sequencer -> instrument -> effects](doc/strudel-rack.png)
 
 ## Quick Examples
 

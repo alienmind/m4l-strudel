@@ -17,7 +17,7 @@ All of Strudel as the track's audio: the **Strudel Superdough** instrument.
   bar-locked at any tempo; a re-render on tempo change keeps the lock. A `setcpm()` in the
   code OVERRIDES this to pin the pattern's own rate - default follows Live, `setcpm` is your
   own clock.
-- **Slider knobs (H.7 v1).** Every `slider()` in the code becomes a web slider AND binds to
+- **Slider knobs.** Every `slider()` in the code becomes a web slider AND binds to
   one of eight native dials (S1..S8) - macro-mappable, on Push - auto-bound by order; a turn
   re-renders. The dial takes the code's name for it (`lpf`, `gain`) on the device panel.
 - **Fixes this pass:** serialized renders now also clear superdough's cross-context node

@@ -75,7 +75,7 @@ Without native file drop support from the webview, there is no scripted way to c
 ## Superdough rendering (Route B) - walls hit during the spikes (2026-07-19)
 
 The feature works; these are the specific things that DID NOT, kept so the next round does
-not rediscover them. The design is [IDEA-STRUDEL-INSTRUMENT.md](IDEA-STRUDEL-INSTRUMENT.md).
+not rediscover them.
 
 - **`superdough`'s `initAudio()` hangs in an OfflineAudioContext.** It `await`s
   `initKabelsalat()` (a SalatRepl) unconditionally, which never resolves offline (worklets
@@ -101,7 +101,7 @@ not rediscover them. The design is [IDEA-STRUDEL-INSTRUMENT.md](IDEA-STRUDEL-INS
   follows an arm/load - a pending `[gate]` does this, and it also makes `stop` stay stopped
   (otherwise the next boundary re-raises the gain).
 - **STILL OPEN, deferred:** the loop is self-clocked (not bar-locked - the transport-sync
-  spike is next, see TESTING.md), and a faint `[groove~]` loop-point tick remains on a pure
+spike is next), and a faint `[groove~]` loop-point tick remains on a pure
   sine (inaudible on real content).
 
 ## Not possible - measured, so nobody re-opens it

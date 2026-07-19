@@ -1,7 +1,7 @@
 /*
 conductor.ts - the render conductor's state machine, pure and deps-injected.
 
-The brain of the superdough device (doc/IDEA-STRUDEL-INSTRUMENT.md C.5), kept free of
+The brain of the superdough device, kept free of
 React and of the real audio context so it can be unit-tested: every side effect - compile,
 render, save, load, arm - is a function passed in. `useSuperdoughRender` wires the real
 ones; the test wires mocks.

@@ -1,7 +1,7 @@
 /*
 offline.ts - render Strudel cycles with the REAL superdough into a WAV.
 
-The heart of the SUPERDOUGH Rendering design (doc/IDEA-STRUDEL-INSTRUMENT.md). An
+The heart of the SUPERDOUGH Rendering design. An
 OfflineAudioContext is injected into superdough's module-level singletons, every hap in
 the arc is scheduled through the real `superdough()`, and startRendering() hands back an
 AudioBuffer we encode to 16-bit PCM. Runs on the MAIN thread only: OfflineAudioContext

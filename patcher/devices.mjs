@@ -134,7 +134,7 @@ export default [
 		/**
 		 * Strudel Superdough - ALL of Strudel, as the track's real audio.
 		 *
-		 * The Route B renderer (doc/IDEA-STRUDEL-INSTRUMENT.md, "SUPERDOUGH Rendering"):
+		 * The Route B renderer ("SUPERDOUGH Rendering"):
 		 * the page compiles the pattern, renders one full loop period OFFLINE with the
 		 * real superdough (OfflineAudioContext + the DSP worklets), writes the WAV next
 		 * to the device (saveToFile), and Max loops it double-buffered, crossfading to a
