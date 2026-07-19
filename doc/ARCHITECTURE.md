@@ -175,8 +175,7 @@ Every device draws from one set of parts, so the five faces read as one product 
 
 ### 4f. Superdough render device (Route B)
 
-The REAL superdough (samples, synths, effects) in the track, as audio. Master plan:
-[IDEA-STRUDEL-INSTRUMENT.md](IDEA-STRUDEL-INSTRUMENT.md). Proven end to end in Live: the
+The REAL superdough (samples, synths, effects) in the track, as audio. Proven end to end in Live: the
 render (browser spike S1), the disk + loop pipe (m4l-jweb `hello-render`, S2/S3), the
 transport lock (S3b), and the device itself on real superdough content (synths, the full
 trance example, transport lock - confirmed by ear). Shape:

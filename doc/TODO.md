@@ -7,8 +7,7 @@ patcher codegen, the Surface, fetch-to-disk, the chain vocabulary - lives in
 **Only open work lives here**, ordered from smallest effort to biggest. What has
 shipped is recorded where it belongs: **what the devices do** in
 [README.md](../README.md), **how and why (including every design tried, rejected or
-measured)** in [ARCHITECTURE.md](ARCHITECTURE.md). What a human still has to check in
-Live is [TESTING.md](TESTING.md). Ideas tried and abandoned are in
+measured)** in [ARCHITECTURE.md](ARCHITECTURE.md). Ideas tried and abandoned are in
 [DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILED_IDEAS.md).
 
 ---
@@ -16,8 +15,8 @@ Live is [TESTING.md](TESTING.md). Ideas tried and abandoned are in
 ## For 0.9.0
 
 All 0.9.0 Live checks are **confirmed** (clip I/O in a Rack, macro-map Play/Stop, the
-bank-based Sampler, native controls + Full Studio in About). [TESTING.md](TESTING.md) is
-clean; the standing re-check recipes live in DRAWER_OF_FAILED_IDEAS.md's "Verified in Live".
+bank-based Sampler, native controls + Full Studio in About).
+The standing re-check recipes live in DRAWER_OF_FAILED_IDEAS.md's "Verified in Live".
 
 ---
 
@@ -63,7 +62,7 @@ abandoned "control a foreign device" adopt idea in the drawer.)
 
 ## Future features (post-0.9.5, the roadmap to the ultimate instrument)
 
-These were the gap analysis in the retired master plan (IDEA-STRUDEL-INSTRUMENT.md), moved
+These were the gap analysis in the retired master plan, moved
 here now that the render device has shipped. Each is a real feature for a future release,
 none blocks anything. Ordered roughly small-to-big.
 
