@@ -17,6 +17,7 @@
 		"build:patchers": "m4l-jweb patchers",
 		"install:device": "m4l-jweb install",
 		"preview": "vite preview --host 127.0.0.1 --port 4175",
+		"spike:render": "vite --config spike/vite.config.ts",
 		"test": "vitest run",
 		"format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"wrapper/**/*.ts\" \"scripts/*.mjs\""
 	},
@@ -34,9 +35,11 @@
 		]
 	},
 	"devDependencies": {
-		"@m4l-jweb/bridge": "^0.9.1",
-		"@m4l-jweb/build": "^0.9.1",
-		"@m4l-jweb/surface": "^0.9.1",
+		"@kabelsalat/lib": "^0.4.1",
+		"@kabelsalat/web": "^0.4.1",
+		"@m4l-jweb/bridge": "link:../m4l-jweb/packages/bridge",
+		"@m4l-jweb/build": "link:../m4l-jweb/packages/build",
+		"@m4l-jweb/surface": "link:../m4l-jweb/packages/surface",
 		"@tailwindcss/vite": "^4.0.0",
 		"@tonaljs/tonal": "^4.10.0",
 		"@types/node": "^22.0.0",
@@ -49,6 +52,7 @@
 		"escodegen": "^2.1.0",
 		"estree-walker": "^3.0.3",
 		"fraction.js": "^5.3.4",
+		"nanostores": "^0.11.3",
 		"prettier": "^3.4.0",
 		"tailwindcss": "^4.0.0",
 		"typescript": "^5.7.0",

@@ -173,6 +173,30 @@ Every device draws from one set of parts, so the five faces read as one product 
 - **`shared/Button.tsx`** - one black-and-white (grey) button. `active` is the only lift (a faint primary wash, e.g. Run while playing); there are no accent/primary/destructive colours any more. Primary actions sit in the top bar, the `?` (`HelpButton`) rightmost.
 - **`shared/AboutPanel.tsx`** - the title opens it. It carries an **Advanced** section with the device's set-once, native affordances so they do not clutter the top bar: **Full Studio** (the pattern devices' big editor window, `onOpenStudio`) and **Controls** (`onShowControls`, revealing the native panel - the MIDI device's mappable Play/Stop). The FX device is the exception: its native **Knobs** panel is the primary interaction, so it keeps that button in the top bar.
 
+### 4f. Superdough render device (Route B, in progress)
+
+The path to putting the REAL superdough (samples, synths, effects) in the track, as audio.
+Master plan: [IDEA-STRUDEL-INSTRUMENT.md](IDEA-STRUDEL-INSTRUMENT.md). Shape:
+
+- **Render offline, on the main thread.** `src/lib/render/offline.ts` injects an
+  `OfflineAudioContext` into superdough's singletons and schedules each hap through the real
+  `superdough()`; `wav.ts` encodes the result. `scope.ts` supplies the eval-scope shims a
+  full strudel.cc pattern needs (`setCpm`, `slider`, `register`'d draw params) that the
+  headless engine's `bootScope` (core+mini+tonal) does not. `OfflineAudioContext` does not
+  exist in a Worker, so this runs where the UI does, not in the engine worker.
+- **The conductor** (`src/lib/render/conductor.ts`) is a pure, deps-injected state machine:
+  compile -> probe period -> determinism -> render -> `saveToFile` -> `render_load` -> arm.
+  Deterministic patterns loop one period; random ones drop to rolling mode (one cycle
+  ahead, each a fresh realization). Unit-tested with mocked effects.
+- **Playback is Max's** via the m4l-jweb `renderplay` chain: a double-buffered `[buffer~]`
+  pair, crossfaded at cycle boundaries. `saveToFile` writes the WAV to disk (flat filename -
+  a subdir fails the maxurl place).
+- **Transport sync comes from LiveAPI, not `[plugsync~]`.** The wrapper polls `is_playing` +
+  `current_song_time` (beats) and emits `tick <playing> <beats>` at 20 Hz; the conductor
+  aligns the loop to the exact transport phase on (re)start, then a rate-1 `@loop` holds the
+  lock (shared clock, no drift within a tempo). `[plugsync~]` outlet 6 read 0 in Live - a
+  dead end (see the drawer). The bar-lock spike is the next open item (TESTING.md).
+
 ## 5. Strudel Integration
 
 We consume Strudel by bundling the `@strudel/core`, `mini`, `transpiler`, and `tonal` packages directly from a pinned git submodule.
