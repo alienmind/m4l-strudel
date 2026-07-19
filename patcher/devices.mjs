@@ -130,4 +130,34 @@ export default [
 		voices: 16,
 		unmatchedTo: "js",
 	},
+	{
+		/**
+		 * Strudel Superdough - ALL of Strudel, as the track's real audio.
+		 *
+		 * The Route B renderer (doc/IDEA-STRUDEL-INSTRUMENT.md, "SUPERDOUGH Rendering"):
+		 * the page compiles the pattern, renders one full loop period OFFLINE with the
+		 * real superdough (OfflineAudioContext + the DSP worklets), writes the WAV next
+		 * to the device (saveToFile), and Max loops it double-buffered, crossfading to a
+		 * fresh render at the loop boundary and pinned to Live's transport phase via
+		 * render_sync. Multi-line `$:`, samples, synths, orbits, all of superdough's
+		 * effects - everything strudel.cc plays - because it IS superdough, not a port.
+		 *
+		 * Chains, and why each is here:
+		 *   renderplay  the double-buffered [buffer~]/[groove~] loop pair, the boundary
+		 *               crossfade, render_load/render_arm/render_sync/render_stop, and
+		 *               the render_ready reply. renderSlots names its two buffers.
+		 *   download    the [maxurl] the wrapper uses for saveToFile's atomic file place
+		 *               (write .part, then a file:// GET as the move).
+		 *
+		 * type "instrument": it fills the Rack's instrument slot - the sound source of
+		 * the track, not an effect on one.
+		 */
+		name: "alienmind-strudel-superdough",
+		ui: "superdough",
+		type: "instrument",
+		mode: "superdough",
+		chains: ["renderplay", "download"],
+		renderSlots: ["rndA", "rndB"],
+		unmatchedTo: "js",
+	},
 ];

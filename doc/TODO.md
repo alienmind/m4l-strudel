@@ -21,64 +21,24 @@ clean; the standing re-check recipes live in DRAWER_OF_FAILED_IDEAS.md's "Verifi
 
 ---
 
+## Shipped in 0.9.5
+
+**Strudel's own audio in the track (Route B) - DONE.** The
+`alienmind-strudel-superdough` device renders ALL of Strudel offline with the real
+superdough and loops it on the track, transport-locked, following Live's tempo. Confirmed
+in Live 2026-07-19. Mechanism in [ARCHITECTURE.md](ARCHITECTURE.md) §4f; the whole design
+history that used to live in the master plan is folded there. Its remaining follow-ups are
+now in "Future features" below.
+
 ## Deferred to 1.0.0
 
-### 1. Strudel's own audio in the track (Route B) - IN PROGRESS
-
-The master plan is [IDEA-STRUDEL-INSTRUMENT.md](IDEA-STRUDEL-INSTRUMENT.md) "SUPERDOUGH
-Rendering". `OfflineAudioContext` renders the real superdough to a WAV, `saveToFile()`
-writes it to disk, and Max loops it double-buffered, crossfading at cycle boundaries.
-
-**RESUME HERE (2026-07-19).** Where the work stands:
-
-- **DONE + verified:**
-  - S1 (renderer): `src/lib/render/{offline,wav,determinism,scope}.ts` render synth +
-    effects + samples + a full strudel.cc pattern to a non-silent WAV in Chromium. Driven
-    by the `spike/` harness (`pnpm spike:render`). See TESTING.md.
-  - m4l-jweb library pipe (committed there, `bfb2fac`): `saveToFile`, the `renderplay`
-    chain, `render_load`, and the `hello-render` demo device. S2 (bytes to disk) and S3
-    (loop + boundary crossfade swap + stop) confirmed in Live.
-  - C.5 conductor core: `src/lib/render/conductor.ts` (pure, deps-injected, 7 unit tests).
-- **DONE this session - transport sync CODE (steps 1 + conductor half of 3):**
-    1. m4l-jweb: `render_sync <slot> <positionMs>` message added to the `renderplay` chain
-       (`packages/build/src/chains.mjs`: appended to the app-route, a per-slot `route` drops
-       `<positionMs>` into that groove's left inlet as a play position) and the bridge
-       (`renderSync()`, `CHAIN_OUT.render_sync`). Patcher regenerates, 240 tests + tsc green.
-       The self-clock stays as the transport-stopped fallback.
-    2. Conductor transport layer (`src/lib/render/conductor.ts`): new `tick(playing, beats)`
-       consumes the LiveAPI tick and, ON THE START EDGE and ON A RELOCATE only (a beat jump
-       past `loopBeats/2`), calls `renderSync(activeSlot, phaseMs(beats))` where
-       `phaseMs = (beats mod loopBeats)/loopBeats * loopSeconds * 1000`. `ready()` also
-       aligns a slot armed while already playing. NOT per-tick (that reintroduces the click).
-       6 new unit tests (13 total in conductor.test.ts), tsc + 198 tests green.
-    3. hello-render (m4l-jweb) now drives `render_sync` from `tick` the same way - the S3b
-       proving harness (align on start/relocate, manual "Re-sync now", transport readout).
-       `doc/TEST-CHAIN-RENDERPLAY.md` has the **S3b** Live checklist.
-- **NEXT (the GATE) - prove align-once-then-lock in Live on hello-render (human step):**
-  run S3b in `doc/TEST-CHAIN-RENDERPLAY.md` - set 120 BPM, arm A, start the transport, and
-  confirm the loop locks to the bar; relocate and confirm it re-aligns; FREEZE/FLATTEN the
-  track and confirm the beep lands in the pocket (acceptance G.2). `[plugsync~]` is NOT the
-  source (outlet 6 read 0 - see the drawer); the tick is. Only AFTER this passes:
-- **THEN:** C.6 - the `superdough` device (manifest + `surface.ts` + `App.tsx` full-Strudel
-  editor) wired to the conductor's real deps (compile via engine.mjs, renderCycles via
-  offline.ts, saveToFile + renderLoad/Arm/Sync from the bridge, tick -> conductor.tick);
-  then Phase 3 (Rack preset, STRUDEL-SUPPORT update).
-- **Wiring note:** m4l-strudel consumes m4l-jweb via `link:../m4l-jweb/packages/*` (package.json
-  + pnpm-lock stay dirty by the standing choice). superdough's own deps (nanostores,
-  @kabelsalat/*) were added as devDeps. Before any push/PR: publish the m4l-jweb render
-  version and set the `@m4l-jweb/*` deps back to a `^` range.
-
-This is also what the **Sampler's "render to WAV + drop an audio clip"** ask needs (the
-MIDI device writes a MIDI clip; a sampler's output is audio). It is deferred here on
-purpose: it needs the offline render above plus an upstream `saveToFile()`, neither built.
-
-### 2. Sampler Device needs to be able to render a WAV
+### 1. FEAT - Sampler Device needs to be able to render a WAV
 And ideally, this needs to be able to be saved to clip
 Same functionality as the MIDI clip save.
 This does not necesarily needs Superdough (see next items), instead
 we render the polysynth device output to disk and then reimport back as audio.
 
-### 3. FIX - "Open folder" is not functional on any device
+### 2. FIX - "Open folder" is not functional on any device
 
 The **Show folder** button (sample browser and the Drums Sampler) does nothing in Live -
 the wrapper now sends the device folder so the button ENABLES, but the reveal itself is
@@ -89,7 +49,7 @@ works - a different Max object (`; max launchbrowser` variants, `sprintf` to an 
 Finder/Explorer on the samples folder. Until then, samples are still on disk at the path
 the status line implies, just not one click away.
 
-### 4. Cross-device coordination in the Rack (enhancement)
+### 3. FEAT - Cross-device coordination in the Rack (enhancement)
 
 Today the Rack's devices are independent: the pattern is typed in Strudel MIDI, the fx
 line in the FX device. A single expression spanning both - `note("c3 e3").lpf(800)` split
@@ -98,3 +58,52 @@ channel. Max `[send]`/`[receive]` are global and collide across tracks; LOM obse
 of a sibling device is plausible but unproven. A real enhancement, not v1 - do not let it
 block anything. (Note: this is coordination BETWEEN our own devices, distinct from the
 abandoned "control a foreign device" adopt idea in the drawer.)
+
+---
+
+## Future features (post-0.9.5, the roadmap to the ultimate instrument)
+
+These were the gap analysis in the retired master plan (IDEA-STRUDEL-INSTRUMENT.md), moved
+here now that the render device has shipped. Each is a real feature for a future release,
+none blocks anything. Ordered roughly small-to-big.
+
+### Superdough follow-ups (ride the shipped render path)
+
+- **One-click Freeze/flatten** goes silent - the page re-instantiates offline and its async
+  generate/load/arm cannot finish an offline pass. Record/resample is the capture path
+  meanwhile. Route: a render-to-clip drop via the existing `saveToFile`.
+- **`readFile()` offline sample cache.** Sample patterns need network on the first render
+  (Chromium blocks `fetch()` of `file://`); a bridge `readFile(path) -> ArrayBuffer` reads
+  the already-downloaded samples back in. Label the limit in the UI until then.
+- **Latency shaving** for long loops (render a window smaller than the full period).
+- **H.7 explicit knob binder** - a "map this slider to knob X" picker replacing the v1
+  auto-bind (slider N -> knob N). Earns its complexity only past eight sliders or when two
+  patterns fight over knob order. The general version is the native-knob POOL feature in
+  [m4l-jweb's TODO](../../m4l-jweb/doc/TODO.md) - a Surface-declared pool of static dials
+  that dynamic controls borrow from, which superdough then adopts.
+
+### Bigger native-instrument features
+
+- **H.1 Native MIDI input (`midiIn`/`kb()`).** Ingest the track's incoming MIDI so Live's
+  sequencer can drive the pattern; a chain with no note generator implicitly reads MIDI in.
+  Needs a `midi_in` wrapper outlet and wiring into strudel's realtime MIDI. Realtime MIDI is
+  non-deterministic, so it forces rolling mode.
+- **H.2 IPC / external DSP offloading.** Delegate native effects (`.lpf()`, `.crush()`) from
+  the instrument to a downstream `alienmind-strudel-fx` over a track-scoped `[send]`/`[receive]`
+  channel, instead of baking them into the rendered WAV.
+- **H.3 Native Rack integration + macros.** A master `.adg` with superdough (instrument) +
+  fx (linked via H.2), the Rack's 16 macros mapped to both devices' native dials for Push.
+- **H.4 `orbit()` / `duck()` native sidechaining.** Render multichannel (a stereo pair per
+  orbit), route each pair out via `[send~ track-N-orbit-M]`, catch them in parallel Rack
+  chains for a native Ableton compressor sidechain.
+- **H.5 Multi-orbit processing in the FX device.** Wrap its DSP in `[poly~]` (or parallel
+  chains), one per active orbit, driven by orbit-tagged IPC (H.2).
+- **H.6 Minimalist superdough synth.** A dedicated `superdough-synth` that takes standard
+  Ableton MIDI and evaluates a static sound/effect chain against note events - no timeline
+  scheduler, a pure sound module after any MIDI sequencer.
+- **Hybrid single-expression instrument.** One line spanning sequencing + sound + fx across
+  the rack's devices - the connective tissue is the cross-device channel above (item 3).
+- **Route A (no edit latency).** superdough voices built natively as `[poly~]` over the
+  `instrument` chain - no offline render, random patterns fully supported. The deferred
+  native-external (Route D) is revived only by a confirmed need for zero-latency live-coding
+  of non-deterministic patterns.

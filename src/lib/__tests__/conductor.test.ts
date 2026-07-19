@@ -55,7 +55,7 @@ describe("SuperdoughConductor", () => {
     expect(deps.renderArm).not.toHaveBeenCalled();
   });
 
-  it("drops to rolling mode for a random pattern: one cycle, next slot on ready", async () => {
+  it("drops to rolling mode for a random pattern: one cycle at a time", async () => {
     const deps = mockDeps({ isDeterministic: vi.fn(() => false) });
     const c = new SuperdoughConductor(deps);
     const slot = await c.evaluate('s("bd").sometimesBy(.5, fast(2))', 120, 4);
@@ -65,12 +65,105 @@ describe("SuperdoughConductor", () => {
     // rolling renders ONE cycle at a time
     expect(deps.renderCycles).toHaveBeenCalledWith(expect.anything(), 0.5, 0, 1);
 
-    // ready() arms AND kicks the next cycle's render into the other slot
+    // ready() arms but does NOT chain the next render - the transport paces rolling
     c.ready("rndA");
     expect(deps.renderArm).toHaveBeenCalledWith("rndA");
-    await Promise.resolve(); // let the fire-and-forget renderChunk settle
+    expect((deps.renderCycles as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
+  });
+
+  it("rolling advances one render per loop boundary, paced by the transport", async () => {
+    const deps = mockDeps({
+      isDeterministic: vi.fn(() => false),
+      renderCycles: vi.fn(async () => ({ wav: new ArrayBuffer(8), seconds: 2 })),
+    });
+    const c = new SuperdoughConductor(deps);
+    await c.evaluate('s("bd").degrade()', 120, 4); // 1 cycle * 4 beats => loopBeats 4
+    c.ready("rndA");
+
+    c.tick(true, 0); // start edge
+    c.tick(true, 1);
+    c.tick(true, 3.9); // still inside loop 0: no new render
+    expect((deps.renderCycles as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
+
+    c.tick(true, 4.1); // boundary passed -> render cycle [1, 2) into rndB
     await Promise.resolve();
-    expect(deps.renderLoad).toHaveBeenCalledWith("rndB", "rndB.wav", 4); // 1 cycle * 4 beats
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(deps.renderCycles).toHaveBeenLastCalledWith(expect.anything(), 0.5, 1, 1);
+    expect(deps.renderLoad).toHaveBeenCalledWith("rndB", "rndB.wav", 4);
+
+    // While rndB's render is pending its ready(), further boundaries do not double-kick
+    c.tick(true, 8.1);
+    expect((deps.renderCycles as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+  });
+
+  it("rolling self-paces with a loop-period timer while the transport is stopped", async () => {
+    vi.useFakeTimers();
+    try {
+      const deps = mockDeps({
+        isDeterministic: vi.fn(() => false),
+        renderCycles: vi.fn(async () => ({ wav: new ArrayBuffer(8), seconds: 2 })),
+      });
+      const c = new SuperdoughConductor(deps);
+      await c.evaluate('s("bd").degrade()', 120, 4); // 1 cycle, loopSeconds 2
+      c.ready("rndA"); // transport stopped -> the self-timer takes the pace
+      expect((deps.renderCycles as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(2100); // one loop period passes
+      expect(deps.renderCycles).toHaveBeenLastCalledWith(expect.anything(), 0.5, 1, 1);
+      expect(deps.renderLoad).toHaveBeenCalledWith("rndB", "rndB.wav", 4);
+
+      // The chain continues: ready -> timer -> next cycle, still one per loop period.
+      c.ready("rndB");
+      await vi.advanceTimersByTimeAsync(2100);
+      expect(deps.renderCycles).toHaveBeenLastCalledWith(expect.anything(), 0.5, 2, 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stopping the transport mid-rolling hands the pace back to the self-timer", async () => {
+    vi.useFakeTimers();
+    try {
+      const deps = mockDeps({
+        isDeterministic: vi.fn(() => false),
+        renderCycles: vi.fn(async () => ({ wav: new ArrayBuffer(8), seconds: 2 })),
+      });
+      const c = new SuperdoughConductor(deps);
+      await c.evaluate('s("bd").degrade()', 120, 4);
+      c.tick(true, 0); // playing before the slot is ready
+      c.ready("rndA"); // playing -> NO timer; tick paces
+      await vi.advanceTimersByTimeAsync(5000);
+      expect((deps.renderCycles as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
+
+      c.tick(false, 1.5); // transport stops -> timer takes over
+      await vi.advanceTimersByTimeAsync(2100);
+      expect((deps.renderCycles as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stop() forgets the audible slot and supersedes an in-flight render", async () => {
+    const deps = mockDeps();
+    const c = new SuperdoughConductor(deps);
+    await c.evaluate('s("bd")', 120, 4);
+    c.ready("rndA");
+    c.tick(true, 0);
+    expect(syncOf(deps)).toHaveBeenCalledTimes(1);
+
+    c.stop();
+    expect(c.getStatus().phase).toBe("idle");
+    c.tick(true, 6); // relocate after stop: nothing audible, nothing to re-sync
+    expect(syncOf(deps)).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefixes WAV filenames per instance (two devices share one folder)", async () => {
+    const deps = mockDeps();
+    const c = new SuperdoughConductor(deps, { filePrefix: "superdough-ab12-" });
+    await c.evaluate('s("bd")', 120, 4);
+    expect(deps.saveToFile).toHaveBeenCalledWith("superdough-ab12-rndA.wav", expect.any(ArrayBuffer));
+    expect(deps.renderLoad).toHaveBeenCalledWith("rndA", "superdough-ab12-rndA.wav", 8);
   });
 
   it("alternates A/B slots across successive evaluates", async () => {

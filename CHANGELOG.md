@@ -3,6 +3,32 @@
 High-level history of m4l-strudel, grouped by milestone release. This is a 0.x
 project, so each minor version is a major milestone. Newest first.
 
+## 0.9.5 - 2026-07-19
+
+All of Strudel as the track's audio: the **Strudel Superdough** instrument.
+
+- **Strudel Superdough** (`alienmind-strudel-superdough`): write anything strudel.cc plays
+  - multi-line `$:`, samples, synths, orbits, superdough's real effects - and the device
+  renders it **offline with the real superdough engine** into a WAV that Max loops on the
+  track, locked to Live's transport, crossfading to each fresh render at the loop boundary.
+  Deterministic patterns loop one period; random patterns drop to **rolling mode** (one
+  realization per loop, with a visible notice). Edits fade in at the next boundary.
+- **Follows Live's tempo.** The pattern speeds up / slows with the BPM and the loop stays
+  bar-locked at any tempo; a re-render on tempo change keeps the lock. A `setcpm()` in the
+  code OVERRIDES this to pin the pattern's own rate - default follows Live, `setcpm` is your
+  own clock.
+- **Slider knobs (H.7 v1).** Every `slider()` in the code becomes a web slider AND binds to
+  one of eight native dials (S1..S8) - macro-mappable, on Push - auto-bound by order; a turn
+  re-renders. The dial takes the code's name for it (`lpf`, `gain`) on the device panel.
+- **Fixes this pass:** serialized renders now also clear superdough's cross-context node
+  pool (kills the intermittent "cannot connect to an AudioNode belonging to a different
+  audio context" on rapid Play/Stop); dials reset their name when a slider is removed; the
+  Controls button moved to the top bar and the debug readout to About.
+- Reverted: a runtime `_parameter_range` spike to carry the slider's real range on the
+  native dial - it shifts the value domain and breaks the normalized knob math. The dials
+  stay 0..1; the app denormalises. The general fix (a Surface-declared native-knob pool) is
+  in the m4l-jweb backlog.
+
 ## 0.9.1 - 2026-07-19
 
 Pattern as a first-class signal, a bank-based sampler, and one consistent chrome.

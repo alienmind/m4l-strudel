@@ -16,6 +16,7 @@ import {
   setAudioContext,
   setSuperdoughAudioController,
   resetGlobalEffects,
+  clearNodePools,
 } from "superdough";
 import { SuperdoughAudioController } from "superdough/superdoughoutput.mjs";
 import { audioBufferToWav } from "./wav";
@@ -53,18 +54,41 @@ export interface RenderResult {
 }
 
 /**
+ * SERIALIZED, one render at a time. superdough's audio context and output controller
+ * are MODULE-LEVEL SINGLETONS: a second render starting while one is in flight swaps
+ * the globals under the first, whose remaining haps then try to connect nodes across
+ * two OfflineAudioContexts - "cannot connect to an AudioNode belonging to a different
+ * audio context", seen in Live when Play/Stop re-evaluated during a render. Every call
+ * queues behind the previous one; the conductor's generation guard then discards any
+ * result that was superseded while it waited.
+ */
+let renderQueue: Promise<unknown> = Promise.resolve();
+
+/**
  * Render cycles [begin, begin+cycles) of `pat` with the real superdough.
  *
  * Pure with respect to the engine worker: `pat` comes from a fresh compile() on the
  * main thread. Superdough's globals are swapped for the duration and restored in
  * `finally`; this device has no realtime superdough, so nothing is disturbed.
  */
-export async function renderCycles(
+export function renderCycles(
   pat: RenderablePattern,
   cps: number,
   begin: number,
   cycles: number,
   sampleRate = 44100,
+): Promise<RenderResult> {
+  const run = renderQueue.then(() => renderCyclesNow(pat, cps, begin, cycles, sampleRate));
+  renderQueue = run.catch(() => {}); // a failed render must not jam the queue
+  return run;
+}
+
+async function renderCyclesNow(
+  pat: RenderablePattern,
+  cps: number,
+  begin: number,
+  cycles: number,
+  sampleRate: number,
 ): Promise<RenderResult> {
   const seconds = cycles / cps;
   const ctx = new OfflineAudioContext(2, Math.ceil(seconds * sampleRate), sampleRate);
@@ -106,5 +130,10 @@ export async function renderCycles(
     setAudioContext(null);
     setSuperdoughAudioController(null);
     resetGlobalEffects();
+    // resetGlobalEffects() clears the analyser/controller singletons but NOT the node
+    // pool, which is keyed by node type across contexts - a pooled node from this render's
+    // OfflineAudioContext would be handed to the next render's context and throw on connect
+    // ("belonging to a different audio context"). Clear it so every render starts clean.
+    clearNodePools();
   }
 }

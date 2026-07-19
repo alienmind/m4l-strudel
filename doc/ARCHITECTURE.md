@@ -173,29 +173,80 @@ Every device draws from one set of parts, so the five faces read as one product 
 - **`shared/Button.tsx`** - one black-and-white (grey) button. `active` is the only lift (a faint primary wash, e.g. Run while playing); there are no accent/primary/destructive colours any more. Primary actions sit in the top bar, the `?` (`HelpButton`) rightmost.
 - **`shared/AboutPanel.tsx`** - the title opens it. It carries an **Advanced** section with the device's set-once, native affordances so they do not clutter the top bar: **Full Studio** (the pattern devices' big editor window, `onOpenStudio`) and **Controls** (`onShowControls`, revealing the native panel - the MIDI device's mappable Play/Stop). The FX device is the exception: its native **Knobs** panel is the primary interaction, so it keeps that button in the top bar.
 
-### 4f. Superdough render device (Route B, in progress)
+### 4f. Superdough render device (Route B)
 
-The path to putting the REAL superdough (samples, synths, effects) in the track, as audio.
-Master plan: [IDEA-STRUDEL-INSTRUMENT.md](IDEA-STRUDEL-INSTRUMENT.md). Shape:
+The REAL superdough (samples, synths, effects) in the track, as audio. Master plan:
+[IDEA-STRUDEL-INSTRUMENT.md](IDEA-STRUDEL-INSTRUMENT.md). Proven end to end in Live: the
+render (browser spike S1), the disk + loop pipe (m4l-jweb `hello-render`, S2/S3), the
+transport lock (S3b), and the device itself on real superdough content (synths, the full
+trance example, transport lock - confirmed by ear). Shape:
 
 - **Render offline, on the main thread.** `src/lib/render/offline.ts` injects an
   `OfflineAudioContext` into superdough's singletons and schedules each hap through the real
   `superdough()`; `wav.ts` encodes the result. `scope.ts` supplies the eval-scope shims a
   full strudel.cc pattern needs (`setCpm`, `slider`, `register`'d draw params) that the
   headless engine's `bootScope` (core+mini+tonal) does not. `OfflineAudioContext` does not
-  exist in a Worker, so this runs where the UI does, not in the engine worker.
+  exist in a Worker, so this runs where the UI does, not in the engine worker. Renders are
+  **serialized** (one at a time): superdough's context is a module-level singleton, so two
+  overlapping renders would connect nodes across two contexts ("cannot connect to an
+  AudioNode belonging to a different audio context"). A superseded render is discarded by
+  the conductor's generation guard. The finally step also clears superdough's node POOL
+  (`clearNodePools`): the pool is keyed by node type, not by context, so a node built in
+  one render's OfflineAudioContext would otherwise be handed to the next and throw on
+  connect - the same cross-context error, seen intermittently on rapid Play/Stop.
 - **The conductor** (`src/lib/render/conductor.ts`) is a pure, deps-injected state machine:
   compile -> probe period -> determinism -> render -> `saveToFile` -> `render_load` -> arm.
-  Deterministic patterns loop one period; random ones drop to rolling mode (one cycle
-  ahead, each a fresh realization). Unit-tested with mocked effects.
+  Design decisions worth keeping (all unit-tested):
+  - **Loop period is `renderPeriod` (`determinism.ts`), not engine.mjs `patternCycles`.**
+    The latter signatures haps by MIDI pitch, so `s("bd <sd cp>")` (no pitch) and
+    `.lpf("<400 800>")` (effect-only variation) collapse to period 1. `renderPeriod`
+    signatures the full hap value - what the renderer actually plays.
+  - **No engine worker.** A second compile (for a playhead) would run in a scope without
+    the full-Strudel shims and throw on the very patterns this device is for; and the
+    playhead spans are bare-mini-only, empty for full code. The conductor's compile is the
+    single source of truth for errors; `tick`/`tempo` are bound by the hook directly.
+  - **Per-instance WAV filenames** (`superdough-<id>-rndA.wav`, conductor `filePrefix`):
+    two instances share the device folder, so bare `rndA.wav` would clobber.
+  - **Rolling mode** (random patterns) renders one cycle ahead, each a fresh realization.
+    Paced by the transport when playing (kick the next render on the loop-boundary
+    crossing in `tick()`), and self-timed at the loop period when the transport is stopped
+    (the groove keeps looping self-clocked, so the render window must keep advancing or the
+    randomness freezes). Never chained off `ready()` - that free-runs many-x realtime,
+    racing ahead of playback.
 - **Playback is Max's** via the m4l-jweb `renderplay` chain: a double-buffered `[buffer~]`
   pair, crossfaded at cycle boundaries. `saveToFile` writes the WAV to disk (flat filename -
   a subdir fails the maxurl place).
 - **Transport sync comes from LiveAPI, not `[plugsync~]`.** The wrapper polls `is_playing` +
   `current_song_time` (beats) and emits `tick <playing> <beats>` at 20 Hz; the conductor
-  aligns the loop to the exact transport phase on (re)start, then a rate-1 `@loop` holds the
-  lock (shared clock, no drift within a tempo). `[plugsync~]` outlet 6 read 0 in Live - a
-  dead end (see the drawer). The bar-lock spike is the next open item (TESTING.md).
+  aligns the loop to the exact transport phase on (re)start / relocate, then a rate-1
+  `@loop` holds the lock (shared clock, no drift within a tempo). `[plugsync~]` outlet 6
+  read 0 in Live - a dead end (see the drawer). The strudel wrapper (`wrapper/device.ts`)
+  gates its clip poll and scale observers OFF for mode `superdough` (an instrument with no
+  clips and no MIDI pitches - running the midi defaults threw LiveAPI noise).
+- **The render FOLLOWS Live's tempo** (`beatsPerCycleForTempoLock`, `tempo.ts`). One cycle
+  occupies a FIXED number of Live beats (default 4 = one bar), set by the pattern's own cps,
+  NOT by the current bpm - so the render `cps = bpm/60/beatsPerCycle` scales with the
+  transport and the WAV is exactly `lengthBeats` long at whatever tempo it renders at, the
+  premise the rate-1 lock needs. Raise Live's BPM and the pattern speeds up and stays
+  bar-locked, like any track instrument; a tempo change re-renders (debounced) into a buffer
+  of the new length. A `setcpm(x)` in the code is a FEATURE, not a fight with this: it
+  OVERRIDES the default tracking, so the pattern runs at its own declared rate relative to
+  the grid (a `setcpm(100)` under a 120 bpm set runs the Strudel clock proportionally
+  faster) - default = follow Live, `setcpm` = pin your own tempo.
+- **Slider knobs (H.7 v1).** Each compile captures the code's `slider()` occurrences in
+  source order (`scope.ts` `beginSliderCapture`/`getSliderSpecs`) and auto-binds slider N
+  to native dial `s<N>` (a static pool of eight, in the panel behind the transport switch).
+  The web slider row and the dial write the same normalized parameter; a turn re-renders
+  (debounced) with the value denormalized into the slider's own range (`setSliderOverrides`).
+  The wrapper's `knob_label` renames the dial after the code's term for it
+  (`.lpf(slider(...))` -> "lpf") via `_parameter_shortname`, and resets unused dials back to
+  `S<n>`. Live finding: the rename takes on the DEVICE PANEL but does NOT reach the Rack
+  macro / Live parameter registry (those stay `s1..s8`) - a frozen-device limit, accepted.
+  A parallel spike to carry the slider's real min..max on the dial via runtime
+  `_parameter_range` was tried and REVERTED: it takes but also shifts the value domain the
+  dial reports, breaking the normalized knob math (the dial stuck at its minimum). The dials
+  stay normalized 0..1; the generalisation (a native-knob POOL the Surface declares, dials
+  that borrow their range) is an m4l-jweb backlog item.
 
 ## 5. Strudel Integration
 
