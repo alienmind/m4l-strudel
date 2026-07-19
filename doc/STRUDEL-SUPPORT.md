@@ -1,106 +1,45 @@
 # What Strudel does, and what these devices do with it
 
-Strudel is a language for making **sound**. These are Max for Live devices, and
-they make sound Ableton's way - MIDI into an instrument, DSP in the signal chain.
-The two overlap heavily, and where they do not, this page says so plainly rather
-than letting you find out by wondering why nothing happened.
+Strudel is a language for making **sound**. This project brings Strudel to Ableton Live through two distinct paradigms: the monolithic **Superdough** device, and the **Micro Devices** (MIDI, FX, Sampler).
 
-**The short version.** The *pattern language* is 100% supported: the real
-`@strudel/core` runs inside the device, so anything that produces notes works,
-including every transformation, and all of it exports to a MIDI clip. What is
-**not** supported is Strudel's *synthesis* engine (superdough oscillators) and the
-pattern-attached audio effects - those are Ableton's job here, reached through an
-instrument on the track or the Audio FX device. **Sample playback IS supported**,
-by the **Drums Sampler**: `s("bd sd").bank("RolandTR909")` plays real drum-machine
-samples through a `[poly~]` keymap (not superdough) - see its section below.
-
-## Patterns that work today
-
-Every line below is verified against the real engine in this repo's tests.
-
-**Bare mini-notation** - type it straight in, no quotes, no `note(...)`:
-
-```
-0 2 4 <7 6>            scale degrees of Live's key; <> alternates per cycle
-0 [2 ~] -1 <4 [5 6]>   negative degrees, rests, nesting
-[0,2,4] ~ [3,5,7] ~    chords
-bd sd bd sd            drum words -> Drum Rack pads
-bd(3,8) ~ sd ~         euclidean rhythm: 3 kicks spread over 8 steps
-bd!3 sd                replication: three kicks, then a snare
-[bd hh]*2 sd hh        subdivision
-c5 [e5 g5]*2 ~ <a5 b5> absolute note names, if you prefer them
-{0 2 4, 7 9}%4         polymeter
-```
-
-**Full Strudel code** - anything the language can do, and all of it exports to a
-clip too:
-
-```js
-note("c3 e3 g3").fast(2)
-n("0 2 4 6").scale(liveScale)                       // liveScale = Live's own key
-note("c3 [e3 g3]").jux(x => x.rev())                // stereo-split via .midichan
-note("c3 e3 g3 b3").sometimesBy(.3, x => x.fast(2)) // a part that evolves
-note("c3(3,8)").off(1/8, x => x.add(note(7)))       // an echo a fifth up
-n("<[0,2,4] [3,5,7]>").scale(liveScale).slow(2)     // a two-bar chord progression
-$: note("c2*4")                                     // several parts at once
-$: note("<e4 g4>").midichan(2)
-```
-
-**Audio FX** - one line, applied to the audio already on the track:
-
-```js
-.lpf(800)              // one-pole lowpass at 800 Hz
-.lpf(2000).gain(1.2)   // ... and a little push
-.cutoff(440)           // `cutoff` and `lpf` are the same control
-.delay(0.4).room(0.5)  // delay and reverb, real Max chains
-```
-
-`.lpf()`, `.drive()`, `.delay()`, `.room()` and `.gain()` make sound. `.crush()` and
-`.hpf()` are recognised but have no Max chain behind them yet - the device tells you
-so rather than pretending they worked. A modulated value
-(`.lpf(sine.range(200,2000))`) is refused for the same reason (it needs the `remote`
-chain): see [doc/TODO.md](doc/TODO.md).
+The level of support depends entirely on which device you are using.
 
 ---
 
-## The one that catches everyone
+## 1. Strudel Superdough (The Monolithic Instrument)
 
-```js
-s("bd sd bd sd")     // on a MIDI device: silence. no notes, no error.
-sound("bd*4")        // same.
-```
+The **Strudel Superdough** device (`alienmind-strudel-superdough`) uses Strudel's real audio engine to render audio directly into your Ableton track.
 
-A pattern built with `s()` / `sound()` names a **sample**, not a note. On the two
-**MIDI devices** there is no sample engine - audio generated in the embedded browser
-view has no path into Live's signal chain (see [ARCHITECTURE.md](ARCHITECTURE.md) §4) -
-so a pattern with no note in it produces **no MIDI**, and the device sits there looking
-broken. It is not broken; it is being asked for a sound a MIDI device cannot make.
+### Supported: Almost Everything
 
-**On the MIDI devices, write notes instead** - for drums into a Drum Rack:
+Because it uses the real `@strudel/superdough` engine under the hood, **everything you can do on strudel.cc is supported.**
+- **Full Synthesis:** `s("sawtooth")`, `s("supersaw")`, `s("triangle")` - all oscillators work.
+- **Samples:** `s("bd sd")`, `s("gabba")` - sample fetching and playback works.
+- **Audio Effects:** `.room()`, `.lpf()`, `.crush()`, `.delay()` - all pattern-attached audio effects work exactly as they do on the web.
+- **Multi-line:** `$:`, `stack()`, orbits, etc.
 
-```
-bd sd bd sd          bare mini-notation - drum words map to Drum Rack pads
-```
+### Limitations & Exceptions
 
-```js
-note("36 38 36 38")  the same thing, as code
-```
+Because Live does not allow the embedded browser's real-time `AudioContext` to output audio into the track (see *Why not just run Strudel's audio engine in real-time?* below), this device renders the audio **offline** and loops it. This introduces specific constraints:
 
-The **Kit** panel maps the words (`bd` = 36, `sd` = 38, `hh` = 42 ...) and you
-can edit it to match any rack. Copying a rhythm off strudel.cc means keeping the
-*structure* - `bd(3,8)`, `bd!3 sd`, `[bd hh]*2` - and dropping the `s()`.
-
-**Or use the Drums Sampler**, where `s("bd sd")` is exactly right: it plays the sample
-itself. See its section below.
+- **1-Pattern Lag:** When you change the code, it renders the new pattern in the background and crossfades to it at the *next loop boundary*. Your changes are not instant.
+- **No Real-Time Knob Tweaking:** Knobs and sliders (`s1`..`s8`) also suffer from the same 1-loop delay. Turning a knob triggers a re-render for the next cycle; it does not smoothly sweep a filter in real time.
+- **Not Yet MIDI Aware:** The superdough engine in this device does not currently process inbound MIDI notes from Ableton.
+- **Randomness is Locked per Loop:** If you use `irand` or `choose`, the offline renderer generates one realization of that randomness per loop. The exact same random values will repeat every cycle until you edit the code.
 
 ---
 
-## Strudel MIDI
+## 2. The Micro Devices (MIDI, FX, Sampler)
 
-The pattern language, in full. The engine is the real one, so if it produces
-notes, this device plays them and can freeze them into a clip.
+The micro devices (`Strudel MIDI`, `Strudel Drums MIDI`, `Strudel Audio FX`, `Strudel Drums Sampler`) do not use the superdough synthesis engine. Instead, they translate Strudel code into native Ableton MIDI or Max DSP.
 
-### Supported: everything that makes notes
+For these devices, the *pattern language* is 100% supported, but the *sound engine* is **not**.
+
+### A. Strudel MIDI
+
+If the pattern produces notes, this device plays them and can freeze them into a clip.
+
+**Supported: everything that makes notes**
 
 | | |
 |---|---|
@@ -111,95 +50,49 @@ notes, this device plays them and can freeze them into a clip.
 | **Multiple parts** | `$:` lines, stacked and played together |
 | **Signals** | `sine`, `saw`, `perlin`, ... wherever they feed a *note* value |
 
-All of it also **exports to a MIDI clip**, because To Clip runs the engine rather
-than a parser of ours.
+All of it also **exports to a MIDI clip**, because To Clip runs the engine rather than a parser of ours.
 
-### The three controls that reach MIDI
+**The trap that catches everyone**
 
-A Strudel pattern carries a bag of properties per event. Exactly three of them
-mean anything to a MIDI device:
+```js
+s("bd sd bd sd")     // on a MIDI device: silence. no notes, no error.
+sound("bd*4")        // same.
+```
 
+A pattern built with `s()` / `sound()` names a **sample**, not a note. On the **MIDI devices**, there is no sample engine. A pattern with no notes produces **no MIDI**, and the device sits there looking broken.
+
+**On the MIDI devices, write notes instead:**
+```js
+note("36 38 36 38")  // The same thing, as code
+bd sd bd sd          // Bare mini-notation maps drum words to Drum Rack pads
+```
+
+**The three controls that reach MIDI:**
 | Strudel | Becomes |
 |---|---|
 | `note` / `n` | the MIDI pitch |
 | `.gain()` / `.velocity()` | MIDI velocity (`gain(0.5)` -> velocity 64) |
 | `.midichan(n)` | the MIDI channel |
 
-### Silently ignored (they are sound-engine controls)
+**Silently ignored (they are sound-engine controls):**
+`.s()`, `.bank()`, `.room()`, `.lpf()`, `.hpf()`, `.delay()`, `.crush()`, `.pan()`, `.speed()`, `.attack()`, `.release()`, `.vowel()`, `.coarse()`, `.shape()`, `.dist()`...
+These do not error. The pattern plays; the property is dropped because there is no synthesiser here. `note("c3").room(0.5)` is just `note("c3")`. If you want reverb, put a native Ableton reverb plugin after the device!
 
-`.s()` / `.sound()`, `.bank()`, `.room()`, `.lpf()`, `.hpf()`, `.delay()`,
-`.crush()`, `.pan()`, `.speed()`, `.begin()`, `.end()`, `.attack()`,
-`.release()`, `.vowel()`, `.coarse()`, `.shape()`, `.dist()`, ...
+### B. Strudel Audio FX
 
-These do not error. The pattern plays; the property is dropped, because there is
-no synthesiser here to hear it. `note("c3").room(0.5)` is just `note("c3")`.
+One line of Strudel's effect vocabulary, applied to the audio already on the track. 
 
-> **If you want reverb on it**, put it on the track: an instrument after this
-> device, then Live's own reverb - or the Audio FX device, once `.room()` exists
-> there. That is the Ableton way round, and it is the whole point of a MIDI
-> effect.
+**The Frozen-Graph Law:**
+The DSP graph is written when the device is built. **Your line only chooses values.** 
+- `.lpf(800).gain(1.2)` and `.gain(1.2).lpf(800)` produce the *same* signal path, because there is only one fixed internal path (e.g., lowpass → drive → delay → room → gain).
+- **Supported:** `.lpf(hz)` / `.cutoff(hz)`, `.hpf(hz)` / `.hcutoff(hz)`, `.drive(x)`, `.crush(bits)`, `.delay(x)`, `.delaytime(ms)`, `.delayfeedback(x)`, `.room(x)`, `.gain(x)`. Values are in real units and modulate in real time!
+- **Refused:** `.pan()`, `.distort()`, `.reverb()`, `.shape()`, `.coarse()`, `.vowel()`, `.phaser()`. These are recognised as real Strudel effects but have no Max chain behind them yet. The device will tell you it's refused. Modulated values like `.lpf(sine)` are also supported, but complex modulations might be refused if unsupported by the bridge.
 
----
+### C. Strudel Drums Sampler
 
-## Strudel Audio FX
+The one micro device where `s()` is not a footgun but the whole point. It plays samples itself from a **drum-machine bank**.
 
-One line of Strudel's effect vocabulary, applied to the audio already on the
-track. But it obeys a hard law, and the law explains every limit below.
-
-### The frozen-graph law
-
-**The DSP graph is written when the device is built. Your line only chooses
-values.**
-
-A Max patcher is generated at build time and frozen inside the `.amxd`. Nothing
-can add a reverb to it at runtime - not the app, not `[js]`. So every effect the
-device will ever apply **already exists in the graph**, always running, and the
-line you type sets each one's amount, including the amount that means *off*.
-
-Two consequences, and neither is a bug:
-
-1. **An effect that is not in the graph cannot be conjured.** `.room()` is
-   recognised and honestly refused ("no Max chain yet") rather than ignored.
-2. **The order is fixed too.** `.lpf(800).gain(1.2)` and `.gain(1.2).lpf(800)`
-   produce the *same* signal path, because there is only one path. The device
-   declares a canonical order (e.g. lowpass → drive → delay → room → gain) and your line 
-   chooses amounts within it. 
-   
-   **This is an imperfect implementation.** As documented in `m4l-jweb`'s [LISTENING.md](https://github.com/alienmind/m4l-jweb/blob/main/doc/LISTENING.md), the order of effects drastically changes the audio result. A chain processing `gain -> drive` sounds quiet and clean because the level is cut before the distortion. A chain processing `drive -> gain` sounds loud and dirty because the distortion happens first. In Strudel on the web, you can sequence effects in any order to achieve both results. In a Max device, the order is locked at build time, so this shortcoming is an inescapable reality of the frozen graph.
-
-### Supported today
-
-| | |
-|---|---|
-| `.lpf(hz)` / `.cutoff(hz)` | one-pole lowpass, 40 Hz - 18 kHz |
-| `.drive(x)` | distortion drive, 1x - 10x |
-| `.delay(x)` | delay mix, 0-1 |
-| `.delaytime(ms)` | delay time, 1-2000 ms |
-| `.delayfeedback(x)` | delay feedback loop gain, 0-1 |
-| `.room(x)` | reverb wet mix, 0-1 |
-| `.gain(x)` | output level, 1 = unity |
-
-Values are in **real units** - `.lpf(800)` is 800 Hz, `.delaytime(250)` is 250 ms - and become real Live
-parameters: automatable, MIDI-mappable, visible on Push.
-
-### Refused, and told to your face
-
-- **`.crush()`, `.hpf()`, `.pan()`, `.distort()`** -
-  recognised as real Strudel effects with no Max chain behind them yet. The
-  device says so; it does not pretend.
-- **Modulated values** - `.lpf(sine.range(200, 2000))` describes continuous
-  modulation, which needs a different machine than "type a number" (see
-  [TODO.md](TODO.md)). Refused rather than silently applying a wrong constant.
-
----
-
-## Strudel Drums Sampler
-
-The one device where `s()` is not a footgun but the whole point. It plays samples itself,
-from a **drum-machine bank**, so the pattern that is silent on the MIDI devices makes sound
-here.
-
-### Supported: `s()` and `bank()`
+**Supported: `s()` and `bank()`**
 
 | Feature | Example | What happens |
 |---|---|---|
@@ -208,35 +101,17 @@ here.
 | **Everything structural** | `s("bd(3,8)")`, `s("[bd hh]*2")`, `s("<bd cp>")` | Full mini-notation and code - it is the same `@strudel/core`, just routed to samples instead of MIDI. |
 | **MIDI notes in** | (a sequencer in front) | Notes map to drum sounds by the Drum Rack layout (36 = `bd` ...) and play the bank. |
 
-The samples are the real **tidal-drum-machines** (the set behind strudel.cc's `bank()`),
-downloaded on first use. This is a `[poly~]` sample keymap, **not** superdough - so
-pitch/melodic `s()` of instruments and superdough-only controls do not apply; it is a drum
-sampler.
-
-### Not here
-
-`.lpf()`, `.room()`, `.crush()` and the rest of the audio-effect vocabulary belong to the
-Audio FX device, not the Sampler. Put an FX device (or Ableton's own) after it on the track.
+**Not Supported:**
+Audio effects like `.lpf()` or `.room()` do not apply here. Use an FX device after it on the track.
 
 ---
 
-## Strudel Samples
+## 3. Why not just run Strudel's audio engine in real-time?
 
-Downloads Strudel's sample maps so Ableton can use them **as audio files**, in
-its own browser and its own Drum Racks. It does not play patterns.
+The engine runs inside `[jweb]`, which is an embedded Chromium view, and Chromium has a perfectly good `AudioContext`. It is the obvious idea and it does not work: **Chromium's audio graph and Live's signal chain do not touch.** 
 
-**Experimental** - see the README.
+Sound produced in the device's browser view goes directly to your system output device, outside Ableton entirely - not down the track, not through your effects, not into your render.
 
----
-
-## Why not just run Strudel's audio engine?
-
-The engine runs inside `[jweb]`, which is a Chromium view, and Chromium has a
-perfectly good `AudioContext`. It is the obvious idea and it does not work:
-**Chromium's audio graph and Live's signal chain do not touch.** Sound produced
-in the device's browser view goes to your system output device, outside Ableton
-entirely - not down the track, not through your effects, not into your render.
-
-That is why sound here is native: MIDI into an instrument, or real Max DSP
-objects in the signal path. It is a genuine constraint of the platform, not a
-shortcut we took.
+That is why this project takes two paths:
+1. **Superdough** renders the audio *offline* to a hidden WAV file, loads it into a Max `[buffer~]`, and plays it back through the track.
+2. **Micro Devices** avoid audio generation entirely, instead translating Strudel math into native MIDI notes or Max DSP parameters that Live understands in real-time.
