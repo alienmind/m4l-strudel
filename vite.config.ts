@@ -3,6 +3,10 @@ import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
+// Turns superdough's `./worklets.mjs?audioworklet` import into a base64 data: URL, so
+// the DSP worklets survive the single-file jweb bundle and load into an
+// OfflineAudioContext (superdough render path). No-op for imports without ?audioworklet.
+import bundleAudioWorklet from "./strudel/packages/vite-plugin-bundle-audioworklet/vite-plugin-bundle-audioworklet.js";
 import pkg from "./package.json";
 import { devices, uiDir } from "./scripts/devices.mjs";
 
@@ -39,7 +43,7 @@ export default defineConfig(() => {
 
 	const config: UserConfig = {
 		base: "./",
-		plugins: [react(), tailwindcss(), viteSingleFile()],
+		plugins: [react(), tailwindcss(), bundleAudioWorklet(), viteSingleFile()],
 		resolve: {
 			alias: [
 				{ find: "@device/App", replacement: fileURLToPath(new URL(`./src/app/${DEVICE}/${WINDOW_ENTRY ?? "App"}`, import.meta.url)) },
@@ -52,6 +56,13 @@ export default defineConfig(() => {
 				{ find: "@strudel/mini", replacement: strudelPkg("mini/index.mjs") },
 				{ find: "@strudel/transpiler", replacement: strudelPkg("transpiler/index.mjs") },
 				{ find: "@strudel/tonal", replacement: strudelPkg("tonal/index.mjs") },
+				// superdough: the REAL synths/samples/effects, rendered offline into WAV
+				// (see doc SUPERDOUGH Rendering). The renderer imports both the barrel
+				// ("superdough") and a subpath ("superdough/superdoughoutput.mjs"), so match
+				// each precisely - a plain-string prefix alias would rewrite the subpath to
+				// .../index.mjs/superdoughoutput.mjs.
+				{ find: /^superdough$/, replacement: strudelPkg("superdough/index.mjs") },
+				{ find: /^superdough\/(.*)$/, replacement: strudelPkg("superdough/$1") },
 			],
 		},
 		define: {

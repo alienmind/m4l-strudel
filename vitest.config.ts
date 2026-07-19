@@ -12,6 +12,8 @@ export default defineConfig({
 			{ find: "@strudel/mini", replacement: pkg("mini/index.mjs") },
 			{ find: "@strudel/transpiler", replacement: pkg("transpiler/index.mjs") },
 			{ find: "@strudel/tonal", replacement: pkg("tonal/index.mjs") },
+			{ find: /^superdough$/, replacement: pkg("superdough/index.mjs") },
+			{ find: /^superdough\/(.*)$/, replacement: pkg("superdough/$1") },
 		],
 	},
 	test: {

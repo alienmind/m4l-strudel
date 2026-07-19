@@ -33,6 +33,11 @@ declare module "@strudel/core" {
 
 	export function isPattern(x: unknown): x is Pattern;
 
+	/** The Pattern class value (for prototype augmentation). Coexists with the interface. */
+	export const Pattern: { prototype: Record<string, unknown> };
+	/** The empty pattern - what a no-op statement returns. */
+	export const silence: Pattern;
+
 	/** The continuous signals: one sweep per cycle. */
 	export const sine: Pattern;
 	export const cosine: Pattern;
@@ -43,8 +48,46 @@ declare module "@strudel/core" {
 	export const rand: Pattern;
 	export const perlin: Pattern;
 
+	/** Register one or more generic controls by name; returns the param functions. */
+	export function createParams(...names: string[]): Record<string, unknown>;
+
 	export function run(n: number): Pattern;
 	export function irand(n: number): Pattern;
 	export function signal(fn: (t: number) => unknown): Pattern;
 	export function pure(value: unknown): Pattern;
+}
+
+/**
+ * superdough - the real synth/sample/effect engine, aliased into the submodule
+ * (strudel/packages/superdough). Narrow to what src/lib/render/offline.ts uses for the
+ * OfflineAudioContext render path. See the SUPERDOUGH Rendering design.
+ */
+declare module "superdough" {
+	/** Schedule one hap. `t`/`dur` are seconds from the context's zero. */
+	export function superdough(value: unknown, t: number, hapDuration: number, cps?: number, cycle?: number): Promise<void>;
+	/** Set polyphony and load the DSP worklets into the current audio context. */
+	export function initAudio(options?: { disableWorklets?: boolean; maxPolyphony?: number; multiChannelOrbits?: boolean }): Promise<void>;
+	/** Load ONLY the DSP worklets into the current audio context - no kabelsalat, no resume. */
+	export function loadWorklets(): Promise<unknown>;
+	/** Set the max voice count before loading worklets. */
+	export function setMaxPolyphony(polyphony: number): void;
+	/** Register the built-in oscillator sounds (sine/saw/square/tri/supersaw/...) into the sound map. */
+	export function registerSynthSounds(): void;
+	/** Map the 0..1 gain value through a curve (superdough global state). */
+	export function setGainCurve(fn: (x: number) => number): void;
+	/** Swap the module-level audio context singleton (null re-defaults on next get). */
+	export function setAudioContext(context: BaseAudioContext | null): void;
+	/** Swap the output controller singleton. */
+	export function setSuperdoughAudioController(controller: unknown | null): void;
+	/** Clear global reverb/delay/etc. state between renders. */
+	export function resetGlobalEffects(): void;
+	/** Load a sample map (e.g. "github:tidalcycles/dirt-samples") into the sound map. */
+	export function samples(sampleMap: string | object, baseUrl?: string, options?: object): Promise<void>;
+}
+
+declare module "superdough/superdoughoutput.mjs" {
+	/** Owns orbits, buses and the destination merger for one audio context. */
+	export class SuperdoughAudioController {
+		constructor(ctx: BaseAudioContext);
+	}
 }
