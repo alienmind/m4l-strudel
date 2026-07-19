@@ -251,6 +251,8 @@ trance example, transport lock - confirmed by ear). Shape:
 ## 5. Strudel Integration
 
 We consume Strudel by bundling the `@strudel/core`, `mini`, `transpiler`, and `tonal` packages directly from a pinned git submodule.
+The submodule points to our own fork (`https://github.com/alienmind/strudel.git`) instead of upstream. This is a temporary measure required for the `superdough` offline render path. Specifically, we added a `clearNodePools()` export to `@strudel/superdough`'s `nodePools.mjs`. The offline renderer generates a new `OfflineAudioContext` for every render pass, and because superdough's node pool is a module-level singleton keyed by node type (not audio context), nodes from a previous render pass linger in the pool. When handed to the next pass, they throw a cross-context error ("cannot connect to an AudioNode belonging to a different audio context"). Our fork allows the host to clear the pool between contexts. This will be cleaned up in a future release once an upstream solution is available.
+
 - **No runtime dependency on strudel.cc** (except for the sample browser which reaches out to fetch sample packs).
 - **No npm dependencies on `@strudel/*`.**
 
