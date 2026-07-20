@@ -56,6 +56,9 @@ export default defineConfig(() => {
 				{ find: "@strudel/mini", replacement: strudelPkg("mini/index.mjs") },
 				{ find: "@strudel/transpiler", replacement: strudelPkg("transpiler/index.mjs") },
 				{ find: "@strudel/tonal", replacement: strudelPkg("tonal/index.mjs") },
+				{ find: "@strudel/webaudio", replacement: strudelPkg("webaudio/index.mjs") },
+				{ find: "@strudel/draw", replacement: strudelPkg("draw/draw.mjs") },
+				{ find: "supradough", replacement: strudelPkg("supradough/index.mjs") },
 				// superdough: the REAL synths/samples/effects, rendered offline into WAV
 				// (see doc SUPERDOUGH Rendering). The renderer imports both the barrel
 				// ("superdough") and a subpath ("superdough/superdoughoutput.mjs"), so match

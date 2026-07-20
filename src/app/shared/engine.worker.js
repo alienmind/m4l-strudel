@@ -145,6 +145,19 @@ const transport = new LiveTransport({
 			}
 			if (voices.length) postMessage({ t: "voices", voices });
 			return;
+		} else if (sink === "superdough") {
+			const doughEvents = [];
+			for (const hap of haps) {
+				const begin = hap.whole.begin.valueOf();
+				const durCycles = hap.duration.valueOf();
+				doughEvents.push({
+					value: hap.value ?? {},
+					durMs: Math.max(5, (durCycles / cps) * 1000),
+					delayMs: transport.delayMs(begin, nowBeats, bpm),
+				});
+			}
+			if (doughEvents.length) postMessage({ t: "doughEvents", doughEvents });
+			return;
 		}
 		const notes = [];
 		for (const hap of haps) {
@@ -180,7 +193,7 @@ onmessage = async (e) => {
 		try {
 			setLiveScale(m.liveScale);
 			engineCtx = m.ctx;
-			sink = m.sink === "voice" ? "voice" : "note";
+			sink = m.sink === "voice" ? "voice" : (m.sink === "superdough" ? "superdough" : "note");
 			// The sampler wraps bare mini as s("...") (sample names); the MIDI devices wrap it
 			// as note("...") with tokens resolved to pitches.
 			pattern = await compile(sink === "voice" ? asSampleCode(m.code) : asStrudelCode(m.code, m.ctx));

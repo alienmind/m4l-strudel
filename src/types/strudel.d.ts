@@ -85,6 +85,12 @@ declare module "superdough" {
 	export function clearNodePools(): void;
 	/** Load a sample map (e.g. "github:tidalcycles/dirt-samples") into the sound map. */
 	export function samples(sampleMap: string | object, baseUrl?: string, options?: object): Promise<void>;
+	export function initAudioOnFirstClick(options?: object): Promise<void>;
+}
+
+declare module "@strudel/webaudio" {
+	export function getAudioContext(): BaseAudioContext;
+	export function initAudioOnFirstClick(options?: object): Promise<void>;
 }
 
 declare module "superdough/superdoughoutput.mjs" {
