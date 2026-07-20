@@ -4,6 +4,18 @@ Strudel is a language for making **sound**. This project brings Strudel to Ablet
 
 The level of support depends entirely on which device you are using.
 
+
+## Preliminary question: Why not just run Strudel's audio engine in real-time so we support everything?
+
+The engine runs inside `[jweb]`, which is an embedded Chromium view, and Chromium has a perfectly good `AudioContext`. It is the obvious idea and it does not work: **Chromium's audio graph and Live's signal chain do not touch.** 
+
+Sound produced in the device's browser view goes directly to your system output device, outside Ableton entirely - not down the track, not through your effects, not into your render.
+
+That is why this project takes two paths:
+1. **Superdough** renders the audio *offline* to a hidden WAV file, loads it into a Max `[buffer~]`, and plays it back through the track.
+2. **Micro Devices** avoid audio generation entirely, instead translating Strudel math into native MIDI notes or Max DSP parameters that Live understands in real-time.
+
+
 ---
 
 ## 1. Strudel Superdough (The Monolithic Instrument)
@@ -103,15 +115,3 @@ The one micro device where `s()` is not a footgun but the whole point. It plays 
 
 **Not Supported:**
 Audio effects like `.lpf()` or `.room()` do not apply here. Use an FX device after it on the track.
-
----
-
-## 3. Why not just run Strudel's audio engine in real-time?
-
-The engine runs inside `[jweb]`, which is an embedded Chromium view, and Chromium has a perfectly good `AudioContext`. It is the obvious idea and it does not work: **Chromium's audio graph and Live's signal chain do not touch.** 
-
-Sound produced in the device's browser view goes directly to your system output device, outside Ableton entirely - not down the track, not through your effects, not into your render.
-
-That is why this project takes two paths:
-1. **Superdough** renders the audio *offline* to a hidden WAV file, loads it into a Max `[buffer~]`, and plays it back through the track.
-2. **Micro Devices** avoid audio generation entirely, instead translating Strudel math into native MIDI notes or Max DSP parameters that Live understands in real-time.

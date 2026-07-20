@@ -39,15 +39,11 @@ export default function App() {
 	const strudelWindow = useWindow(surface, "strudel");
 
 	if (showAbout) {
-		// RENDER HEALTH, debug-only: the conductor's phase and loop geometry, then the
-		// transport. Instantly shows which hop is dead - stuck "saving" is the bridge, stuck
-		// "loading" is buffer~, "armed" with a stopped transport is just waiting. Lives here,
-		// not in the device view, since it is for debugging only.
-		const phase = s.status.phase === "idle" && !s.live ? "Ready - Run renders the pattern" : s.status.message;
+		// RENDER HEALTH, debug-only
+		const phase = s.status.phase === "idle" && !s.live ? "Ready - Run plays the pattern" : s.status.message;
 		const debug =
 			`${phase}\n` +
-			`${s.status.phase}${s.status.slot ? ` ${s.status.slot}` : ""}` +
-			`${s.sliders.length > 0 ? ` / ${s.sliders.length} knob${s.sliders.length === 1 ? "" : "s"}` : ""}` +
+			`${s.status.phase}` +
 			` / ${s.beatsPerCycle} beat${s.beatsPerCycle === 1 ? "" : "s"}/cyc` +
 			` / bpm ${Math.round(s.tempo)} / ${s.playing ? "play" : "stop"} @ ${s.beats.toFixed(1)}`;
 		return (
@@ -83,8 +79,8 @@ export default function App() {
 					onClick={s.live ? s.hush : s.run}
 					title={
 						s.live
-							? "Stop and fade out the rendered loop"
-							: "Render this pattern with superdough and loop it on the track (Ctrl+Enter)"
+							? "Stop pattern"
+							: "Run this pattern natively with Jweb audio"
 					}
 				>
 					{s.live ? "Stop" : "Run"}
@@ -110,49 +106,11 @@ export default function App() {
 
 			{error && <span className="truncate text-[10px] leading-none text-destructive">{error}</span>}
 
-			{/* THE DETERMINISM NOTICE (acceptance G.6: what cannot be pre-rendered says so).
-			    Rolling mode = a random pattern rendered one cycle ahead; each audible cycle
-			    is one frozen roll of the dice, advanced at every loop boundary. */}
-			{s.status.mode === "rolling" && (
-				<span className="truncate text-[10px] leading-none text-amber-500">
-					random pattern: rendering ahead, each loop is one realization
-				</span>
-			)}
-			{s.samplesNote && !error && s.status.mode !== "rolling" && (
+			{s.samplesNote && !error && (
 				<span className="truncate text-[10px] leading-none text-amber-500" title={s.samplesNote}>
 					{s.samplesNote}
 				</span>
 			)}
-
-			{/* THE SLIDERS (H.7's React zone): every slider() in the code, live. Each one
-			    writes the native knob it is bound to (S1..S8 - reveal them under About >
-			    Advanced > Controls to macro-map), and a drag re-renders at the next boundary. */}
-			{s.sliders.length > 0 && (
-				<div className="flex items-center gap-2 overflow-x-auto text-[10px] leading-none text-muted-foreground">
-					{s.sliders.map((sl, i) => (
-						<label
-							key={i}
-							className="flex shrink-0 items-center gap-1"
-							title={`slider(${sl.min}..${sl.max}) - bound to native knob S${i + 1} (macro-mappable via About > Advanced > Controls)`}
-						>
-							{sl.label}
-							<input
-								type="range"
-								min={0}
-								max={1}
-								step={0.001}
-								value={sl.norm}
-								onChange={(e) => sl.set(Number(e.target.value))}
-								className="h-1 w-16 accent-primary"
-							/>
-							<span className="font-mono text-[9px] text-muted-foreground/70">
-								{sl.raw.toFixed(Math.abs(sl.max - sl.min) > 10 ? 0 : 2)}
-							</span>
-						</label>
-					))}
-				</div>
-			)}
-
 		</div>
 	);
 }

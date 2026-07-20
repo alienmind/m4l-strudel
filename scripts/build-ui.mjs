@@ -33,7 +33,7 @@ for (const dir of uiDirs) {
 	const windows = surface?.windows ? Object.keys(surface.windows) : [];
 	if (!windows.length) continue;
 
-	renameSync(path.join(outDir, "index.html"), path.join(outDir, "_device.html"));
+	renameSync(path.join(outDir, "index.html"), path.join(outDir, "../_device.html"));
 	for (const winId of windows) {
 		process.env.WINDOW = winId;
 		process.env.WINDOW_ENTRY = surface.windows[winId].entry;
@@ -41,7 +41,7 @@ for (const dir of uiDirs) {
 		await build();
 		renameSync(path.join(outDir, "index.html"), path.join(outDir, `${winId}.html`));
 	}
-	renameSync(path.join(outDir, "_device.html"), path.join(outDir, "index.html"));
+	renameSync(path.join(outDir, "../_device.html"), path.join(outDir, "index.html"));
 }
 
 console.log(`\nm4l-jweb: ${uiDirs.length} UI bundle(s) -> dist/ui/`);

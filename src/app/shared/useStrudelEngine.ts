@@ -70,6 +70,7 @@ type EngineMessage =
 	| { t: "evalerr"; message: string }
 	| { t: "notes"; notes: EngineNote[] }
 	| { t: "voices"; voices: VoiceEvent[] }
+	| { t: "doughEvents"; doughEvents: { value: Record<string, any>; durMs: number; delayMs: number }[] }
 	| { t: "clip"; notes: ClipNote[]; cycles: number }
 	| { t: "exporterr"; message: string }
 	| { t: "phase"; cycle: number }
@@ -118,6 +119,11 @@ export interface EngineOptions {
 	 * no pitch. Absent for the MIDI devices, which stay note-shaped.
 	 */
 	voiceSink?: (voice: VoiceEvent) => void;
+	/**
+	 * THE SUPERDOUGH SINK. When set, the engine routes each scheduled hap to this callback
+	 * (with all raw Strudel properties) for Jweb to play natively via the Web Audio API.
+	 */
+	superdoughSink?: (event: { value: Record<string, any>; durMs: number; delayMs: number }) => void;
 }
 
 export interface EngineState {
@@ -176,7 +182,7 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 	// The Sampler passes a voiceSink; the MIDI devices do not. Presence alone selects the
 	// worker's sink mode. The ref keeps the (bound-once) worker handler reading the current
 	// callback rather than the one it closed over at mount.
-	const sink = opts.voiceSink ? "voice" : "note";
+	const sink = opts.voiceSink ? "voice" : opts.superdoughSink ? "superdough" : "note";
 	const voiceSinkRef = useRef(opts.voiceSink);
 	voiceSinkRef.current = opts.voiceSink;
 	const [playParam, setPlayParam] = useParam(surface, "play");
@@ -418,6 +424,10 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 				counters.sent += m.voices.length;
 				const play = voiceSinkRef.current;
 				if (play) for (const voice of m.voices) play(voice);
+			} else if (m.t === "doughEvents") {
+				counters.sent += m.doughEvents.length;
+				const play = opts.superdoughSink;
+				if (play) for (const ev of m.doughEvents) play(ev);
 			} else if (m.t === "clip") {
 				// Cycles -> beats. One cycle occupies `beatsPerCycle` of Live's beats -
 				// derived from the pattern's tempo (see tempo.ts) or the user's override.
