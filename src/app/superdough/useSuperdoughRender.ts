@@ -5,7 +5,9 @@ import { bootScope, compile } from "../../max/shared/engine.mjs";
 import { renderPeriod } from "../../lib/render/determinism";
 import { renderCycles } from "../../lib/render/offline";
 import { asStrudelCode } from "../../lib/strudelCode";
+import { withDeadline } from "../../lib/samples";
 import { useStrudelEngine } from "../shared/useStrudelEngine";
+import { useSliderKnobs } from "../shared/useSliderKnobs";
 import surface, { INITIAL_TEXT } from "./surface";
 
 /**
@@ -29,26 +31,53 @@ const SAMPLE_MAPS = [
 /**
  * The native Web Audio sink for the Superdough device.
  *
- * The engine worker schedules haps against the Live transport and hands each one
- * over with a delayMs computed on ITS clock (plugsync~ ticks, or the free-run
- * wall-clock timer when Live is stopped). The page's AudioContext under jweb~
- * is a different clock, and the two can drift: if we scheduled blindly at
- * currentTime + delayMs, drift past the lookahead window would put every event
- * in the past and superdough DROPS past events - the audio "collapses" into
- * silence. So clamp: an event that arrives late plays now (a few ms of jitter)
- * instead of never, and the accumulated lateness is logged so the drift is
- * visible in the jweb console instead of being a mystery.
+ * TWO CLOCKS, AND WHY delayMs IS THE WRONG BRIDGE BETWEEN THEM. The worker schedules
+ * against Live's transport and hands each hap a `delayMs` measured from the beat
+ * position of the TICK it was queried in. That works for the MIDI devices because Max's
+ * [pipe] applies the delay on Max's own scheduler - the number never leaves the clock it
+ * was computed on. Here it does: by the time the event has crossed postMessage and
+ * React, an unknown slice of that delay is already spent, and `currentTime + delayMs`
+ * quietly means something later than it says.
+ *
+ * The first attempt clamped a late event to "now" so superdough would not drop it (it
+ * refuses to schedule in the past). That is worse than dropping: once the clocks drift
+ * past the lookahead window EVERY event clamps to the same instant, so a bar's worth of
+ * notes fires simultaneously - which is exactly the reported symptom, audio that starts,
+ * collapses, spikes the CPU and distorts, then loosely resumes.
+ *
+ * So do not convert a delay at all. Anchor the pattern's own timeline to the audio
+ * clock ONCE, and derive every event from it: `t = anchorTime + (cycle - anchorCycle) /
+ * cps`. Spacing then comes from the pattern (exact, jitter-free) rather than from
+ * message arrival times, and superdough is handed strictly increasing future times.
+ *
+ * The anchor is re-taken only when it is genuinely meaningless: the first event, a
+ * tempo change, or a computed time that has fallen behind or run absurdly ahead -
+ * transport start/stop, a loop jump, a scrub, or the page being throttled. Each re-anchor
+ * is a one-off timing seam, so they are counted and reported rather than hidden.
  */
-const MIN_LEAD_S = 0.01;
+/** How far ahead of `currentTime` a fresh anchor places its first event. Comfortably
+ *  inside the worker's 150 ms lookahead, comfortably past message jitter. */
+const ANCHOR_LEAD_S = 0.08;
+/** Below this much lead, the mapping has fallen behind the audio clock: re-anchor. */
+const MIN_LEAD_S = 0.005;
+/** Further ahead than this and the mapping is nonsense (a jump backwards): re-anchor. */
+const MAX_AHEAD_S = 2;
 
 /** Longest bounce we render, in cycles - a pattern whose period does not settle is
  *  capped here rather than rendering forever. */
 const MAX_EXPORT_CYCLES = 32;
 
+/** The engine's NoteContext is empty here: superdough takes the code verbatim, so there
+ *  is no octave convention or drum map to resolve. MODULE-LEVEL, so its identity is
+ *  stable - an inline `{}` would be a new object every render. */
+const EMPTY_CTX = {} as const;
+
 export function useSuperdoughRender() {
 	const [samplesNote, setSamplesNote] = useState<string | null>("Loading samples...");
 	const initialized = useRef(false);
-	const lateStats = useRef({ count: 0, worstMs: 0, lastLogged: 0 });
+	/** Pattern time pinned to audio time: events derive from this, not from delayMs. */
+	const anchor = useRef<{ cycle: number; time: number; cps: number } | null>(null);
+	const reanchors = useRef({ count: 0, lastLogged: 0 });
 	const [exporting, setExporting] = useState(false);
 	const [exportNote, setExportNote] = useState<string | null>(null);
 
@@ -72,27 +101,50 @@ export function useSuperdoughRender() {
 	const engine = useStrudelEngine({
 		surface: surface as any,
 		initialText: INITIAL_TEXT,
-		ctx: {},
+		ctx: EMPTY_CTX,
 		liveScale: "C4:major",
 		superdoughSink: (ev) => {
 			if (!initialized.current) return;
-			const ctx = getAudioContext();
-			const ideal = ctx.currentTime + ev.delayMs / 1000;
-			const t = Math.max(ctx.currentTime + MIN_LEAD_S, ideal);
-			const lateMs = (t - ideal) * 1000;
-			if (lateMs > 1) {
-				const s = lateStats.current;
-				s.count++;
-				s.worstMs = Math.max(s.worstMs, lateMs);
-				const now = Date.now();
-				if (now - s.lastLogged > 5000) {
-					s.lastLogged = now;
-					console.warn(`[superdough-sink] ${s.count} late events, worst ${s.worstMs.toFixed(0)}ms - engine/audio clock drift`);
+			const ac = getAudioContext();
+			const now = ac.currentTime;
+			let a = anchor.current;
+
+			// A tempo change re-scales the whole mapping, so the old anchor no longer
+			// describes this pattern's timeline.
+			if (a && a.cps !== ev.cps) a = null;
+
+			let t = a ? a.time + (ev.cycle - a.cycle) / ev.cps : now + ANCHOR_LEAD_S;
+
+			// Behind the audio clock, or absurdly ahead: the thread between pattern time
+			// and audio time is lost (start/stop, loop jump, scrub, a throttled page).
+			// Re-pin it here rather than firing a pile-up at "now".
+			if (!a || t < now + MIN_LEAD_S || t > now + MAX_AHEAD_S) {
+				t = now + ANCHOR_LEAD_S;
+				anchor.current = { cycle: ev.cycle, time: t, cps: ev.cps };
+				if (a) {
+					const s = reanchors.current;
+					s.count++;
+					const wall = Date.now();
+					if (wall - s.lastLogged > 5000) {
+						s.lastLogged = wall;
+						console.warn(`[superdough-sink] re-anchored ${s.count}x - transport jump, tempo change or clock drift`);
+					}
 				}
 			}
+
 			superdough(ev.value, t, ev.durMs / 1000, ev.cps, ev.cycle);
 		},
 	});
+
+	// Every slider() in the pattern, on a native S1..S8 dial.
+	const sliders = useSliderKnobs(surface, engine.sliderSpecs, engine.text, engine.setSliderValues);
+
+	// Stopping ends the timeline. Without this the next Run maps its first cycle against
+	// an anchor from minutes ago, which is guaranteed to be behind the audio clock - one
+	// wasted re-anchor, and a first note that lands late.
+	useEffect(() => {
+		if (!engine.live) anchor.current = null;
+	}, [engine.live]);
 
 	/**
 	 * Export the current pattern to a WAV next to the device (TODO item 3).
@@ -119,7 +171,11 @@ export function useSuperdoughRender() {
 			// rather than forcing a resample on import.
 			const { wav, seconds } = await renderCycles(pat, cps, 0, cycles, getAudioContext().sampleRate);
 			const name = `superdough-export-${Date.now()}.wav`;
-			await saveToFile(name, wav);
+			// Deadlined: saveToFile settles only when the wrapper replies, and a request
+			// that never reaches [maxurl] gets no reply at all - which showed up as a
+			// status stuck on "Rendering..." forever while a .part sat on disk. A bounded
+			// wait turns a silent hang into a message that says where to look.
+			await withDeadline(saveToFile(name, wav), 30_000, `Saving ${name}`);
 			setExportNote(`Exported ${name} (${seconds.toFixed(1)}s) - drag from the device folder`);
 		} catch (e) {
 			setExportNote("Export failed: " + (e instanceof Error ? e.message : String(e)));
@@ -132,7 +188,7 @@ export function useSuperdoughRender() {
 	return {
 		...engine,
 		samplesNote,
-		sliders: [],
+		sliders,
 		status: { phase: engine.status, message: engine.debug },
 		beats: 0,
 		beatsPerCycle: engine.beatsPerCycle,
