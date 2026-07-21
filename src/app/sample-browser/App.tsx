@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, FolderOpen, GripVertical, Search, Square } from "lucide-react";
-import { bindInlet, outlet, saveToFile, uiReady } from "@m4l-jweb/bridge";
+import { ChevronLeft, ChevronRight, ClipboardCopy, GripVertical, Search, Square } from "lucide-react";
+import { bindInlet, saveToFile, uiReady } from "@m4l-jweb/bridge";
 import { decodeSample, playBuffer } from "../shared/webaudio";
+import { copyText } from "../shared/clipboard";
 import { cn } from "@/lib/utils";
 import {
 	DEFAULT_QUANT,
@@ -13,7 +14,7 @@ import {
 	withDeadline,
 	type Sound,
 } from "@/lib/samples";
-import { IN, OUT } from "./protocol";
+import { IN } from "./protocol";
 import { AboutPanel } from "../shared/AboutPanel";
 import { Button } from "../shared/Button";
 import { CustomMapPanel } from "./CustomMapPanel";
@@ -70,7 +71,7 @@ export default function App() {
 	const [playing, setPlaying] = useState<string | null>(null);
 	const [status, setStatus] = useState("Loading...");
 	const [folder, setFolder] = useState<string | null>(null);
-	/** Whether anything has been fetched this session - the "Show folder" button has
+	/** Whether anything has been fetched this session - the "Copy folder path" button has
 	 *  nothing to reveal until then, and the folder itself does not exist yet. */
 	const [downloaded, setDownloaded] = useState(false);
 	const [showAbout, setShowAbout] = useState(false);
@@ -109,6 +110,14 @@ export default function App() {
 		uiReady();
 		return clearPreview; // a device view that goes away must not leave a loop running
 	}, [clearPreview]);
+
+	/** The downloads folder on the clipboard. `samples/` is where localPath() puts every
+	 *  file, so that subfolder is the useful path here - not the device folder itself. */
+	const copyFolder = useCallback(async () => {
+		if (!folder) return;
+		const path = `${folder}/samples`;
+		setStatus((await copyText(path)) ? `Path copied: ${path}` : `Could not copy - the folder is ${path}`);
+	}, [folder]);
 
 	/** The list actually on screen. The cursor indexes THIS, not the catalog: a
 	 *  filtered list whose arrow keys walked the unfiltered one would be unusable. */
@@ -470,17 +479,18 @@ export default function App() {
 				<span className="flex-1 truncate text-[10px] text-muted-foreground" title={status}>
 					{status}
 				</span>
-				{/* The stopgap for "where did my sample go": the page cannot open a file
-				    manager, so it asks the wrapper to. Enabled once a sample is on disk -
-				    before that the folder does not exist. The drag-into-Live alternative was
-				    tried and failed (doc/DRAWER_OF_FAILED_IDEAS.md); this is the answer. */}
+				{/* The answer to "where did my sample go": neither the page nor Max can open a
+				    file manager (doc/TODO.md item 1), so the path goes on the clipboard to
+				    paste into one. Enabled once a sample is on disk - before that the folder
+				    does not exist. The drag-into-Live alternative was tried and failed
+				    (doc/DRAWER_OF_FAILED_IDEAS.md). */}
 				<Button
-					icon={FolderOpen}
-					onClick={() => outlet(OUT.reveal_folder)}
+					icon={ClipboardCopy}
+					onClick={copyFolder}
 					disabled={!downloaded || !folder}
 					title={
 						downloaded
-							? "Show the samples folder in Finder/Explorer"
+							? "Copy the samples folder path to the clipboard, to paste into Explorer/Finder"
 							: "Audition a sample first - the folder appears once something is downloaded"
 					}
 				/>
@@ -534,7 +544,7 @@ function useTransport() {
  *
  * SPIKE CLOSED - FAILED (doc/DRAWER_OF_FAILED_IDEAS.md): [jweb]'s CEF hands an HTML5 drag
  * to the OS as TEXT, but strips the `DownloadURL` payload, so no real file ever drops into
- * Live's audio lane (and LOM has no create-audio-clip). Parked for good; **Show folder** is
+ * Live's audio lane (and LOM has no create-audio-clip). Parked for good; **Copy folder path** is
  * the shipping answer. This drag stays as a best-effort text handoff (a native Windows path
  * on `text/plain`, the `file://` URI on `text/uri-list`) - harmless where it lands as text,
  * never a clip.

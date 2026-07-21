@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { registerSynthSounds, samples, setGainCurve, superdough, initAudio, getAudioContext } from "superdough";
-import { saveToFile } from "@m4l-jweb/bridge";
+import { bindInlet, saveToFile } from "@m4l-jweb/bridge";
+import { copyText } from "../shared/clipboard";
 import { bootScope, compile } from "../../max/shared/engine.mjs";
 import { renderPeriod } from "../../lib/render/determinism";
 import { renderCycles } from "../../lib/render/offline";
@@ -80,6 +81,9 @@ export function useSuperdoughRender() {
 	const reanchors = useRef({ count: 0, lastLogged: 0 });
 	const [exporting, setExporting] = useState(false);
 	const [exportNote, setExportNote] = useState<string | null>(null);
+	/** Where the export lands, as the wrapper resolved it. The page cannot know its own
+	 *  device's folder; the wrapper sends it once at ui_ready (wrapper/device.ts). */
+	const [folder, setFolder] = useState<string | null>(null);
 	/** True while a bounce holds superdough's context. A ref, not the `exporting` state:
 	 *  the sink closes over its render's values and must see the flag the instant it flips. */
 	const bouncing = useRef(false);
@@ -143,6 +147,17 @@ export function useSuperdoughRender() {
 			superdough(ev.value, t, ev.durMs / 1000, ev.cps, ev.cycle);
 		},
 	});
+
+	useEffect(() => {
+		bindInlet("device_folder", (path) => setFolder(String(path)));
+	}, []);
+
+	/** Put the export folder on the clipboard - the honest replacement for a reveal that
+	 *  Max cannot perform (doc/TODO.md item 1). */
+	const copyFolder = useCallback(async () => {
+		if (!folder) return;
+		setExportNote((await copyText(folder)) ? `Path copied: ${folder}` : `Could not copy - the folder is ${folder}`);
+	}, [folder]);
 
 	// Every slider() in the pattern, on a native S1..S8 dial.
 	const sliders = useSliderKnobs(surface, engine.sliderSpecs, engine.text, engine.setSliderValues);
@@ -220,5 +235,7 @@ export function useSuperdoughRender() {
 		exportAudio,
 		exporting,
 		exportNote,
+		folder,
+		copyFolder,
 	};
 }

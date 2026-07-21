@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Download, FolderOpen, LayoutGrid, Play, Square } from "lucide-react";
-import { bindInlet, onNote, outlet, saveToFile, uiReady } from "@m4l-jweb/bridge";
+import { ArrowLeft, ClipboardCopy, Download, LayoutGrid, Play, Square } from "lucide-react";
+import { bindInlet, onNote, saveToFile, uiReady } from "@m4l-jweb/bridge";
 import { audioContext, decodeSample, playBuffer, type DecodedSample } from "../shared/webaudio";
+import { copyText } from "../shared/clipboard";
 import { bootScope, compile, queryWindow, hapToVoice } from "../../max/shared/engine.mjs";
 import { renderPeriod } from "../../lib/render/determinism";
 import { audioBufferToWav } from "../../lib/render/wav";
 import { asSampleCode } from "../../lib/strudelCode";
-import { IN, OUT } from "./protocol";
+import { IN } from "./protocol";
 import { useStateSync, useWindow } from "@m4l-jweb/surface/react";
 import { cn } from "@/lib/utils";
 import { tokenAtCaret } from "@/lib/reference";
@@ -80,7 +81,7 @@ export default function App() {
 	const [showAbout, setShowAbout] = useState(false);
 	const [exporting, setExporting] = useState(false);
 	const [exportNote, setExportNote] = useState<string | null>(null);
-	/** The device's folder on disk, so "Show folder" has something to reveal. */
+	/** The device's folder on disk, so "Copy folder path" has something to hand over. */
 	const [folder, setFolder] = useState<string | null>(null);
 
 	/** The drum-machine catalog (one big map, keys `Machine_sound`), loaded once. */
@@ -287,13 +288,19 @@ export default function App() {
 			const wav = audioBufferToWav(await ctx.startRendering());
 			const name = `drums-export-${Date.now()}.wav`;
 			await withDeadline(saveToFile(name, wav), 30_000, `Saving ${name}`);
-			setExportNote(`Exported ${name} (${seconds.toFixed(1)}s) - Show folder to find it`);
+			setExportNote(`Exported ${name} (${seconds.toFixed(1)}s) - copy the folder path to find it`);
 		} catch (e) {
 			setExportNote("Export failed: " + (e instanceof Error ? e.message : String(e)));
 		} finally {
 			setExporting(false);
 		}
 	}, [exporting, engine.tempo, engine.beatsPerCycle, engine.text, resolve, ensureLoaded]);
+
+	/** The export folder on the clipboard - Max cannot open a file manager (TODO item 1). */
+	const copyFolder = useCallback(async () => {
+		if (!folder) return;
+		setExportNote((await copyText(folder)) ? `Path copied: ${folder}` : `Could not copy - the folder is ${folder}`);
+	}, [folder]);
 
 	const helpWindow = useWindow(surface, "help");
 	const studioWindow = useWindow(surface, "studio");
@@ -471,12 +478,16 @@ export default function App() {
 					{exportNote ?? (view === "code" ? codeStatus : status)}
 				</span>
 				{/* Enabled once something has been written: before the first Export the
-				    folder may not exist yet, and revealing nothing is worse than no button. */}
+				    folder may not exist yet, and a path to nothing is worse than no button. */}
 				<Button
-					icon={FolderOpen}
-					onClick={() => outlet(OUT.reveal_folder)}
+					icon={ClipboardCopy}
+					onClick={copyFolder}
 					disabled={!exportNote || !folder}
-					title={folder ? "Show the device folder in Finder/Explorer" : "Export something first"}
+					title={
+						folder
+							? "Copy the device folder path to the clipboard, to paste into Explorer/Finder"
+							: "Export something first"
+					}
 				/>
 			</div>
 		</div>

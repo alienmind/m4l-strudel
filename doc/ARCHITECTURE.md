@@ -174,8 +174,8 @@ worst a single stray empty file however many exports are made. (Upstream in
 
 **The rule to carry forward:** a device that writes a file gets `download` in its chain
 list AND `HAS_DEVICE_FOLDER` in `wrapper/device.ts`. The two travel together - the second
-is how the page learns where the file went, and what gives "Show folder" something to
-reveal. Where it writes is per device, and the reveal must agree with it: the sample
+is how the page learns where the file went, and what "Copy folder path" puts on the
+clipboard. Where it writes is per device, and the reveal must agree with it: the sample
 browser downloads into a `samples/` subfolder, the exporters write flat into the device
 folder. A reveal pointed at a folder nobody created is not a no-op, it is an OS error
 dialog.
@@ -281,7 +281,7 @@ Auditioning is still acquiring - there is no separate Download button, because p
 
 - **`s()` -> sound, via a bank.** The CODE screen runs a Strudel `s("bd sd, hh*8")` pattern through the shared engine (`voiceSink`, §3a) - bare mini-notation (`bd sd, hh!6`) is wrapped in `s(...)` by `asSampleCode`, not resolved to pitches. Each hap's sample name resolves against the selected BANK - a tidal-drum-machine, strudel's `bank()` prefix: `bd` with bank `RolandTR909` is the catalog key `RolandTR909_bd`. A `.bank("AkaiLinn")` in the pattern overrides the dropdown per-hap. The catalog is strudel's own generated `tidal-drum-machines.json` (`DRUM_MACHINES_URL` in `lib/samples.ts`, base rewritten ritchse->geikha for the moved repo).
 - **MIDI notes drive it too.** A note into the track maps to a drum sound by the Drum Rack / General MIDI convention (`NOTE_SOUND`: 36 = bd, 38 = sd, 42 = hh, ...) and plays the selected bank's sample for it - so a MIDI sequencer (or the Drums MIDI device) in front of the Sampler plays the same bank.
-- **Auto-load, decoded in the page.** The first time a sound is named it is fetched and decoded to an `AudioBuffer` (deadlined at 30 s, deduped by an in-flight set so a repeated hap does not fire a second download); it sounds from the next cycle. Up to `MAX_RESIDENT` (64) decoded sounds stay in memory, LRU past that - a full drum machine and change, against the 16 the `[poly~]` era could hold. Playback is one `AudioBufferSourceNode` per hit with velocity as gain, so **polyphony is free**: no voice allocation, no stealing, no slot bookkeeping. Nothing touches the disk, so there is no folder to reveal and no "Show folder" button here any more.
+- **Auto-load, decoded in the page.** The first time a sound is named it is fetched and decoded to an `AudioBuffer` (deadlined at 30 s, deduped by an in-flight set so a repeated hap does not fire a second download); it sounds from the next cycle. Up to `MAX_RESIDENT` (64) decoded sounds stay in memory, LRU past that - a full drum machine and change, against the 16 the `[poly~]` era could hold. Playback is one `AudioBufferSourceNode` per hit with velocity as gain, so **polyphony is free**: no voice allocation, no stealing, no slot bookkeeping. Nothing touches the disk for playback; the only file this device writes is an Export.
 - **Instances are naturally independent.** Each device instance is its own page with its own cache, so two Samplers in one set cannot collide - the `---`-scoped buffer names that used to guarantee this are no longer needed.
 
 ### 4e. Shared device chrome

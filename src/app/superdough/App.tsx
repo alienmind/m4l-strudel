@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, FolderOpen, Play, Square, SlidersHorizontal } from "lucide-react";
-import { outlet } from "@m4l-jweb/bridge";
+import { ClipboardCopy, Download, Play, Square, SlidersHorizontal } from "lucide-react";
 import { useNativePanel, useParam, useStateSync, useWindow } from "@m4l-jweb/surface/react";
 import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
@@ -119,11 +118,12 @@ export default function App() {
 						{s.exportNote}
 					</span>
 					{/* Only once something has been written - the folder may not exist before
-					    the first Export, and revealing nothing is worse than no button. */}
+					    the first Export, and offering a path to nothing is worse than no button. */}
 					<Button
-						icon={FolderOpen}
-						onClick={() => outlet("reveal_folder")}
-						title="Show the device folder in Finder/Explorer"
+						icon={ClipboardCopy}
+						onClick={s.copyFolder}
+						disabled={!s.folder}
+						title="Copy the device folder path to the clipboard, to paste into Explorer/Finder"
 					/>
 				</div>
 			)}

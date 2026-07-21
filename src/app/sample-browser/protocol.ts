@@ -50,7 +50,4 @@ export const OUT = {
 	...CHAIN_OUT,
 	/** UI -> wrapper: page ready; send me the current state. */
 	ui_ready: "ui_ready",
-	/** UI -> wrapper: reveal the samples folder in Finder/Explorer. The page cannot
-	 *  open an OS file manager; the wrapper asks the Max application to. */
-	reveal_folder: "reveal_folder",
 } as const;
