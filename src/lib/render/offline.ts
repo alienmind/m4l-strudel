@@ -20,7 +20,9 @@ import {
 	loadWorklets,
 	setMaxPolyphony,
 	registerSynthSounds,
+	getAudioContext,
 	setAudioContext,
+	getSuperdoughAudioController,
 	setSuperdoughAudioController,
 	resetGlobalEffects,
 	clearNodePools,
@@ -96,6 +98,20 @@ async function renderCyclesNow(
 ): Promise<RenderResult> {
 	const seconds = cycles / cps;
 	const ctx = new OfflineAudioContext(2, Math.ceil(seconds * sampleRate), sampleRate);
+
+	// What was installed before us - the LIVE realtime context on a device that plays
+	// natively. Restored in `finally`: nulling it instead would make the next
+	// getAudioContext() build a brand new realtime context, and under jweb~ the context
+	// IS the device's output, so live playback would come back silent.
+	const prevCtx = getAudioContext();
+	const prevController = getSuperdoughAudioController();
+
+	// BEFORE, not only after. The node pool is keyed by node type ACROSS contexts, so a
+	// node the live path pooled earlier would be handed to this OfflineAudioContext and
+	// throw "cannot connect to an AudioNode belonging to a different audio context" -
+	// intermittently, since it depends on what happens to be pooled at the time.
+	clearNodePools();
+
 	setAudioContext(ctx);
 	setSuperdoughAudioController(new SuperdoughAudioController(ctx));
 	try {
@@ -121,14 +137,15 @@ async function renderCyclesNow(
 		const buffer = await ctx.startRendering();
 		return { wav: audioBufferToWav(buffer), seconds };
 	} finally {
-		// Do not leave a closed offline context installed; the next getAudioContext()
-		// lazily rebuilds a realtime one if anyone asks.
-		setAudioContext(null);
-		setSuperdoughAudioController(null);
+		// Tear down the offline graph's global effects while its own context is still
+		// installed - resetGlobalEffects() acts on whatever controller is current.
 		resetGlobalEffects();
-		// The node pool is keyed by node type ACROSS contexts - a pooled node from this
-		// render's OfflineAudioContext would be handed to the next render's context and
-		// throw on connect. Clear it so every render starts clean.
+		// Hand the engine back exactly what it had, so a live device keeps playing out of
+		// the same context (and therefore the same jweb~ signal outlets) it started on.
+		setAudioContext(prevCtx);
+		setSuperdoughAudioController(prevController);
+		// Symmetric with the clear above: nothing this render pooled may reach the live
+		// context either.
 		clearNodePools();
 	}
 }

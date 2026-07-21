@@ -79,6 +79,8 @@ declare module "superdough" {
 	export function getAudioContext(): AudioContext;
 	/** Swap the module-level audio context singleton (null re-defaults on next get). */
 	export function setAudioContext(context: BaseAudioContext | null): void;
+	/** The output controller singleton (built against the current context on first get). */
+	export function getSuperdoughAudioController(): unknown;
 	/** Swap the output controller singleton. */
 	export function setSuperdoughAudioController(controller: unknown | null): void;
 	/** Clear global reverb/delay/etc. state between renders. */

@@ -82,6 +82,8 @@ export default function App() {
 					onClick={s.live ? s.hush : s.run}
 					title={s.live ? "Stop the pattern" : "Run the pattern (Ctrl+Enter)"}
 				/>
+				{/* Allowed while playing: the bounce takes superdough's context over for its
+				    duration, so playback goes quiet and resumes (useSuperdoughRender). */}
 				<Button
 					icon={Download}
 					onClick={s.exportAudio}
