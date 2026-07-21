@@ -228,9 +228,9 @@ function sendFolder(): void {
  * if it opens a browser listing instead, that is the finding, and the fallback is to
  * reveal via a different Max object.
  *
- * The samples folder only exists once something has been downloaded (fetchToFile creates
- * it); before then this opens nothing. The app only offers the button once a sample is on
- * disk, so by the time it is clicked the folder is there.
+ * A subfolder only exists once something has been written into it; before then the OS
+ * reports a missing file rather than opening anything. Every app only offers the button
+ * once it has put a file on disk, so by the time it is clicked the folder is there.
  */
 function reveal_folder(): void {
 	if (!HAS_DEVICE_FOLDER) return;
@@ -239,9 +239,14 @@ function reveal_folder(): void {
 		post("strudel: cannot reveal folder - the patcher is unsaved, so it has no path yet\n");
 		return;
 	}
-	// file:///<path>/samples/ - encodeURI so the spaces in "Ableton Library" survive, and
-	// strip a leading slash so a POSIX "/Users/x" becomes "file:///Users/x" not "////".
-	var url = encodeURI("file:///" + (folder + "/samples/").replace(/^\/+/, ""));
+	// WHICH folder depends on what the device writes, and getting this wrong is not a
+	// cosmetic miss - the OS reports "cannot find the file" on a folder that was never
+	// created. The sample browser downloads into a `samples/` subfolder (localPath());
+	// superdough and the drums sampler export their WAVs to the device folder ITSELF.
+	var target = IS_SAMPLE_BROWSER ? folder + "/samples/" : folder + "/";
+	// file:///<path> - encodeURI so the spaces in "Ableton Library" survive, and strip a
+	// leading slash so a POSIX "/Users/x" becomes "file:///Users/x" not "////".
+	var url = encodeURI("file:///" + target.replace(/^\/+/, ""));
 	messnamed("max", "launchbrowser", url);
 	post("strudel: reveal " + url + "\n");
 }
