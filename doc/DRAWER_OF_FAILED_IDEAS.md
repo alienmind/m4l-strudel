@@ -4,7 +4,7 @@ Things we tried and that do not work - kept so nobody spends a second afternoon
 rediscovering the same wall. Ideas that WORKED are not here; they live in
 [README.md](../README.md) and [ARCHITECTURE.md](ARCHITECTURE.md) (native `live.*`
 controls and Push banks, the macro-mappable transport, clip I/O that reaches the track
-even inside a Rack, the shipped Instrument Rack preset).
+even inside a Rack).
 
 ---
 
@@ -57,10 +57,12 @@ Two shapes from the same old plan, neither built because the shipped design is b
   containers by `mode`. This was the plan's route to the super-device feel with one
   codebase.
 
-What shipped instead - the **Instrument Rack preset** (separate, properly-typed devices
-pre-wired, one library entry) - delivers the single-thing-to-drag goal AND stays
-hand-composable (swap the instrument, remove the fx, add your own). So the unified merge
-bought nothing over the devices as they are, and was dropped. The devices stay separate,
+What shipped instead - separate, properly-typed devices the user groups into a Rack
+themselves - stays hand-composable (swap the instrument, remove the fx, add your own) and
+costs one drag more. A preset of that arrangement DID ship for a while and was withdrawn
+in 1.0.0: a Live rack embeds a copy of every device inside it, so it goes stale the moment
+a device is rebuilt. Either way the unified merge bought nothing over the devices as they
+are, and was dropped. The devices stay separate,
 sharing code only where it already pays (`src/app/shared/`, `ui:` reuse), not forced into
 one bundle.
 
@@ -463,11 +465,47 @@ testing:
 path. So there was no further form to try.
 
 **What shipped instead.** "Copy folder path" - the page puts the folder on the clipboard
-(`src/app/shared/clipboard.ts`) and the user pastes it into Explorer/Finder. It needs no
-Max message, has nothing platform-specific to verify, and cannot fail silently: the path
-is printed in the status line either way.
+and the user pastes it into Explorer/Finder. It needs no Max message and nothing
+platform-specific. It came with a tar pit of its own; see the next entry.
 
 **The transferable lesson.** `launchbrowser` failing silently is the trap. It is fire and
 forget - no reply, no error - so a device that relies on it looks correct in code, logs
 nothing, and simply does nothing. Prefer a mechanism that can report its own outcome, even
 a cruder one.
+
+## Copying to the clipboard from a device page (2026-07-21)
+
+**What we wanted.** The replacement for the reveal above: click a button, the folder path
+lands on the system clipboard.
+
+**Every mechanism a `file://` page has, and how each one failed:**
+
+- **`navigator.clipboard.writeText()`** - gated on a SECURE CONTEXT. A device page is
+  loaded from `file://`, which is not one, so the API is typically absent altogether.
+- **`navigator.clipboard?.writeText(...)` with optional chaining** - the trap that made
+  the absence WORSE than useless. On a page with no clipboard API the expression is
+  `undefined`, `await undefined` resolves happily, and the code reported a successful
+  copy having called nothing at all. An API that might not exist has to be tested for,
+  not chained through.
+- **`document.execCommand("copy")`** - no secure-context gate, works in plenty of CEF
+  builds, and **returned `true` in Live while putting nothing on the system clipboard**.
+  This is the bad one: a false success, in a device that then told the user "Path
+  copied" over an empty clipboard.
+- **Reading it back to check** - `navigator.clipboard.readText()` needs the same secure
+  context the write did. There is no verification path. A copy can be CLAIMED but never
+  CONFIRMED from inside the page.
+
+**What shipped instead.** Inside jweb, no claim is trusted. The programmatic copy is still
+attempted (it costs nothing and does work in some builds), and then the path is shown in a
+focused, pre-selected field over the device; the browser's own `copy` event is taken as the
+confirmation, because that one fires only when a copy really happens. The status line says
+"Path copied" for a confirmed copy and "Not copied - the folder is <path>" otherwise, so
+the path is reachable either way.
+
+**UNVERIFIED as of 1.0.0.** Export failed before writing a file (`could not place save: -1
+bytes`), and the Copy button only appears once something has been written - so the whole
+mechanism is still untested in Live. TODO items 0 and 1.
+
+**The transferable lesson, and it is the same one twice:** in a frozen device page, prefer
+the mechanism that can report its own outcome. Where none can, do not invent a reassuring
+message - make the user's own action the confirmation.

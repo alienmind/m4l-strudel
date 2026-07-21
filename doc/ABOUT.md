@@ -12,38 +12,43 @@ Bring generative sequencing, euclidean rhythms, and algorithmic composition dire
 
 ---
 
+## New in 1.0.0
+
+- **Live's transport drives the devices.** Launch a clip on a device's track, or just press Play, and the pattern starts; it stops when the transport does. No second button to remember.
+- **The main instrument is simply called Strudel** (`alienmind-strudel`), and it plays LIVE - the real superdough engine runs inside the device, so an edit or a knob turn is audible immediately. It used to render offline and fade in at the next loop boundary; that whole pipeline is gone.
+- **Strudel Synth**, a new device: type a SOUND rather than a pattern (`s("sawtooth").lpf(800).room(.3)`) and every MIDI note the track sends plays it.
+- **Your sounds survive going offline.** Samples and sample maps are cached inside the device, so a set reopened with no network still plays what it played before.
+- **One set of controls everywhere.** Every device's top bar now draws the same icon buttons, and the native knob panel is reachable from the device view rather than buried in About.
+
+Known issues in this release: **Export** on the Strudel device fails to write its WAV (`could not place save`), and the **Copy folder path** button is therefore still untested. Both are first in line for 1.1.
+
+---
+
 ## What's in the box
 
 ![All Devices](screenshot-all-devices.png)
 
-### The Monolithic Instrument: Strudel Superdough
+### The Main Instrument: Strudel
 
-The primary deliverable is **Strudel Superdough** (`alienmind-strudel-superdough`). This instrument understands the full Strudel language and uses the real `@strudel/superdough` engine to natively produce sounds (synths, oscillators, samples) and effects, perfectly in sync with Ableton's transport clock.
+The primary deliverable is **Strudel** (`alienmind-strudel`, called `alienmind-strudel-superdough` before 1.0.0). This instrument understands the full Strudel language and uses the real `@strudel/superdough` engine to natively produce sounds (synths, oscillators, samples) and effects, perfectly in sync with Ableton's transport clock.
 
-> ⚠️ **Experimental Limitations:** Superdough renders its audio offline in the background to bypass browser audio limitations. As a result:
-> - **1-Pattern Lag:** Code edits and knob turns take effect on the *next loop boundary*.
-> - **No Real-Time Tweaking:** It cannot smoothly sweep a filter live.
-> - **No MIDI In:** It does not currently accept incoming MIDI notes.
+> ⚠️ **Experimental Limitations:** superdough now runs LIVE in the device, so edits and knob turns are audible immediately and there is no loop boundary to wait for. What remains:
+> - **No MIDI in:** it sequences its own pattern rather than playing notes you send it. For that, use **Strudel Synth**.
+> - **Freeze does not work:** Live freezes a track offline, and this device's sound comes from a live browser engine. Use **Export**, or resample the track.
+> - **Timing can wobble:** the page's audio clock and Live's transport are two clocks, and a heavy set can pull them apart.
 
 ### The Micro Devices
 
-We also deliver a set of specialized, lightweight devices that translate Strudel math into real-time native Ableton MIDI or Max DSP (without the Superdough audio engine):
+We also deliver a set of specialized, lightweight devices - some translating Strudel into native Ableton MIDI or Max DSP, some making sound of their own:
 
 | Device | Type, drop it on | What it does for you |
 |---|---|---|
+| **Strudel Synth** | Instrument, **MIDI track** | Type a SOUND (`s("sawtooth").lpf(800)`) instead of a pattern, and every MIDI note the track sends plays it. |
 | **Strudel MIDI** | MIDI effect, **MIDI track** | Type a Strudel pattern, press **Run**, and it streams live MIDI into whatever instrument sits after it. Also converts patterns **to and from MIDI clips**. |
 | **Strudel Drums MIDI** | MIDI effect, **MIDI track** | The same generative power as Strudel MIDI, focused on drums. Visual **Kit** mapper routes drum words (`bd`, `sd`) directly to Drum Rack pads. |
 | **Strudel Drums Sampler** | Instrument, **MIDI track** | A code-driven drum sampler. Write `s("bd sd, hh*8")`, pick a drum machine **bank**, and it plays that machine's sounds. |
 | **Strudel Audio FX** | Audio effect, **audio track** | Type a single line of Strudel's DSP effect vocabulary (e.g., `.lpf(800).gain(1.2)`) and it generates a real Max signal chain on the track. |
-| **Strudel Samples** | Audio effect, **audio track** | Browse Strudel's sample-map universe. Audition samples beat-synced to your project and drag them straight into a Drum Rack. |
-
-### Exemplary Racks
-
-To get you started instantly, we ship two ready-to-use Instrument Racks:
-- **AlienMind Strudel Bass Rack.adg** - Strudel MIDI into a stock Ableton bass plugin, followed by Strudel Audio FX.
-- **AlienMind Strudel Superdough Rack.adg** - The full experimental suite in one rack.
-
-![The shipped Instrument Rack: Strudel MIDI -> instrument -> Strudel Audio FX](strudel-rack.png)
+| **Strudel Samples** | Instrument, **MIDI track** | Browse Strudel's sample-map universe. Audition samples beat-synced to your project and drag them straight into a Drum Rack. |
 
 ---
 
@@ -58,13 +63,27 @@ To get you started instantly, we ship two ready-to-use Instrument Racks:
 
 ## Device Guide
 
-### Strudel Superdough
+### Strudel (`alienmind-strudel.amxd`)
 Type any Strudel pattern - whether it's synthesizers like `s("sawtooth")`, samples like `s("bd")`, or complex effect chains. Press **Run** and start Live's transport. The pattern plays live, as real track audio: it goes through the fader, the sends and the meters like any other instrument, and you can resample or record it.
 
 **One limitation worth knowing: Freeze does not work on this device.** Live's Freeze renders a track offline and faster than real time, and the device's sound comes from a live browser engine that cannot run in that offline pass - so a frozen track goes silent. This is a property of how Live freezes, not something the device can work around. Two things do work, and either gives you the same result:
 
 - **Export** (the download icon) renders the pattern to a `.wav` next to the device. Use **Copy folder path** (the clipboard icon) to get the folder, paste it into Explorer/Finder, and drag the file onto an audio track.
 - **Resample** the track onto an audio track while it plays, the normal Live way.
+
+**Launching a clip on the track starts it.** You do not have to press Run as well: launch a clip on the device's track and the pattern starts; stop the clip and it stops. On a track with no clips at all, Live's global Play does the same job. Run and the mappable **Play/Stop** parameter still work, and whichever moved last wins.
+
+### Strudel Synth (`alienmind-strudel-synth.amxd`)
+
+The synth is the one device here that takes a **sound**, not a pattern. Type `s("sawtooth")`, add an envelope and effects (`.attack(0.2).lpf(800).room(.3)`), press the tick (or **Ctrl+Enter**), and every MIDI note the track sends plays that sound - from a clip, from your keyboard, or from a Strudel MIDI device sitting in front of it.
+
+There is no Play/Stop here on purpose: the notes are the trigger, so there is nothing to start.
+
+Two things to know:
+- **Structure collapses.** `s("<sawtooth square>")` is a pattern, and this device keeps only its first event. Patterns belong in the main Strudel device.
+- **Holding a key does not hold the note.** A note's length is decided when it starts, from `.sustain(seconds)` (0.6 s if you do not say). This is how the sound engine schedules a voice - the whole envelope goes in up front and cannot be cut short.
+
+Any `slider()` in the sound (`.lpf(slider(1200, 100, 8000))`) binds to one of the eight native knobs (**S1..S8**), so you can automate the timbre or turn it from Push.
 
 ### Strudel MIDI (`alienmind-strudel-midi.amxd`)
 
@@ -132,3 +151,5 @@ A browser for the community sample maps behind strudel.cc. Drop it on any audio 
 - **Red outline** → The message under the editor names the parse/eval error.
 - **Load from Clip greyed out** → The track has no clips yet; Save to Clip makes one.
 - **The sample list is empty after picking a map** → Check the status line for a fetch error (the maps come from the network).
+- **No sound offline from `s("bd")`** → Samples are fetched when they play, so a sound has to have played online once. After that it is cached in the device and plays offline; synths (`s("sawtooth")`) never need the network.
+- **The Synth is silent** → It plays incoming MIDI only. Check there is a clip or a controller sending notes to the track, and that the status line names your sound rather than showing a red error.

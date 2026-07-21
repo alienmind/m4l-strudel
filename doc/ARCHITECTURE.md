@@ -16,7 +16,8 @@ This document describes the high-level architecture, the build pipeline, the run
 │  src/app/drums-midi/    the Drums MIDI device's UI                │
 │  src/app/drums-sampler/ the Drums Sampler device's UI             │
 │  src/app/sample-browser/ the sample browser's UI                  │
-│  src/app/superdough/    the Superdough device's UI                │
+│  src/app/strudel/       the main Strudel device's UI               │
+│  src/app/synth/         the Synth device's UI                      │
 │  src/app/fx/            the Audio FX device's UI                  │
 │  src/app/shared/        engine hook + worker + webaudio + Button  │
 │  src/lib/mini/          the mini-notation parser + resolver       │
@@ -30,16 +31,25 @@ This document describes the high-level architecture, the build pipeline, the run
 └──────────────────────────────┬────────────────────────────────────┘
                           pnpm build
                  (@m4l-jweb/build under the hood)
-  ┌──────────┬────────────┬─────────┴─────┬───────────────┬──────────┐
-  ▼          ▼            ▼               ▼               ▼          ▼
--midi      -drums-midi  -drums-sampler  -sample-browser  -superdough -fx
-.amxd      .amxd        .amxd           .amxd            .amxd       .amxd
-(MIDI)     (MIDI)       (instrument)    (instrument)     (instrument)(audio)
+                               ▼
+                    seven self-contained .amxd
+                               │
+   ├── alienmind-strudel.amxd                (instrument)
+   ├── alienmind-strudel-synth.amxd          (instrument)
+   ├── alienmind-strudel-drums-sampler.amxd  (instrument)
+   ├── alienmind-strudel-sample-browser.amxd (instrument)
+   ├── alienmind-strudel-midi.amxd           (MIDI)
+   ├── alienmind-strudel-drums-midi.amxd     (MIDI)
+   └── alienmind-strudel-fx.amxd             (audio)
 ```
 
-An **instrument** originates sound and fills a track's
-instrument slot (superdough, the drums sampler, and the sample browser - a preview is a
-sound source, not a process).
+`alienmind-strudel` is the main device and carries the plain name; it was
+`alienmind-strudel-superdough` until 1.0.0 (the engine is still superdough, but the
+device is the whole language). Every other device keeps its suffix.
+
+An **instrument** originates sound and fills a track's instrument slot (strudel, the
+synth, the drums sampler, and the sample browser - a preview is a sound source, not a
+process).
 An **audio** effect processes what is already on the track (fx).
 A **MIDI** device emits notes and has no signal path at all (midi, drums-midi).
 
@@ -153,7 +163,7 @@ two phases need no chain at all, so a device without `download` writes its bytes
 perfectly and then fails **silently** at the last step: the request leaves on an aux
 outlet with nothing on the other end, no reply ever comes, the promise never settles, and
 the UI sits on "Rendering..." forever beside a `.part` file that looks almost right. That
-is exactly how the Superdough device shipped for a day.
+is exactly how the main Strudel device shipped for a day.
 
 **Why the place step exists: atomicity.** The destination is not touched until the bytes
 on disk have been counted and match what the app promised. A crash, a Live quit or a
@@ -167,10 +177,22 @@ truncated to zero bytes and left behind. Naming it after the destination was fin
 the only writer was the sample browser, whose filenames come from the sample's URL: the
 same sample re-fetched reused the same scratch file. An audio export names its file after
 the moment it was rendered, so every bounce stranded another zero-byte
-`superdough-export-<timestamp>.wav.part` next to the real one, accumulating forever. The
+`strudel-export-<timestamp>.wav.part` next to the real one, accumulating forever. The
 wrapper uses one `m4l-jweb-save.part` per device folder now - reused, overwritten, and at
 worst a single stray empty file however many exports are made. (Upstream in
 `@m4l-jweb/wrapper`; `tests/wrapper-max.test.mjs` pins it.)
+
+**OPEN, 1.0.0: `could not place save: -1 bytes at destination`.** Export on the Strudel
+device renders and then fails at exactly this last step, in Live. `-1` is the wrapper's
+"cannot size the destination file at all", so the scratch file was never placed over the
+target - not placed short. The save protocol is the library's, so the fault may be
+upstream; m4l-jweb 1.0.0 carries a related fix (one reused scratch file per folder) that
+landed after this was seen, and re-testing against it comes before debugging anything
+here. Diagnostic order: does the `.part` exist at the right size after `save_end`; does
+`deviceFolder()` resolve to a real writable directory (an unsaved patcher has none); is
+the `download` chain - which owns [maxurl], and therefore the place step - really wired.
+Tracked as TODO item 0, and it blocks the clipboard item behind it: the Copy button only
+appears once a file has been written.
 
 **The rule to carry forward:** a device that writes a file gets `download` in its chain
 list AND `HAS_DEVICE_FOLDER` in `wrapper/device.ts`. The two travel together - the second
@@ -206,7 +228,7 @@ Each device defines its selectors in `src/app/<device>/protocol.ts`, extending `
 | js → UI (midi) | `notes ...`, `clip_available`, `read_error`, `write_error`, `scale` | clip replies + Live scale (`*_error` carry `no_track`/`no_clip`/`no_slot`) |
 | UI → Max (midi) | `midinote ...`, `flush` | scheduled engine output, via `sendNote()`/`flushNotes()` |
 | UI ⇄ worker (pattern devices) | `code`/`hush`/`tick` in, `ready`/`evalok`/`evalerr`/`notes`/`voices`/`doughEvents`/`flush` out | postMessage, not Max messages |
-| UI ⇄ Max (browser, superdough) | `fetch_to_file` / `fetch_done`, `save_begin`/`save_chunk`/`save_end` / `save_done` | the `download` chain: file acquisition and `saveToFile` |
+| UI ⇄ Max (browser, strudel) | `fetch_to_file` / `fetch_done`, `save_begin`/`save_chunk`/`save_end` / `save_done` | the `download` chain: file acquisition and `saveToFile` |
 | UI ⇄ js (drums, fx) | `sync_state <id> <json>`, `state_<id> <json>` | state slots, via `useStateSync()` |
 
 Audio itself is **not** in this table any more: it leaves the page as a signal on
@@ -291,9 +313,9 @@ Every device draws from one set of parts, so the six faces read as one product r
 - **`shared/Button.tsx`** - one black-and-white (grey) button. `active` is the only lift (a faint primary wash, e.g. Run while playing); there are no accent/primary/destructive colours any more. Primary actions sit in the top bar, the `?` (`HelpButton`) rightmost.
 - **`shared/AboutPanel.tsx`** - the title opens it. It carries an **Advanced** section with the device's set-once, native affordances so they do not clutter the top bar: **Full Studio** (the pattern devices' big editor window, `onOpenStudio`) and **Controls** (`onShowControls`, revealing the native panel - the MIDI device's mappable Play/Stop). The FX device is the exception: its native **Knobs** panel is the primary interaction, so it keeps that button in the top bar.
 
-### 4f. Superdough device: all of Strudel, live
+### 4f. The Strudel device: all of Strudel, live
 
-`alienmind-strudel-superdough` is the REAL superdough - every synth, sample, orbit and
+`alienmind-strudel` is the REAL superdough - every synth, sample, orbit and
 effect strudel.cc plays, because it *is* superdough, not a port - running live in the page
 and heard through the track. An instrument on the `webaudio` chain alone.
 
@@ -305,7 +327,7 @@ and heard through the track. An instrument on the `webaudio` chain alone.
   tempo-synced effects (`.delay()`, phaser) run at the wrong rate.
 - **Scheduling is clamped, not trusted.** See §2c - the worker's clock and the page's
   `AudioContext` are different clocks, and superdough drops events scheduled in the past.
-  `useSuperdoughRender.ts` clamps a late event to `currentTime + 10 ms` and reports
+  `useStrudelRender.ts` clamps a late event to `currentTime + 10 ms` and reports
   sustained lateness to the console.
 - **The eval scope.** A pattern written on strudel.cc reaches for helpers the headless engine
   does not have (`setcps`, `slider`, `_scope`, draw params). `installReplShims()` in
@@ -321,7 +343,7 @@ and heard through the track. An instrument on the `webaudio` chain alone.
   fresh on the main thread (the worker's pattern lives in another thread and cannot be
   transferred), takes `renderPeriod()` capped at 32 cycles, renders through an
   `OfflineAudioContext` at the page's own sample rate, and `saveToFile`s a flat
-  `superdough-export-<timestamp>.wav` into the device folder. Three details in that renderer
+  `strudel-export-<timestamp>.wav` into the device folder. Three details in that renderer
   are hard-won and must not be "simplified":
   - `loadWorklets()` + `setMaxPolyphony()`, **never** `initAudio()` - the latter awaits
     `initKabelsalat()` unconditionally, which hangs under `OfflineAudioContext`.
@@ -338,18 +360,109 @@ and heard through the track. An instrument on the `webaudio` chain alone.
   silences the device - a structural limit, not a bug we can fix. Export (or resampling the
   track) is the answer.
 - **Wrapper mode.** `wrapper/device.ts` gates the clip poll and scale observers OFF for mode
-  `superdough` - an instrument with no clips and no MIDI pitches; running the MIDI defaults
+  `strudel` - an instrument with no clips and no MIDI pitches; running the MIDI defaults
   threw LiveAPI noise.
-- **Slider knobs, partially restored.** Eight native dials `s1..s8` still build (a static
-  pool in the panel behind the transport switch) and `slider()` now evaluates, returning the
-  code's default. What does NOT yet flow is the *value*: turning a dial does not reach the
-  worker's compile. `scope.ts` still holds the capture machinery
-  (`beginSliderCapture`/`getSliderSpecs`/`setSliderOverrides`) with its own tests, waiting to
-  be wired to the worker (TODO item 5). Two findings from the 0.9.x version worth keeping:
+- **Slider knobs.** Eight native dials `s1..s8` (a static pool in the panel behind the
+  transport switch): each `slider()` in the code binds to one, in source order, through
+  `shared/useSliderKnobs.ts`. Values travel NORMALIZED 0..1 - a dial's travel is stamped at
+  build time while a slider's range belongs to the code - and turning one feeds
+  `setSliderOverrides` into the next compile, so the pattern is re-evaluated with the new
+  value. `engine.mjs` holds the capture (`beginSliderCapture`/`getSliderSpecs`) for the
+  worker; `lib/render/scope.ts` carries the same for the main-thread export renderer. What
+  the dials still do NOT carry is a NAME or a RANGE (TODO item 5.3). Two findings from the 0.9.x version worth keeping:
   the wrapper's `knob_label` rename takes on the DEVICE PANEL but never reaches the Rack
   macro / Live parameter registry (those stay `s1..s8`), and a spike to carry each slider's
   real min..max via runtime `_parameter_range` was REVERTED - it shifts the value domain the
   dial reports and breaks the normalized knob math.
+
+### 4g. Synth device: one superdough voice, played by MIDI
+
+`alienmind-strudel-synth` is the smallest instrument here: no pattern, no transport, no
+engine worker, no scheduler. `src/app/synth/useSynth.ts` is the whole device.
+
+- **The spec is a VALUE, not a pattern.** `s("sawtooth").lpf(800)` is compiled through the
+  same `engine.mjs` `compile()` the other devices use - Strudel has no other parser - and
+  then QUERIED for its first hap. That hap's value IS the superdough control object. A spec
+  with structure in it (`s("<sawtooth square>")`) therefore collapses to its first event.
+- **`note` and `n` are stripped from the spec.** They belong to the keyboard: a spec that
+  named a note would make every key play the same pitch.
+- **Notes in.** The `midiin` chain's `onNote` plays one voice per note-on, at
+  `currentTime + 20 ms` - past the bridge and React, "now" is already the past.
+- **Note-off is not a release, and cannot be.** `superdough(value, t, duration)` schedules
+  the whole envelope up front and returns no handle, so a voice cannot be cut short. A
+  note's length is decided WHEN IT STARTS, from the spec's `sustain` (default 0.6 s).
+  Note-offs are tracked only as a re-trigger guard. A real gate needs a voice handle
+  upstream in superdough.
+- **Knobs.** Same eight-dial pool as the main device, through `useSliderKnobs`; a knob turn
+  recompiles the spec with `setSliderOverrides`.
+- **Wrapper mode `synth`.** No clips, no scale observers, and NOT in the transport follow of
+  §4h - its notes are its trigger, so there is nothing to start or stop.
+
+### 4h. Following Live's transport
+
+A sequencing device should start when the music starts, and until 1.0.0 the Play parameter
+was the only way in. There is no single LOM property for "should this device be playing",
+so `wrapper/device.ts` observes two and picks between them:
+
+- `playing_slot_index >= 0` - a session clip is running on this device's track.
+- `live_set is_playing` - the global transport is running.
+
+Either one starts the device; it stops when both are false. An earlier version asked whether
+the track held any clip and, if it did, followed only the clips - which left a Drums Sampler
+silent on Play whenever a clip merely SAT in a slot unlaunched. The cost of the union is the
+other direction: stopping a clip while the transport runs leaves the device playing, which is
+the honest reading of "the transport is running".
+
+Both are observed, never polled; the page receives `transport_play <0|1>` on the EDGES only
+(plus one forced send at `ui_ready`, where the page has heard nothing yet). The page writes
+it into the Play PARAMETER rather than calling run()/hush() directly, so there is still
+exactly one source of truth for "is this device playing": a click, an automation lane and a
+launched clip all move the same automatable control, and the last one to move it wins.
+
+### 4i. The offline sample cache
+
+superdough fetches samples at PLAY time, so with no network `s()` patterns are silent while
+synths are unaffected. Chromium blocks `fetch()` of `file://`, so reading bytes back off
+disk is not available - but jweb IS Chromium, so the page has storage of its own.
+
+`src/lib/sampleCache.ts` wraps the global `fetch` before any device code runs
+(`sampleCache.install.ts`, imported above the app in `main.tsx` - import order is execution
+order). Sample bytes are served **cache first** (a sample at a URL is immutable in practice,
+and a hit costs no network at all); sample MAPS are **network first** with a cache fallback,
+so a map that gains sounds upstream is not pinned to the first copy stored. Everything else
+passes through untouched. Storage is IndexedDB with a synchronous in-memory layer in front
+of it - the memory copy lands the moment the bytes exist, because the same sample asked for
+twice in quick succession is what a pattern does. No storage failure escapes the wrapper: a
+disabled or partitioned IndexedDB degrades to a session cache.
+
+Whether the CEF profile PERSISTS that storage across a Live restart is the one thing this
+cannot decide for itself; `sampleCacheStatus()` reports the entry count and the main
+device's status line names it, which is the spike.
+
+### 4j. Copying a path out of a device page
+
+A device that writes a file has to hand the user a way to reach it, and Max cannot open a
+file manager from a frozen device (`; max launchbrowser` was tried three ways and does
+nothing on Windows 11 - see DRAWER_OF_FAILED_IDEAS.md). So the page copies the path
+instead, and that turned out to be its own small tar pit.
+
+**A device page cannot confirm a copy.** `navigator.clipboard` needs a secure context and
+the page is `file://`; `document.execCommand("copy")` has no such gate but **returns true
+in jweb while putting nothing on the system clipboard**, and there is no read-back to
+catch it with (`readText()` needs the same secure context). A claim is therefore just a
+claim, and the first version of this shipped a status line that said "Path copied" over an
+empty clipboard.
+
+`src/app/shared/clipboard.ts` now treats the two paths differently by environment: outside
+jweb a successful write is believed, inside jweb nothing is. It attempts the copy anyway,
+then shows the path in a focused, pre-selected field and waits for the browser's own
+`copy` event - which fires only when a copy really happens, and is the only honest
+confirmation available. `copyMessage()` turns the outcome into one wording shared by the
+three devices that write files, and the "not copied" wording still names the folder, so
+the path is never unreachable.
+
+**Unverified as of 1.0.0**, because Export never produced a file to copy the folder of
+(§2d). TODO item 1.
 
 ## 5. Strudel Integration
 
@@ -392,7 +505,8 @@ When testing manually, ensure:
 │   │   ├── drums-midi/        # the Drums device: App.tsx, useStrudel.ts, DrumMapPanel.tsx
 │   │   ├── drums-sampler/     # the Drums Sampler: App.tsx, surface.ts
 │   │   ├── sample-browser/    # the sample browser: App.tsx, protocol.ts, surface.ts
-│   │   ├── superdough/        # the Superdough device: App.tsx, useSuperdoughRender.ts
+│   │   ├── strudel/           # the main Strudel device: App.tsx, useStrudelRender.ts
+│   │   ├── synth/             # the Synth device: App.tsx, useSynth.ts
 │   │   └── shared/            # shared engine and UI: PatternEditor.tsx, engine.worker.js,
 │   │                          #   useStrudelEngine.ts, webaudio.ts (decode + play), surface.ts
 │   ├── lib/
@@ -400,6 +514,8 @@ When testing manually, ensure:
 │   │   ├── render/            # the Export-audio bounce: offline.ts, wav.ts,
 │   │   │                      #   determinism.ts (renderPeriod), scope.ts (slider capture)
 │   │   ├── fx.ts              # the effects line -> parameter values (a recorder, not a parser)
+│   │   ├── sampleCache.ts     # the persistent fetch cache (+ sampleCache.install.ts)
+│   │   ├── sampleMaps.ts      # the prebaked sample-map list, shared by the sound devices
 │   │   ├── samples.ts         # sample map URL resolution and fetch logic
 │   │   └── strudelCode.ts     # bare mini vs code; wraps mini in note(...)
 │   └── max/
