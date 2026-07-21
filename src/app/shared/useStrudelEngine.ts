@@ -70,7 +70,16 @@ type EngineMessage =
 	| { t: "evalerr"; message: string }
 	| { t: "notes"; notes: EngineNote[] }
 	| { t: "voices"; voices: VoiceEvent[] }
-	| { t: "doughEvents"; doughEvents: { value: Record<string, any>; durMs: number; delayMs: number; cps: number; cycle: number }[] }
+	| {
+			t: "doughEvents";
+			doughEvents: {
+				value: Record<string, any>;
+				durMs: number;
+				delayMs: number;
+				cps: number;
+				cycle: number;
+			}[];
+	  }
 	| { t: "sliders"; specs: SliderSpec[] }
 	| { t: "clip"; notes: ClipNote[]; cycles: number }
 	| { t: "exporterr"; message: string }
@@ -124,7 +133,13 @@ export interface EngineOptions {
 	 * THE SUPERDOUGH SINK. When set, the engine routes each scheduled hap to this callback
 	 * (with all raw Strudel properties) for Jweb to play natively via the Web Audio API.
 	 */
-	superdoughSink?: (event: { value: Record<string, any>; durMs: number; delayMs: number; cps: number; cycle: number }) => void;
+	superdoughSink?: (event: {
+		value: Record<string, any>;
+		durMs: number;
+		delayMs: number;
+		cps: number;
+		cycle: number;
+	}) => void;
 }
 
 /** One `slider()` occurrence in the code: its default and range, in source order.
@@ -314,6 +329,20 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 			setClipAvailable(Number(avail) === 1);
 		});
 		bindInlet(IN.build, (stamp) => setAmxdBuild(String(stamp).split(" ")[0]));
+		/**
+		 * FOLLOW LIVE'S TRANSPORT (TODO item 0).
+		 *
+		 * Launching a clip on this device's track - or pressing Play, on a track that has
+		 * no clips to launch - starts the pattern, and stopping it stops the pattern. The
+		 * wrapper decides WHICH of those two signals applies (it can see the track; this
+		 * page cannot) and sends the resolved answer on the edges only.
+		 *
+		 * It is written into the Play PARAMETER rather than calling run()/hush() directly,
+		 * so there is still exactly one source of truth for "is this device playing": the
+		 * automatable parameter. Clicking Play in the device, an automation lane and a
+		 * launched clip all move the same control, and the last one to move it wins.
+		 */
+		bindInlet(IN.transport_play, (on) => setPlayParam(Number(on) === 1));
 		// Tempo must be bound BEFORE ui_ready goes out - the wrapper replies
 		// with the current tempo immediately, and the worker effect below runs
 		// after this one. The ref carries the value across that gap.

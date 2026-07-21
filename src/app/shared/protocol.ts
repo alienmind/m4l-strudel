@@ -30,6 +30,11 @@ export const IN = {
 	write_error: "write_error",
 	/** wrapper -> UI: Live 12 global scale. args: `<rootNote> <scaleName>`. */
 	scale: "scale",
+	/** wrapper -> UI: should this device be sequencing right now? args: `<0|1>`.
+	 *  Derived from the track's playing clip, or from `live_set is_playing` on a track
+	 *  with no clips (wrapper/device.ts, TODO item 0). The page writes it into the Play
+	 *  parameter, so automation and macros keep the last word. */
+	transport_play: "transport_play",
 } as const;
 
 /** UI -> device. */

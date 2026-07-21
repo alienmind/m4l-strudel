@@ -35,7 +35,7 @@
 // type, and the fx entry declares none of its own. Before it was listed here every
 // fx instance warned "no device mode" and fell back to midi - harmless but noisy,
 // and it ran the midi-only clip poll on a device with no clips to read.
-var MODES = ["midi", "sample-browser", "drums-sampler", "audio", "superdough"];
+var MODES = ["midi", "sample-browser", "drums-sampler", "audio", "strudel", "synth"];
 function resolveStrudelMode(): string {
 	for (var i = 0; i < jsarguments.length; i++) {
 		var a = String(jsarguments[i]);
@@ -54,11 +54,15 @@ var IS_SAMPLE_BROWSER = STRUDEL_MODE === "sample-browser";
  *  PAGE (0.9.9), so it touches no disk and needs no folder paths. It does not poll for
  *  clips either - it is an instrument with none. */
 var IS_DRUMS_SAMPLER = STRUDEL_MODE === "drums-sampler";
-/** The superdough render device: an instrument with no clips, no pitches (the code goes
+/** The main Strudel device: an instrument with no clips, no pitches (the code goes
  *  to superdough verbatim, so Live's scale means nothing to it) and no samples folder of
  *  its own. It wants NONE of the observers below - running the midi defaults on it was
  *  what produced the "no valid object set" noise in the Max console. */
-var IS_SUPERDOUGH = STRUDEL_MODE === "superdough";
+var IS_STRUDEL = STRUDEL_MODE === "strudel";
+/** The Synth: a superdough VALUE played by incoming MIDI. No clips, no pitches to resolve
+ *  (the value goes to superdough verbatim), no files, and nothing to start or stop - the
+ *  notes are the trigger. It wants none of the observers below either. */
+var IS_SYNTH = STRUDEL_MODE === "synth";
 /**
  * The devices that put files in the device folder, and therefore need to tell the page
  * where that folder is and to reveal it on request.
@@ -68,7 +72,7 @@ var IS_SUPERDOUGH = STRUDEL_MODE === "superdough";
  * bounces with Export. Anything that writes needs the `download` chain for [maxurl] and
  * belongs in here - the two travel together.
  */
-var HAS_DEVICE_FOLDER = IS_SAMPLE_BROWSER || IS_DRUMS_SAMPLER || IS_SUPERDOUGH;
+var HAS_DEVICE_FOLDER = IS_SAMPLE_BROWSER || IS_DRUMS_SAMPLER || IS_STRUDEL;
 
 post("strudel: mode " + STRUDEL_MODE + "\n");
 
@@ -122,9 +126,9 @@ var liveRoot: unknown = 0;
 var liveScale = "Major";
 
 function setupScaleObservers(): void {
-	// The superdough device never resolves a pitch - its code is full Strudel that goes
+	// The main Strudel device never resolves a pitch - its code is full Strudel that goes
 	// to superdough verbatim - so Live's scale is not its business.
-	if (IS_SUPERDOUGH) return;
+	if (IS_STRUDEL || IS_SYNTH) return;
 	// Recreate unconditionally: an observer built in a loading context is dead,
 	// and a `if (obs) return` guard would make that permanent.
 	try {
@@ -231,6 +235,90 @@ function sendFolder(): void {
  */
 
 /* ------------------------------------------------------------------ *
+ * Transport follow (TODO item 0)
+ *
+ * A sequencing device should start when the music starts. Until now the page's Play
+ * parameter was the only way in: pressing Play in Live, or launching a clip on the
+ * device's track, left the pattern silent until somebody also clicked the device.
+ *
+ * WHAT COUNTS AS "PLAYING" is the UNION of the two signals Live offers, because there
+ * is no single LOM property for it:
+ *
+ *   - `playing_slot_index >= 0` - a session clip is running on this device's track.
+ *   - `live_set is_playing` - the global transport is running.
+ *
+ * Either one starts the device; it stops when BOTH are false.
+ *
+ * The first version was cleverer and worse. It asked whether the track held any clip
+ * and, if it did, followed ONLY the clips - so a Drums Sampler on a track that merely
+ * HAD a clip in some slot sat silent when you pressed Play, because nothing had been
+ * launched. "Press Play, hear the instrument" is the rule every other device in Live
+ * has already taught the user, and quietly opting out of it reads as broken.
+ *
+ * The cost is the other direction: stopping a clip while the transport keeps running
+ * leaves the device playing. That is the honest reading of "the transport is running",
+ * and the Play parameter is still there to stop it by hand.
+ *
+ * Both are observed, never polled. The page receives `transport_play <0|1>` and
+ * writes its Play parameter, so an automation lane or a Rack macro still overrides
+ * it - the follow only acts on the EDGES of Live's own state.
+ * ------------------------------------------------------------------ */
+
+/** The devices that SEQUENCE, and therefore have something to start: everything except
+ *  the browser (auditions), fx (filters audio it is given) and the synth (its notes are
+ *  its trigger - there is no pattern to run). */
+var FOLLOWS_TRANSPORT =
+	STRUDEL_MODE !== "sample-browser" && STRUDEL_MODE !== "audio" && STRUDEL_MODE !== "synth";
+
+var songPlayObs: LiveAPI | null = null;
+var slotObs: LiveAPI | null = null;
+var songPlaying = 0;
+var playingSlot = -1;
+var lastFollow = -1;
+
+function setupTransportFollow(): void {
+	if (!FOLLOWS_TRANSPORT) return;
+	try {
+		songPlayObs = new LiveAPI(onSongPlaying, "live_set");
+		songPlayObs.property = "is_playing";
+		var track = ownTrack();
+		if (track && track.id) {
+			slotObs = new LiveAPI(onPlayingSlot, track.unquotedpath);
+			slotObs.property = "playing_slot_index";
+		}
+		post("strudel: transport follow on\n");
+	} catch (e) {
+		post("strudel: transport follow unavailable " + (e as Error).message + "\n");
+	}
+}
+
+function onSongPlaying(a: unknown[]): void {
+	if (a && a[0] == "is_playing") {
+		songPlaying = Number(a[1]) ? 1 : 0;
+		sendFollow(false);
+	}
+}
+
+function onPlayingSlot(a: unknown[]): void {
+	if (a && a[0] == "playing_slot_index") {
+		playingSlot = Number(a[1]);
+		sendFollow(false);
+	}
+}
+
+/**
+ * Push the follow state to the page, on change only (or unconditionally at ui_ready,
+ * where the page has heard nothing yet and "no change" would leave it uninitialised).
+ */
+function sendFollow(force: boolean): void {
+	if (!FOLLOWS_TRANSPORT) return;
+	var value = playingSlot >= 0 || songPlaying === 1 ? 1 : 0;
+	if (!force && value === lastFollow) return;
+	lastFollow = value;
+	outlet(0, "transport_play", value);
+}
+
+/* ------------------------------------------------------------------ *
  * Knob renaming (superdough, H.7 "dynamic renaming") - SPIKE
  *
  * The superdough device's eight native dials are a GENERIC pool ("S1".."S8"); the
@@ -246,7 +334,7 @@ function sendFolder(): void {
  * ------------------------------------------------------------------ */
 
 function knob_label(): void {
-	if (!IS_SUPERDOUGH) return;
+	if (!IS_STRUDEL) return;
 	var index = Number(arguments[0]);
 	var label = Array.prototype.slice.call(arguments, 1).join(" ");
 	if (!(index >= 0 && index < 8) || !label) return;
@@ -265,7 +353,17 @@ function knob_label(): void {
 			obj.message("_parameter_shortname", label);
 		}
 		var after = obj.getattr("_parameter_shortname");
-		post("strudel: knob_label " + varname + " '" + before + "' -> '" + after + "'" + (String(after) === label ? "" : " (rename did NOT take)") + "\n");
+		post(
+			"strudel: knob_label " +
+				varname +
+				" '" +
+				before +
+				"' -> '" +
+				after +
+				"'" +
+				(String(after) === label ? "" : " (rename did NOT take)") +
+				"\n",
+		);
 	} catch (e) {
 		post("strudel: knob_label " + varname + " error: " + (e as Error).message + "\n");
 	}
@@ -280,17 +378,21 @@ function onDeviceReady(): void {
 	startClipPoll();
 	setupScaleObservers();
 	setupBrowserObservers();
+	setupTransportFollow();
 }
 
 /** The UI announced itself; the packaged core has already sent mode/build/tempo. */
 function onUiReady(): void {
 	outlet(0, "mode", STRUDEL_MODE); // the real mode, not the packaged default
-	if (!IS_SUPERDOUGH) sendScale(); // the observers fired before this page existed
+	if (!IS_STRUDEL && !IS_SYNTH) sendScale(); // the observers fired before this page existed
 	sendQuant(); // ...same: the page cannot have heard the first one
 	sendFolder();
+	// The observers fired before this page existed, and "no change" would leave the
+	// page's Play parameter guessing - so this one is forced.
+	sendFollow(true);
 	lastClipAvail = -1;
 	// The Sampler is an instrument with no clips, so it does not poll for them (it shares
 	// the browser's samples-folder paths, not the MIDI devices' clip paths). The superdough
 	// device is an instrument with no clips either - probing one throws LiveAPI noise.
-	if (!HAS_DEVICE_FOLDER && !IS_SUPERDOUGH) checkClipAvailable();
+	if (!HAS_DEVICE_FOLDER && !IS_STRUDEL && !IS_SYNTH) checkClipAvailable();
 }
