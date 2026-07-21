@@ -80,7 +80,12 @@ export default [
 		ui: "superdough",
 		type: "instrument",
 		mode: "superdough",
-		chains: ["webaudio"],
+		// `download` is NOT about downloading here: it owns the [maxurl] object, and
+		// saveToFile's last phase places the verified .part over the destination with a
+		// file:// GET through it. Drop the chain and Export writes a .part that is never
+		// renamed, with no reply - so the promise never settles and the UI hangs on
+		// "Rendering...". Anything that writes a file needs this chain.
+		chains: ["webaudio", "download"],
 		unmatchedTo: "js",
 	},
 ];
