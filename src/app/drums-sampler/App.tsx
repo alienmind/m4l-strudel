@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Play, Square } from "lucide-react";
-import { onNote, uiReady } from "@m4l-jweb/bridge";
-import { decodeSample, playBuffer, type DecodedSample } from "../shared/webaudio";
+import { ArrowLeft, Download, FolderOpen, LayoutGrid, Play, Square } from "lucide-react";
+import { bindInlet, onNote, outlet, saveToFile, uiReady } from "@m4l-jweb/bridge";
+import { audioContext, decodeSample, playBuffer, type DecodedSample } from "../shared/webaudio";
+import { bootScope, compile, queryWindow, hapToVoice } from "../../max/shared/engine.mjs";
+import { renderPeriod } from "../../lib/render/determinism";
+import { audioBufferToWav } from "../../lib/render/wav";
+import { asSampleCode } from "../../lib/strudelCode";
+import { IN, OUT } from "./protocol";
 import { useStateSync, useWindow } from "@m4l-jweb/surface/react";
 import { cn } from "@/lib/utils";
 import { tokenAtCaret } from "@/lib/reference";
@@ -29,6 +34,10 @@ import surface, { INITIAL_BANK, INITIAL_TEXT } from "./surface";
  * change, far past the 16 the old Max-side [poly~] could hold.
  */
 const MAX_RESIDENT = 64;
+
+/** Longest bounce Export renders, in cycles - a pattern whose period does not settle is
+ *  capped here rather than rendering forever. */
+const MAX_EXPORT_CYCLES = 32;
 
 /**
  * MIDI note -> drum sound token, so a sequencer in front of the Sampler drives it (this is
@@ -69,6 +78,10 @@ export default function App() {
 
 	const [status, setStatus] = useState("Loading drum machines...");
 	const [showAbout, setShowAbout] = useState(false);
+	const [exporting, setExporting] = useState(false);
+	const [exportNote, setExportNote] = useState<string | null>(null);
+	/** The device's folder on disk, so "Show folder" has something to reveal. */
+	const [folder, setFolder] = useState<string | null>(null);
 
 	/** The drum-machine catalog (one big map, keys `Machine_sound`), loaded once. */
 	const [dmSounds, setDmSounds] = useState<Sound[]>([]);
@@ -223,6 +236,65 @@ export default function App() {
 	);
 
 	const engine = useStrudelEngine({ surface, initialText: INITIAL_TEXT, ctx: EMPTY_CTX, voiceSink });
+
+	/**
+	 * Export the pattern to a WAV next to the device.
+	 *
+	 * Rendered through THIS device's own sound path, not superdough: what it plays is
+	 * decoded AudioBuffers, so the bounce is the same buffers scheduled into an
+	 * OfflineAudioContext. That keeps the export honest (it is what you hear) and keeps
+	 * superdough - a large dependency this device does not otherwise carry - out of the
+	 * bundle. Decoded AudioBuffers are not bound to the context that decoded them, so
+	 * the ones already in memory can be reused directly.
+	 */
+	const exportAudio = useCallback(async () => {
+		if (exporting) return;
+		setExporting(true);
+		setExportNote("Compiling...");
+		try {
+			await bootScope();
+			const cps = engine.tempo / 60 / engine.beatsPerCycle;
+			const pat = await compile(asSampleCode(engine.text));
+			const cycles = renderPeriod(pat, cps, MAX_EXPORT_CYCLES);
+			const seconds = cycles / cps;
+			const sampleRate = audioContext().sampleRate;
+
+			// Every sound the pattern names has to be resident BEFORE rendering starts -
+			// an offline context runs faster than realtime and will not wait for a fetch.
+			setExportNote("Loading sounds...");
+			const haps = queryWindow(pat, 0, cycles, cps);
+			const voices = haps.map((h: unknown) => hapToVoice(h, cps)).filter(Boolean);
+			for (const v of voices) {
+				const r = resolve(v.s, v.bank);
+				if (r) await ensureLoaded(r.key, r.sound, v.n ?? 0);
+			}
+
+			setExportNote(`Rendering ${cycles} cycle${cycles === 1 ? "" : "s"}...`);
+			const ctx = new OfflineAudioContext(2, Math.ceil(seconds * sampleRate), sampleRate);
+			for (const v of voices) {
+				const r = resolve(v.s, v.bank);
+				const loaded = r && loadedRef.current.get(r.key);
+				if (!loaded) continue;
+				const src = ctx.createBufferSource();
+				src.buffer = loaded.sample.buffer;
+				src.playbackRate.value = v.rate ?? 1;
+				const amp = ctx.createGain();
+				amp.gain.value = (v.velocity ?? 100) / 127;
+				src.connect(amp);
+				amp.connect(ctx.destination);
+				src.start(Math.max(0, v.beginCycle / cps));
+			}
+			const wav = audioBufferToWav(await ctx.startRendering());
+			const name = `drums-export-${Date.now()}.wav`;
+			await withDeadline(saveToFile(name, wav), 30_000, `Saving ${name}`);
+			setExportNote(`Exported ${name} (${seconds.toFixed(1)}s) - Show folder to find it`);
+		} catch (e) {
+			setExportNote("Export failed: " + (e instanceof Error ? e.message : String(e)));
+		} finally {
+			setExporting(false);
+		}
+	}, [exporting, engine.tempo, engine.beatsPerCycle, engine.text, resolve, ensureLoaded]);
+
 	const helpWindow = useWindow(surface, "help");
 	const studioWindow = useWindow(surface, "studio");
 	const strudelWindow = useWindow(surface, "strudel");
@@ -236,6 +308,7 @@ export default function App() {
 	}, [bankName]);
 
 	useEffect(() => {
+		bindInlet(IN.device_folder, (path) => setFolder(String(path)));
 		// A MIDI note from a sequencer in front of the Sampler plays the bank's sound for
 		// that note (Drum Rack convention). Bound once; reads the current bank via refs.
 		onNote((pitch, velocity) => {
@@ -313,19 +386,20 @@ export default function App() {
 							icon={engine.live ? Square : Play}
 							active={engine.live}
 							onClick={() => (engine.live ? engine.hush() : engine.run())}
-							title={engine.live ? "Stop the pattern" : "Run the pattern"}
-						>
-							{engine.live ? "Stop" : "Run"}
-						</Button>
-						<Button onClick={() => setView("browse")} title="Browse the bank's sounds">
-							Sounds
-						</Button>
+							title={engine.live ? "Stop the pattern" : "Run the pattern (Ctrl+Enter)"}
+						/>
+						<Button
+							icon={Download}
+							onClick={exportAudio}
+							disabled={exporting}
+							active={exporting}
+							title="Export: render this pattern to a WAV next to the device, then drag it into a track"
+						/>
+						<Button icon={LayoutGrid} onClick={() => setView("browse")} title="Sounds: browse the bank" />
 						<HelpButton onOpen={helpWindow.open} />
 					</>
 				) : (
-					<Button className="ml-auto" onClick={() => setView("code")} title="Back to the code screen">
-						Back
-					</Button>
+					<Button className="ml-auto" icon={ArrowLeft} onClick={() => setView("code")} title="Back to the code screen" />
 				)}
 			</div>
 
@@ -392,10 +466,18 @@ export default function App() {
 			<div className="flex items-center gap-2">
 				<span
 					className={cn("flex-1 truncate text-[10px]", missing.length > 0 ? "text-amber-500" : "text-muted-foreground")}
-					title={view === "code" ? codeStatus : status}
+					title={exportNote ?? (view === "code" ? codeStatus : status)}
 				>
-					{view === "code" ? codeStatus : status}
+					{exportNote ?? (view === "code" ? codeStatus : status)}
 				</span>
+				{/* Enabled once something has been written: before the first Export the
+				    folder may not exist yet, and revealing nothing is worse than no button. */}
+				<Button
+					icon={FolderOpen}
+					onClick={() => outlet(OUT.reveal_folder)}
+					disabled={!exportNote || !folder}
+					title={folder ? "Show the device folder in Finder/Explorer" : "Export something first"}
+				/>
 			</div>
 		</div>
 	);

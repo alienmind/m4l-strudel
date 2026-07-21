@@ -1,4 +1,4 @@
-/**
+﻿/**
  * device.ts - the Strudel-specific half of the [js] glue.
  *
  * @m4l-jweb/wrapper already provides the lifecycle (bang/loadbang, the
@@ -59,11 +59,16 @@ var IS_DRUMS_SAMPLER = STRUDEL_MODE === "drums-sampler";
  *  its own. It wants NONE of the observers below - running the midi defaults on it was
  *  what produced the "no valid object set" noise in the Max console. */
 var IS_SUPERDOUGH = STRUDEL_MODE === "superdough";
-/** The devices that own a samples folder on disk (download chain). Only the browser
- *  now: it still writes each auditioned file, because a file on disk is what makes a
- *  row draggable into a track. The Sampler dropped out when its playback moved into
- *  the page. */
-var HAS_SAMPLES_FOLDER = IS_SAMPLE_BROWSER;
+/**
+ * The devices that put files in the device folder, and therefore need to tell the page
+ * where that folder is and to reveal it on request.
+ *
+ * It is no longer only about SAMPLES. The browser saves each auditioned file (a file on
+ * disk is what makes a row draggable into a track), and both pattern devices write WAV
+ * bounces with Export. Anything that writes needs the `download` chain for [maxurl] and
+ * belongs in here - the two travel together.
+ */
+var HAS_DEVICE_FOLDER = IS_SAMPLE_BROWSER || IS_DRUMS_SAMPLER || IS_SUPERDOUGH;
 
 post("strudel: mode " + STRUDEL_MODE + "\n");
 
@@ -204,7 +209,7 @@ function sendQuant(): void {
  * of [js] it stays whole.
  */
 function sendFolder(): void {
-	if (!HAS_SAMPLES_FOLDER) return;
+	if (!HAS_DEVICE_FOLDER) return;
 	var folder = deviceFolder(); // the packaged core's - the same resolution the download used
 	if (folder) outlet(0, "device_folder", folder);
 	else post("strudel: no device folder yet (unsaved patcher?) - the sample links will be off\n");
@@ -228,7 +233,7 @@ function sendFolder(): void {
  * disk, so by the time it is clicked the folder is there.
  */
 function reveal_folder(): void {
-	if (!HAS_SAMPLES_FOLDER) return;
+	if (!HAS_DEVICE_FOLDER) return;
 	var folder = deviceFolder();
 	if (!folder) {
 		post("strudel: cannot reveal folder - the patcher is unsaved, so it has no path yet\n");
@@ -303,5 +308,5 @@ function onUiReady(): void {
 	// The Sampler is an instrument with no clips, so it does not poll for them (it shares
 	// the browser's samples-folder paths, not the MIDI devices' clip paths). The superdough
 	// device is an instrument with no clips either - probing one throws LiveAPI noise.
-	if (!HAS_SAMPLES_FOLDER && !IS_SUPERDOUGH) checkClipAvailable();
+	if (!HAS_DEVICE_FOLDER && !IS_SUPERDOUGH) checkClipAvailable();
 }
