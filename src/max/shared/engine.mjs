@@ -80,6 +80,55 @@ export function setLiveScale(name) {
  * Core-only, so this stays loadable under node (the engine unit tests) as well as in
  * jweb's Chromium worker.
  */
+/**
+ * SLIDERS ARE THE DEVICE'S KNOBS. strudel.cc's `slider()` is a codemirror widget; here
+ * the same role is played by native live.dial parameters (S1..S8). Each compile records
+ * every slider the code declares, IN SOURCE ORDER, and the device maps slider N to knob
+ * N. `setSliderOverrides()` feeds the knob values back into the NEXT compile, so turning
+ * a dial re-evaluates the pattern with the new value.
+ *
+ * This lives here, next to the shim that defines `slider`, because compiling happens in
+ * the WORKER - and the worker is a separate module instance from anything on the page.
+ * (src/lib/render/scope.ts carries the same capture for the main-thread export renderer,
+ * which compiles in its own scope.)
+ */
+let captured = [];
+let overrides = [];
+
+/** Reset the capture. Call immediately before each compile. */
+export function beginSliderCapture() {
+	captured = [];
+}
+
+/** The sliders the last compile declared, in source order. */
+export function getSliderSpecs() {
+	return captured;
+}
+
+/** Values to substitute for the code's own defaults on the NEXT compile, by capture
+ *  order. `null` keeps the code's value - an untouched knob. */
+export function setSliderOverrides(values) {
+	overrides = Array.isArray(values) ? values : [];
+}
+
+function sliderValue(id, value, min, max) {
+	const v = Number(value);
+	// Deduped by id: a slider inside a register()'d combinator is called once per use,
+	// and it is still ONE slider.
+	let index = captured.findIndex((s) => s.id === id);
+	if (index < 0) {
+		index = captured.length;
+		captured.push({
+			id,
+			value: Number.isFinite(v) ? v : 0,
+			min: Number.isFinite(Number(min)) ? Number(min) : 0,
+			max: Number.isFinite(Number(max)) ? Number(max) : 1,
+		});
+	}
+	const override = overrides[index];
+	return override ?? (Number.isFinite(v) ? v : 0);
+}
+
 export function installReplShims() {
 	const g = globalThis;
 	const setCps = () => silence;
@@ -90,9 +139,8 @@ export function installReplShims() {
 	g.setGainCurve = g.setGainCurve ?? (() => {}); // real one is injected on the audio thread
 	// slider(value, min?, max?, step?); the transpiler rewrites the bare call to
 	// sliderWithID(id, value, ...), so the id-prefixed form is the one compiled code hits.
-	const sliderValue = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
-	g.slider = (value) => sliderValue(value);
-	g.sliderWithID = (_id, value) => sliderValue(value);
+	g.slider = (value, min, max) => sliderValue(`plain-${captured.length}`, value, min, max);
+	g.sliderWithID = (id, value, min, max) => sliderValue(String(id), value, min, max);
 	const passthrough = function () {
 		return this;
 	};

@@ -71,6 +71,7 @@ type EngineMessage =
 	| { t: "notes"; notes: EngineNote[] }
 	| { t: "voices"; voices: VoiceEvent[] }
 	| { t: "doughEvents"; doughEvents: { value: Record<string, any>; durMs: number; delayMs: number; cps: number; cycle: number }[] }
+	| { t: "sliders"; specs: SliderSpec[] }
 	| { t: "clip"; notes: ClipNote[]; cycles: number }
 	| { t: "exporterr"; message: string }
 	| { t: "phase"; cycle: number }
@@ -126,6 +127,15 @@ export interface EngineOptions {
 	superdoughSink?: (event: { value: Record<string, any>; durMs: number; delayMs: number; cps: number; cycle: number }) => void;
 }
 
+/** One `slider()` occurrence in the code: its default and range, in source order.
+ *  The id is the transpiler's widget id; only ORDER matters to a device. */
+export interface SliderSpec {
+	id: string;
+	value: number;
+	min: number;
+	max: number;
+}
+
 export interface EngineState {
 	text: string;
 	setText: (t: string) => void;
@@ -178,6 +188,12 @@ export interface EngineState {
 	/** Live's transport tempo in BPM (120 until the first tempo message). Read by the
 	 *  audio-export path to render a bounce at the right cps. */
 	tempo: number;
+	/** Every `slider()` the last compile declared, in source order. Empty for code that
+	 *  uses none. A device maps these onto its native knobs. */
+	sliderSpecs: SliderSpec[];
+	/** Substitute values for those sliders, by source order (`null` = keep the code's
+	 *  own). Recompiles the current pattern with them. */
+	setSliderValues: (values: (number | null)[]) => void;
 }
 
 export function useStrudelEngine(opts: EngineOptions): EngineState {
@@ -190,6 +206,11 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 	voiceSinkRef.current = opts.voiceSink;
 	const superdoughSinkRef = useRef(opts.superdoughSink);
 	superdoughSinkRef.current = opts.superdoughSink;
+	/** What the last compile declared. The device turns these into knobs. */
+	const [sliderSpecs, setSliderSpecs] = useState<SliderSpec[]>([]);
+	const setSliderValues = useCallback((values: (number | null)[]) => {
+		workerRef.current?.postMessage({ t: "sliders", values });
+	}, []);
 	const [playParam, setPlayParam] = useParam(surface, "play");
 	/**
 	 * THE PATTERN, from the `code` state slot - not component state.
@@ -273,7 +294,14 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 	/** Everything a mini-notation token needs to become a pitch. Both paths - the
 	 *  live engine and the clip exporter - resolve tokens through this, which is
 	 *  what keeps them agreeing. */
-	const noteCtx = useMemo<NoteContext>(() => ({ conv, octaveOffset, ...ctx }), [conv, octaveOffset, ctx]);
+	// Keyed on the ctx's CONTENTS, not its identity. A device that passes an inline
+	// `ctx={{}}` hands us a new object on every render, and noteCtx is a dependency of
+	// the recompile effect below - so identity-keying made the engine re-evaluate the
+	// pattern on every keystroke, which is exactly what Ctrl+Enter exists to avoid.
+	// The object is a handful of scalars; stringifying it is cheaper than the bug.
+	const ctxKey = JSON.stringify(ctx ?? {});
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	const noteCtx = useMemo<NoteContext>(() => ({ conv, octaveOffset, ...ctx }), [conv, octaveOffset, ctxKey]);
 
 	// The clip exporter reads these inside a worker callback; a ref keeps that
 	// callback from having to be rebuilt (and the worker restarted) on every edit.
@@ -429,6 +457,8 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 				counters.sent += m.voices.length;
 				const play = voiceSinkRef.current;
 				if (play) for (const voice of m.voices) play(voice);
+			} else if (m.t === "sliders") {
+				setSliderSpecs(m.specs);
 			} else if (m.t === "doughEvents") {
 				counters.sent += m.doughEvents.length;
 				const play = superdoughSinkRef.current;
@@ -576,5 +606,7 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 		amxdBuild,
 		noteCtx,
 		tempo,
+		sliderSpecs,
+		setSliderValues,
 	};
 }

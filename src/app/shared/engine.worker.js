@@ -46,6 +46,9 @@ import {
 	exportNotes,
 	patternCycles,
 	setLiveScale,
+	beginSliderCapture,
+	getSliderSpecs,
+	setSliderOverrides,
 } from "../../max/shared/engine.mjs";
 import { LiveTransport } from "../../max/shared/transport.mjs";
 import { asStrudelCode, asSampleCode } from "../../lib/strudelCode";
@@ -72,6 +75,8 @@ let sink = "note";
 let livePlaying = false;
 let lastBeats = 0;
 let engineCtx = null;
+/** The last `code` message, replayed when a knob changes a slider value. */
+let lastCode = null;
 const free = { timer: null, beats: 0, last: 0 };
 
 function startFreeRun() {
@@ -194,17 +199,28 @@ onmessage = async (e) => {
 		else if (!free.timer) transport.tick(0, m.beats, bpm); // idle: flush path
 	} else if (m.t === "tempo") {
 		if (m.bpm > 0) bpm = m.bpm;
+	} else if (m.t === "sliders") {
+		// A knob moved: re-evaluate with the new values. `code` is unchanged, so this is
+		// a recompile of the SAME text - the pattern's slider() calls simply read the
+		// overrides instead of their own defaults.
+		setSliderOverrides(m.values);
+		if (lastCode !== null) onmessage({ data: { ...lastCode, t: "code" } });
 	} else if (m.t === "code") {
 		try {
 			setLiveScale(m.liveScale);
 			engineCtx = m.ctx;
+			lastCode = m;
 			sink = m.sink === "voice" ? "voice" : (m.sink === "superdough" ? "superdough" : "note");
+			// Fresh capture per compile: the specs describe THIS pattern, in source order,
+			// and a stale list would map knobs to sliders that no longer exist.
+			beginSliderCapture();
 			// The sampler wraps bare mini as s("...") (sample names); the MIDI devices wrap it
 			// as note("...") with tokens resolved to pitches.
 			pattern = await compile(sink === "voice" ? asSampleCode(m.code) : asStrudelCode(m.code, m.ctx));
 			running = true;
 			syncClockMode();
 			postMessage({ t: "evalok" });
+			postMessage({ t: "sliders", specs: getSliderSpecs() });
 		} catch (err) {
 			postMessage({ t: "evalerr", message: String((err && err.message) || err) });
 		}
