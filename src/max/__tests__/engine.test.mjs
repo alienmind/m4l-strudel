@@ -54,7 +54,7 @@ describe("the sampler voice sink: haps keyed by sample name, no pitch", () => {
 
 	test("s() names survive with no drum map - the pitchless path", async () => {
 		// hapToNote would DROP these (no pitch); hapToVoice keeps them by name. Commas
-		// layer, so bd/hh/sd all land in one cycle - the polyphony the [poly~] gives free.
+		// layer, so bd/hh/sd all land in one cycle - the polyphony Web Audio gives free.
 		const got = await voices('s("bd sd, hh*2")');
 		expect(got.map((v) => v.s).sort()).toEqual(["bd", "hh", "hh", "sd"]);
 	});
@@ -84,5 +84,29 @@ describe("the sampler voice sink: haps keyed by sample name, no pitch", () => {
 
 	test("a hap that names no sample is null, not a voice", async () => {
 		expect(await voices('note("c3")')).toEqual([null]);
+	});
+});
+
+describe("repl eval shims: strudel.cc helpers do not throw headless", () => {
+	beforeAll(() => bootScope());
+
+	test("slider() returns its default, baked into the control", async () => {
+		// The transpiler rewrites slider(...) -> sliderWithID(id, ...); both must exist,
+		// and both must return the numeric default so the pattern still compiles to sound.
+		const pat = await compile('note("c3").lpf(slider(500, 100, 1000))');
+		const [hap] = queryWindow(pat, 0, 1, 0.5);
+		expect(hap.value.cutoff).toBe(500);
+	});
+
+	test("setcps / setCpm are valid no-op statements", async () => {
+		// A pattern copied off strudel.cc often opens with setcps(0.5) or setCpm(120);
+		// Live owns tempo, so these capture-and-return-silence rather than throwing.
+		const pat = await compile('setcps(0.5)\nnote("c3 e3")');
+		expect(queryWindow(pat, 0, 1, 0.5).length).toBe(2);
+	});
+
+	test("a visual chain (_scope/.fill) passes the pattern through", async () => {
+		const pat = await compile('note("c3")._scope()');
+		expect(queryWindow(pat, 0, 1, 0.5).length).toBe(1);
 	});
 });

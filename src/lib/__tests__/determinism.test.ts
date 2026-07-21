@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeAll } from "vitest";
-// @ts-expect-error - engine.mjs is untyped (raw submodule-facing JS)
 import { bootScope, compile } from "@/max/shared/engine.mjs";
 import { isDeterministic, renderPeriod } from "@/lib/render/determinism";
 
