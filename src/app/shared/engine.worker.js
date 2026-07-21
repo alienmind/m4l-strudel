@@ -54,9 +54,10 @@ let pattern = null;
 let running = false;
 let bpm = 120;
 /**
- * WHERE THE HAPS GO: "note" (the MIDI devices - out to the midiout chain via sendNote)
- * or "voice" (the code-driven Sampler - each hap's sample name to a [poly~] voice). Set
- * per compile from the `code` message, because it belongs to the device, not the tick.
+ * WHERE THE HAPS GO: "note" (the MIDI devices - out to the midiout chain via sendNote),
+ * "voice" (the code-driven Sampler - each hap's sample name, played in the page), or
+ * "superdough" (the Superdough device - the whole hap value, into the real superdough).
+ * Set per compile from the `code` message, because it belongs to the device, not the tick.
  */
 let sink = "note";
 
@@ -128,7 +129,7 @@ const transport = new LiveTransport({
 			return;
 		}
 		if (sink === "voice") {
-			// The Sampler sink: each hap names a sample, played on a [poly~] voice.
+			// The Sampler sink: each hap names a sample, played in the page.
 			const voices = [];
 			for (const hap of haps) {
 				const voice = hapToVoice(hap, cps);
@@ -154,6 +155,10 @@ const transport = new LiveTransport({
 					value: hap.value ?? {},
 					durMs: Math.max(5, (durCycles / cps) * 1000),
 					delayMs: transport.delayMs(begin, nowBeats, bpm),
+					// superdough wants these for tempo-synced effects (.delay, phaser)
+					// and cycle-relative modulation; without them it assumes 0.5 cps.
+					cps,
+					cycle: begin,
 				});
 			}
 			if (doughEvents.length) postMessage({ t: "doughEvents", doughEvents });

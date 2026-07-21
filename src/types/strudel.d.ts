@@ -75,6 +75,8 @@ declare module "superdough" {
 	export function registerSynthSounds(): void;
 	/** Map the 0..1 gain value through a curve (superdough global state). */
 	export function setGainCurve(fn: (x: number) => number): void;
+	/** The module-level audio context singleton (created on first get). */
+	export function getAudioContext(): AudioContext;
 	/** Swap the module-level audio context singleton (null re-defaults on next get). */
 	export function setAudioContext(context: BaseAudioContext | null): void;
 	/** Swap the output controller singleton. */

@@ -5,7 +5,7 @@ import surface from "./surface";
 /**
  * The Full Studio window (surface.ts declares `entry: "StudioWindow"`). An editor, not
  * an engine: it binds the `code` slot and nothing else - the DEVICE view owns the
- * conductor, so exactly one thing renders no matter how many views are open.
+ * engine and the audio, so exactly one thing plays no matter how many views are open.
  */
 export default function Studio() {
 	const [code, setCode] = useStateSync(surface, "code");

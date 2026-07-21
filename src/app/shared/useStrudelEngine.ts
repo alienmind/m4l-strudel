@@ -70,7 +70,7 @@ type EngineMessage =
 	| { t: "evalerr"; message: string }
 	| { t: "notes"; notes: EngineNote[] }
 	| { t: "voices"; voices: VoiceEvent[] }
-	| { t: "doughEvents"; doughEvents: { value: Record<string, any>; durMs: number; delayMs: number }[] }
+	| { t: "doughEvents"; doughEvents: { value: Record<string, any>; durMs: number; delayMs: number; cps: number; cycle: number }[] }
 	| { t: "clip"; notes: ClipNote[]; cycles: number }
 	| { t: "exporterr"; message: string }
 	| { t: "phase"; cycle: number }
@@ -113,8 +113,8 @@ export interface EngineOptions {
 	warning?: string | null;
 	/**
 	 * THE SAMPLER SINK. When set, the engine routes each scheduled hap to this callback
-	 * (a [poly~] voice) INSTEAD of out to the midiout chain via sendNote - the code-driven
-	 * Sampler plays pads by sample name. Its presence flips the worker's `sink` to "voice",
+	 * (which plays the named sample in the page) INSTEAD of out to the midiout chain via
+	 * sendNote - the code-driven Sampler. Its presence flips the worker's `sink` to "voice",
 	 * so a hap that names a sample (`s("bd")`) survives instead of being dropped for having
 	 * no pitch. Absent for the MIDI devices, which stay note-shaped.
 	 */
@@ -123,7 +123,7 @@ export interface EngineOptions {
 	 * THE SUPERDOUGH SINK. When set, the engine routes each scheduled hap to this callback
 	 * (with all raw Strudel properties) for Jweb to play natively via the Web Audio API.
 	 */
-	superdoughSink?: (event: { value: Record<string, any>; durMs: number; delayMs: number }) => void;
+	superdoughSink?: (event: { value: Record<string, any>; durMs: number; delayMs: number; cps: number; cycle: number }) => void;
 }
 
 export interface EngineState {
@@ -175,6 +175,9 @@ export interface EngineState {
 	amxdBuild: string;
 	/** The resolved NoteContext, for a device that needs to read it back. */
 	noteCtx: NoteContext;
+	/** Live's transport tempo in BPM (120 until the first tempo message). Read by the
+	 *  audio-export path to render a bounce at the right cps. */
+	tempo: number;
 }
 
 export function useStrudelEngine(opts: EngineOptions): EngineState {
@@ -185,6 +188,8 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 	const sink = opts.voiceSink ? "voice" : opts.superdoughSink ? "superdough" : "note";
 	const voiceSinkRef = useRef(opts.voiceSink);
 	voiceSinkRef.current = opts.voiceSink;
+	const superdoughSinkRef = useRef(opts.superdoughSink);
+	superdoughSinkRef.current = opts.superdoughSink;
 	const [playParam, setPlayParam] = useParam(surface, "play");
 	/**
 	 * THE PATTERN, from the `code` state slot - not component state.
@@ -426,7 +431,7 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 				if (play) for (const voice of m.voices) play(voice);
 			} else if (m.t === "doughEvents") {
 				counters.sent += m.doughEvents.length;
-				const play = opts.superdoughSink;
+				const play = superdoughSinkRef.current;
 				if (play) for (const ev of m.doughEvents) play(ev);
 			} else if (m.t === "clip") {
 				// Cycles -> beats. One cycle occupies `beatsPerCycle` of Live's beats -
@@ -570,5 +575,6 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 		debug,
 		amxdBuild,
 		noteCtx,
+		tempo,
 	};
 }

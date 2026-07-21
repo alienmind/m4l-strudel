@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Play, Square, SlidersHorizontal } from "lucide-react";
+import { Download, Play, Square, SlidersHorizontal } from "lucide-react";
 import { useNativePanel, useParam, useStateSync, useWindow } from "@m4l-jweb/surface/react";
 import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
@@ -12,12 +12,13 @@ import surface from "./surface";
 /**
  * Strudel Superdough - an instrument. Write ANY Strudel - multi-line `$:`, samples,
  * synths, orbits, superdough's real effects - and it becomes the track's audio: the
- * pattern is rendered OFFLINE with the real superdough into a WAV, and Max loops it
- * locked to Live's transport, crossfading to each fresh render at the loop boundary.
+ * real superdough runs LIVE in this page and jweb~ routes its Web Audio output
+ * straight into the track's signal path. Edits are audible immediately; there is no
+ * render, no loop boundary to wait for, and a random pattern is simply random.
  *
- * What that buys and costs is said in the UI, not hidden: edits become audible at the
- * next loop boundary (render-ahead latency), and a random pattern cannot be honestly
- * looped - it drops to rolling mode, one realization per cycle, with a visible notice.
+ * EXPORT is the one place the offline renderer survives: it bounces the pattern to a
+ * WAV next to the device (see useSuperdoughRender's exportAudio). The old
+ * render-and-loop pipeline it descends from is parked in doc/DRAWER_OF_FAILED_IDEAS.md.
  *
  * Same 169px budget as every device: header (14) + editor (flex) + notice rows +
  * bottom status row.
@@ -86,6 +87,15 @@ export default function App() {
 					{s.live ? "Stop" : "Run"}
 				</Button>
 				<Button
+					icon={Download}
+					onClick={s.exportAudio}
+					disabled={s.exporting}
+					active={s.exporting}
+					title="Render this pattern to a WAV next to the device - drag it from the device folder into a track (Export audio / bounce)"
+				>
+					{s.exporting ? "..." : "Export"}
+				</Button>
+				<Button
 					icon={SlidersHorizontal}
 					onClick={() => setShowTransport(true)}
 					title="Show the native controls panel - the mappable Play/Stop and the eight slider knobs (S1..S8). The native Back switch returns."
@@ -106,7 +116,13 @@ export default function App() {
 
 			{error && <span className="truncate text-[10px] leading-none text-destructive">{error}</span>}
 
-			{s.samplesNote && !error && (
+			{s.exportNote && (
+				<span className="truncate text-[10px] leading-none text-muted-foreground" title={s.exportNote}>
+					{s.exportNote}
+				</span>
+			)}
+
+			{s.samplesNote && !error && !s.exportNote && (
 				<span className="truncate text-[10px] leading-none text-amber-500" title={s.samplesNote}>
 					{s.samplesNote}
 				</span>
