@@ -483,9 +483,7 @@ export default function App() {
 							? "Show the samples folder in Finder/Explorer"
 							: "Audition a sample first - the folder appears once something is downloaded"
 					}
-				>
-					Show folder
-				</Button>
+				/>
 			</div>
 		</div>
 	);
