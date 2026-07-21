@@ -7,9 +7,11 @@ compare serialized haps. Strudel's rand family disagrees across two queries; a
 deterministic pattern serializes identically. The source-regex is the belt, the query
 equality is the suspenders.
 
-A non-deterministic verdict does NOT kill rendering - the conductor drops to rolling
-mode (render one cycle ahead, each cycle is one realization of the dice) and says so in
-the UI.
+Live playback does not care: superdough plays each cycle as it comes, dice and all. This
+matters for the EXPORT bounce, where a random pattern cannot be represented honestly by
+any finite loop - one roll of the dice gets frozen into the file. `renderPeriod()` is the
+part still used on every export; `isDeterministic()` is what an export UI should ask
+before promising the WAV repeats.
 */
 
 /** The slice of a Strudel Hap this check reads. Kept minimal - engine.mjs is untyped. */
