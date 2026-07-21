@@ -1,7 +1,51 @@
 # Changelog
 
-High-level history of m4l-strudel, grouped by milestone release. This is a 0.x
-project, so each minor version is a major milestone. Newest first.
+High-level history of m4l-strudel, grouped by milestone release. Up to 1.0.0 each
+minor version was a milestone of its own. Newest first.
+
+## 1.0.0 - 2026-07-21
+
+The v1.0.0 backlog, cleared: the transport drives the devices, samples survive going
+offline, there is a MIDI-played synth, and the main device gets its plain name.
+
+- **`alienmind-strudel-superdough` is now `alienmind-strudel`.** The engine is still
+  superdough; the DEVICE is the whole language, so it carries the plain name. Every
+  parameter and state slot name is unchanged. An existing Live set embeds its own copy
+  of the old device and keeps working - re-add the device to move a set onto the new
+  name.
+- **No Instrument Racks in the distribution.** Both `.adg` presets are withdrawn: a Live
+  rack embeds a copy of every device it holds, so a shipped rack is a snapshot that goes
+  stale the moment a device is rebuilt. The devices are the distribution.
+- **The transport starts the device.** Launching a clip on the track starts the pattern
+  and stopping it stops the pattern; on a track with no clips, Live's global Play does
+  the same. The wrapper resolves which signal applies and the page writes it into the
+  automatable Play parameter, so a click, an automation lane and a launched clip all move
+  one control.
+- **Offline sample cache.** Every sample and sample map fetched by any device is stored
+  in the page (IndexedDB, with a session fallback) and served cache first, so a set
+  reopened with no network still plays the sounds it played before.
+- **Strudel Synth** (`alienmind-strudel-synth`): one superdough sound - `s("sawtooth")
+  .lpf(800).room(.3)`, a value rather than a pattern - played by the track's MIDI. The
+  eight native slider knobs work here too. Note length is decided at trigger time
+  (superdough schedules a whole envelope up front), so holding a key does not hold the
+  note.
+- **Clipboard copy stopped lying.** "Copy folder path" reported success on a page that
+  had copied nothing - `execCommand("copy")` returns true in jweb and writes nothing, and
+  a `file://` page cannot read the clipboard back to check. No claim is trusted inside
+  jweb now: the path is shown pre-selected and the browser's own `copy` event is the
+  confirmation. **Still unverified in Live** - see below.
+- **Shared device chrome.** The top-bar buttons (Run/Stop, Clip, Controls, Export) are one
+  shared component each, icon-only on every device, so a control learnt on one device is
+  the same control on the next. The slider row no longer draws a scrollbar over itself.
+- **`pnpm build` cleans `dist/` first.** It never did, so a renamed device left its old
+  `.amxd` behind and `install:device` faithfully copied the ghost into the User Library.
+
+**Known issues in 1.0.0**
+
+- **Export fails on the Strudel device**: `could not place save: -1 bytes at destination`.
+  The render completes; the file never lands. Tracked as TODO item 0.
+- **The clipboard copy is untested**, because the Copy button only appears once Export has
+  written something. TODO item 1.
 
 ## 0.9.5 - 2026-07-19
 
