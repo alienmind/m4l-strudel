@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderOpen, Play, Square } from "lucide-react";
-import { bindInlet, fetchToFile, loadSample, onNote, outlet, playVoice, uiReady } from "@m4l-jweb/bridge";
+import { Play, Square } from "lucide-react";
+import { onNote, uiReady } from "@m4l-jweb/bridge";
+import { decodeSample, playBuffer, type DecodedSample } from "../shared/webaudio";
 import { useStateSync, useWindow } from "@m4l-jweb/surface/react";
 import { cn } from "@/lib/utils";
 import { tokenAtCaret } from "@/lib/reference";
@@ -9,7 +10,6 @@ import {
 	banksOf,
 	isPlayable,
 	loadSampleMap,
-	localPath,
 	soundKey,
 	soundToken,
 	variationUrl,
@@ -22,14 +22,13 @@ import { HelpButton } from "../shared/HelpButton";
 import { PatternEditor } from "../shared/PatternEditor";
 import { useStrudelEngine, type VoiceEvent } from "../shared/useStrudelEngine";
 import surface, { INITIAL_BANK, INITIAL_TEXT } from "./surface";
-import { IN, OUT } from "./protocol";
 
 /**
- * The instrument's buffer slots, as the manifest names them (loadSample takes the NAME,
- * playVoice takes the 0-based INDEX). Sixteen, matching the 16-voice [poly~].
+ * How many decoded samples stay resident before the least-recently-used one is
+ * dropped. Drum hits decode to a few hundred kB each; 64 is a full machine and
+ * change, far past the 16 the old Max-side [poly~] could hold.
  */
-const SLOT_NAMES = Array.from({ length: 16 }, (_, i) => `slot${i + 1}`);
-const NSLOTS = SLOT_NAMES.length;
+const MAX_RESIDENT = 64;
 
 /**
  * MIDI note -> drum sound token, so a sequencer in front of the Sampler drives it (this is
@@ -43,11 +42,9 @@ const NOTE_SOUND: Record<number, string> = {
 	52: "cr", 53: "rd", 54: "tb", 55: "cr", 56: "cb", 57: "cr", 59: "rd",
 };
 
-/** What a slot holds once its sample is read in. `lastUsed` drives LRU eviction. */
+/** A resident sound: the decoded audio, and when it last played (LRU eviction). */
 interface Loaded {
-	slot: number;
-	durationMs: number;
-	channels: number;
+	sample: DecodedSample;
 	lastUsed: number;
 }
 
@@ -62,7 +59,8 @@ interface Loaded {
  * the same bank. Sounds are keyed by NAME; there are no per-pad MIDI notes to configure.
  *
  * TWO SCREENS: CODE (pattern + bank picker + Run) and SOUNDS (the bank's sounds, to
- * audition). A name -> slot allocator keeps up to 16 distinct sounds resident, LRU past 16.
+ * audition). Samples decode into page AudioBuffers and play through jweb~ (the
+ * `webaudio` chain) - no Max [poly~], no disk. LRU keeps MAX_RESIDENT sounds decoded.
  */
 export default function App() {
 	const [view, setView] = useState<"code" | "browse">("code");
@@ -70,21 +68,15 @@ export default function App() {
 	const bankName = typeof bank === "string" && bank ? bank : INITIAL_BANK;
 
 	const [status, setStatus] = useState("Loading drum machines...");
-	const [folder, setFolder] = useState<string | null>(null);
-	const [downloaded, setDownloaded] = useState(false);
 	const [showAbout, setShowAbout] = useState(false);
 
 	/** The drum-machine catalog (one big map, keys `Machine_sound`), loaded once. */
 	const [dmSounds, setDmSounds] = useState<Sound[]>([]);
 
-	/** Paths already fetched this session, so a re-reference does not re-download. */
-	const onDisk = useRef(new Set<string>());
-	/** key -> the slot it is loaded in. The occupancy source of truth. */
+	/** key -> its decoded sample. The occupancy source of truth. */
 	const loadedRef = useRef<Map<string, Loaded>>(new Map());
 	/** key -> in-flight load, so a repeated hap does not fire a second download. */
 	const loadingRef = useRef<Set<string>>(new Set());
-	/** slot index -> the key that owns it (reserved the moment a load starts). */
-	const slotOwnerRef = useRef<(string | null)[]>(Array(NSLOTS).fill(null));
 	/** A monotonic clock for LRU. */
 	const seq = useRef(0);
 	const [, setLoadedTick] = useState(0);
@@ -140,20 +132,15 @@ export default function App() {
 	const play = useCallback(
 		(loaded: Loaded, key: string, velocity: number, rate: number) => {
 			loaded.lastUsed = ++seq.current;
-			playVoice({ slot: loaded.slot, rate, velocity, durationMs: loaded.durationMs, channels: loaded.channels });
+			playBuffer(loaded.sample.buffer, { rate, gain: velocity / 127 });
 			flash(key);
 		},
 		[flash],
 	);
 
-	/** Reserve a slot: a free one, or the least-recently-used loaded slot. -1 only when all
-	 *  16 are reserved by in-flight loads (nothing evictable) - a rare transient. */
-	const allocSlot = useCallback((key: string): number => {
-		const free = slotOwnerRef.current.indexOf(null);
-		if (free >= 0) {
-			slotOwnerRef.current[free] = key;
-			return free;
-		}
+	/** Past MAX_RESIDENT decoded sounds, drop the least recently played one. */
+	const evictLru = useCallback(() => {
+		if (loadedRef.current.size < MAX_RESIDENT) return;
 		let lruKey: string | null = null;
 		let lruUsed = Infinity;
 		for (const [k, l] of loadedRef.current) {
@@ -162,15 +149,11 @@ export default function App() {
 				lruKey = k;
 			}
 		}
-		if (lruKey === null) return -1;
-		const slot = loadedRef.current.get(lruKey)!.slot;
-		loadedRef.current.delete(lruKey);
-		slotOwnerRef.current[slot] = key;
-		return slot;
+		if (lruKey !== null) loadedRef.current.delete(lruKey);
 	}, []);
 
-	/** Fetch (first reference, cached) and read a sound into a slot; return the loaded slot,
-	 *  or null while it is still loading / on a failure the status line explains. */
+	/** Fetch (first reference, cached) and decode a sound; return it resident, or null
+	 *  while it is still loading / on a failure the status line explains. */
 	const ensureLoaded = useCallback(
 		async (key: string, sound: Sound, n: number): Promise<Loaded | null> => {
 			const already = loadedRef.current.get(key);
@@ -183,41 +166,30 @@ export default function App() {
 					reportMissing(`${sound.name} (not WAV/AIFF)`);
 					return null;
 				}
-				const path = localPath(sound, n, DRUM_MACHINES_URL);
-				if (!onDisk.current.has(path)) {
-					setStatus(`Fetching ${sound.name}...`);
-					await withDeadline(
-						fetchToFile(url, path, (done, total) =>
-							setStatus(
-								total > 0
-									? `Fetching ${sound.name} - ${Math.round((done / total) * 100)}%`
-									: `Fetching ${sound.name} - ${Math.round(done / 1024)} kB`,
-							),
-						),
-						30_000,
-						`Download of ${sound.name}`,
-					);
-					onDisk.current.add(path);
-					setDownloaded(true);
-				}
-				const slot = allocSlot(key);
-				if (slot < 0) return null;
-				const meta = await loadSample(SLOT_NAMES[slot], path);
-				const loaded: Loaded = { slot, durationMs: meta.durationMs, channels: meta.channels, lastUsed: ++seq.current };
+				setStatus(`Fetching ${sound.name}...`);
+				// Deadlined, so no network cannot leave the status on "Fetching..." forever.
+				const bytes = await withDeadline(
+					fetch(url).then((r) => {
+						if (!r.ok) throw new Error(`HTTP ${r.status}`);
+						return r.arrayBuffer();
+					}),
+					30_000,
+					`Download of ${sound.name}`,
+				);
+				evictLru();
+				const loaded: Loaded = { sample: await decodeSample(bytes), lastUsed: ++seq.current };
 				loadedRef.current.set(key, loaded);
 				bumpLoaded();
 				setStatus(`Loaded ${sound.name}`);
 				return loaded;
 			} catch (err) {
-				const i = slotOwnerRef.current.indexOf(key);
-				if (i >= 0) slotOwnerRef.current[i] = null;
 				setStatus(`Error loading ${sound.name}: ${message(err)}`);
 				return null;
 			} finally {
 				loadingRef.current.delete(key);
 			}
 		},
-		[allocSlot, bumpLoaded, reportMissing],
+		[evictLru, bumpLoaded, reportMissing],
 	);
 
 	/** Trigger a sound by name: play it if resident, else background-load it (sounds from the
@@ -264,7 +236,6 @@ export default function App() {
 	}, [bankName]);
 
 	useEffect(() => {
-		bindInlet(IN.device_folder, (path) => setFolder(String(path)));
 		// A MIDI note from a sequencer in front of the Sampler plays the bank's sound for
 		// that note (Drum Rack convention). Bound once; reads the current bank via refs.
 		onNote((pitch, velocity) => {
@@ -425,14 +396,6 @@ export default function App() {
 				>
 					{view === "code" ? codeStatus : status}
 				</span>
-				<Button
-					icon={FolderOpen}
-					onClick={() => outlet(OUT.reveal_folder)}
-					disabled={!downloaded || !folder}
-					title={downloaded ? "Show the samples folder in Finder/Explorer" : "Play or audition a sound first"}
-				>
-					Show folder
-				</Button>
 			</div>
 		</div>
 	);

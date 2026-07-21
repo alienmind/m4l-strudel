@@ -14,10 +14,11 @@
  *
  * WHAT IS NO LONGER OURS: the [node.script] bootstrap, and the fan-out of tick and
  * tempo to outlet 1 that fed it. The sample browser has no process of its own since
- * m4l-jweb 0.6.0 - it fetches its catalog in the page, downloads through the
- * `download` chain and previews through the `samples` chain - and outlet 1 now
- * belongs to the packaged wrapper, which answers `buffer_load` and `fetch_to_file`
- * on it. Writing to it by hand from here would be talking over the library.
+ * m4l-jweb 0.6.0 - it fetches its catalog in the page, plays previews in the page
+ * (0.9.9, through the `webaudio` chain) and writes the file through the `download`
+ * chain - and outlet 1 now belongs to the packaged wrapper, which answers
+ * `fetch_to_file` and the `save_*` requests on it. Writing to it by hand from here
+ * would be talking over the library.
  *
  * Everything here is ES5 and gated by acorn, same as the packaged sources.
  */
@@ -49,17 +50,20 @@ function resolveStrudelMode(): string {
 /** The packaged core also computes a MODE; ours is the authoritative one. */
 var STRUDEL_MODE = resolveStrudelMode();
 var IS_SAMPLE_BROWSER = STRUDEL_MODE === "sample-browser";
-/** The code-driven Sampler: an instrument, but it ACQUIRES samples the same way the
- *  browser does (fetch-to-disk, reveal folder), so it shares those paths. It does NOT
- *  poll for clips - it is an instrument with none. */
+/** The code-driven Sampler: an instrument that decodes and plays its samples IN THE
+ *  PAGE (0.9.9), so it touches no disk and needs no folder paths. It does not poll for
+ *  clips either - it is an instrument with none. */
 var IS_DRUMS_SAMPLER = STRUDEL_MODE === "drums-sampler";
 /** The superdough render device: an instrument with no clips, no pitches (the code goes
  *  to superdough verbatim, so Live's scale means nothing to it) and no samples folder of
  *  its own. It wants NONE of the observers below - running the midi defaults on it was
  *  what produced the "no valid object set" noise in the Max console. */
 var IS_SUPERDOUGH = STRUDEL_MODE === "superdough";
-/** The devices that own a samples folder on disk (download chain). */
-var HAS_SAMPLES_FOLDER = IS_SAMPLE_BROWSER || IS_DRUMS_SAMPLER;
+/** The devices that own a samples folder on disk (download chain). Only the browser
+ *  now: it still writes each auditioned file, because a file on disk is what makes a
+ *  row draggable into a track. The Sampler dropped out when its playback moved into
+ *  the page. */
+var HAS_SAMPLES_FOLDER = IS_SAMPLE_BROWSER;
 
 post("strudel: mode " + STRUDEL_MODE + "\n");
 
@@ -150,15 +154,15 @@ function sendScale(): void {
 /* ------------------------------------------------------------------ *
  * The sample browser's two facts about the world
  *
- * 1. WHERE THE DEVICE LIVES. The browser downloads a sample to a path RELATIVE to
- *    the device's folder, and that is the right thing for Max - `fetchToFile` and
- *    `[buffer~]` both resolve it the same way, and a relative path cannot be split
- *    into atoms by the spaces in "Ableton Library". But the USER has to be able to
- *    get at the file: to drag it into a Simpler, to find it in Places. A page cannot
- *    know its own device's folder, so the wrapper tells it - once, at ui_ready.
+ * 1. WHERE THE DEVICE LIVES. The browser saves an auditioned sample to a path RELATIVE
+ *    to the device's folder, and that is the right thing for Max - the wrapper resolves
+ *    it, and a relative path cannot be split into atoms by the spaces in "Ableton
+ *    Library". But the USER has to be able to get at the file: to drag it into a
+ *    Simpler, to find it in Places. A page cannot know its own device's folder, so the
+ *    wrapper tells it - once, at ui_ready.
  *
  *    deviceFolder() is the packaged core's, and it is the SAME resolution the
- *    download used, which is what makes the path we hand the page the real one.
+ *    save used, which is what makes the path we hand the page the real one.
  *
  * 2. LIVE'S GLOBAL QUANTIZATION. The preview starts on a beat, and WHICH beat is not
  *    ours to decide - the user already told Live, in the transport bar. `1 Bar` means
@@ -207,8 +211,10 @@ function sendFolder(): void {
 }
 
 /**
- * Reveal the samples folder in the OS file manager - the app cannot, and this is the
- * stopgap until the drag-to-clip spike settles (doc/SPIKE-DRAG-TO-CLIP.md).
+ * Reveal the samples folder in the OS file manager - the app cannot. This is the shipping
+ * answer, not a stopgap: the drag-into-Live alternative was tried and failed for good
+ * (doc/DRAWER_OF_FAILED_IDEAS.md - CEF strips the DownloadURL payload, and LOM has no
+ * create-audio-clip).
  *
  * `messnamed("max", ...)` is the JS equivalent of a `; max ...` message box: it addresses
  * the Max APPLICATION. `launchbrowser` hands a URL to the OS default handler, and the

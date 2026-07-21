@@ -74,15 +74,16 @@ describe("parseSampleMap", () => {
 	});
 });
 
-describe("what [buffer~] can actually read", () => {
+describe("what the preview will actually play", () => {
 	it("takes WAV and AIFF", () => {
 		expect(isPlayable("https://x/bd.wav")).toBe(true);
 		expect(isPlayable("https://x/bd.AIFF")).toBe(true);
 	});
 
-	it("refuses MP3 and friends - they are [sfplay~]'s list, not [buffer~]'s", () => {
-		// The trap this closes is silent: an MP3 downloads perfectly, and then
-		// [buffer~] reports nothing at all and loadSample() times out.
+	it("refuses MP3 and friends - the formats a sample map should not be carrying", () => {
+		// The gate is inherited from [buffer~]'s format list and kept on purpose: an
+		// unexpected extension in a sample map is far more often a broken entry than a
+		// deliberate MP3, and refusing it up front beats a decode error after the download.
 		expect(isPlayable("https://x/bd.mp3")).toBe(false);
 		expect(isPlayable("https://x/bd.ogg")).toBe(false);
 		expect(isPlayable("https://x/bd.flac")).toBe(false);

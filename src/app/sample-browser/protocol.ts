@@ -7,11 +7,12 @@
  * [node.script] process of its own that did the fetching, the downloading and the
  * previewing, and every reply came back base64-encoded through it.
  *
- * All three jobs are library chains now, and their selectors belong to
- * @m4l-jweb/bridge: CHAIN_OUT/CHAIN_IN carry `fetch_to_file` / `fetch_done` /
- * `fetch_progress` (the `download` chain) and `buffer_load` / `buffer_play` /
- * `buffer_ready` (the `samples` chain). The app never types those names - it calls
- * fetchToFile(), loadSample() and playSample(), which do.
+ * Fetching and previewing are the page's own work now - `fetch()` for the bytes,
+ * `decodeAudioData` + an AudioBufferSourceNode for the sound, out through the
+ * `webaudio` chain's signal path. The only job still crossing the bridge is WRITING
+ * the audited file to disk, so it can be dragged into a track: `save_begin` /
+ * `save_chunk` / `save_end` / `save_done` (the `download` chain), which CHAIN_OUT and
+ * CHAIN_IN carry and `saveToFile()` wraps. The app never types those names.
  *
  * What is left is genuinely this device's own: Live's global scale, which the
  * browser shows so a pitched sample map can be read in the key of the set.
