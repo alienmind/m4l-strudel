@@ -8,18 +8,54 @@ Every item below was re-assessed after the 0.9.9 jweb~ rewrite (native Web Audio
 see [ARCHITECTURE.md §2c](ARCHITECTURE.md)). The rewrite changed the ground under
 several of them: some got easier, and one became impossible in its original form.
 
-Closed since, and removed rather than left as noise: the two rewrite regressions
-(`slider()` no longer evaluating, and sample patterns having no sound source
-registered), both fixed and Live-tested. What remains of the slider work is item 6
-(choosing a binding) and item 13 (the dials' name and scale).
+Anything finished has been REMOVED from this file rather than left as a done-list -
+git history is the record of what shipped. What remains of the slider work, for
+instance, is item 4 (choosing a binding) and item 11 (the dials' name and scale);
+the parts that work are simply gone from here.
 
 ---
 
 ## Open Tasks
 
-Item 1 is the priority and is ordered first. The rest run least-difficult to most.
+**Item 3 is the priority.** The rest run roughly least-difficult to most.
 
-### 1. FEAT (PRIORITY, PLANNED NOT BUILT) - replace the Studio window with a real local strudel.cc
+### 1. FIX - "Show folder" is not functional (sample browser)
+
+**Assessment.** Still valid, scope shrank: the Drums Sampler no longer downloads
+files at all (samples decode in-page since 0.9.9), so its button is gone. Only the
+sample browser has a folder to reveal (`saveToFile` still writes the drag-out file).
+The button emits `reveal_folder`; the wrapper handler behind it never worked in Live.
+
+**Preliminary design.** Do the reveal wrapper-side with `;max launchbrowser
+file:///<device folder>` - a folder `file://` URL opens Explorer/Finder, and
+`launchbrowser` is a documented `max` message that needs no [shell] external and
+survives freezing. Fallback if a frozen device refuses it: [js] `max.launchbrowser()`
+call. Verify on Windows AND macOS before closing; the path must be URI-encoded (Live
+library paths contain spaces).
+
+### 2. FEAT - offline sample cache for Superdough
+
+**Assessment.** Still needed, and the shape changed. There is no render step any
+more: superdough fetches samples at PLAY time, so no network means silence for
+`s()` patterns (synths are unaffected). Chromium still blocks `fetch()` of
+`file://`, so "read the file back from disk" needs help. But jweb's Chromium also
+has page-side persistent storage, which the old design ignored - if it survives a
+Live restart, no bridge API is needed at all.
+
+**Preliminary design.** Two stages, cheapest first:
+1. **Page-side cache (probe first).** Wrap superdough's sample loading in a
+   CacheStorage/IndexedDB layer keyed by URL: on fetch success store the bytes, on
+   fetch failure serve from the cache. SPIKE: confirm jweb's CEF profile persists
+   IndexedDB across Live sessions and device reloads (open device, store a value,
+   restart Live, read it). If it persists, done - and the Drums Sampler gets the
+   same cache for free.
+2. **Bridge `readFile(path) -> ArrayBuffer`** only if storage does NOT persist:
+   wrapper-side [js] File object reads the bytes, base64-chunks them over the
+   bridge (the mirror of `saveToFile`'s save_chunk protocol). Slower and more code;
+   build it only when stage 1 fails the spike.
+
+   
+### 3. FEAT (PRIORITY, PLANNED NOT BUILT) - replace the Studio window with a real local strudel.cc
 
 **The idea.** The "Full Studio" window is a bigger textarea over the same `code` slot. It
 is a worse version of something that already exists and that we already ship: the actual
@@ -90,117 +126,10 @@ Offline, in Live: the Studio opens the real REPL; typing and evaluating there pl
 through the track; the device view and the window agree about the pattern; closing and
 reopening the set restores it; and the `.amxd` is still a size a user will accept.
 
-### 2. FIX - "Show folder" is not functional (sample browser)
+### 4. FEAT - explicit knob binder
 
-**Assessment.** Still valid, scope shrank: the Drums Sampler no longer downloads
-files at all (samples decode in-page since 0.9.9), so its button is gone. Only the
-sample browser has a folder to reveal (`saveToFile` still writes the drag-out file).
-The button emits `reveal_folder`; the wrapper handler behind it never worked in Live.
-
-**Preliminary design.** Do the reveal wrapper-side with `;max launchbrowser
-file:///<device folder>` - a folder `file://` URL opens Explorer/Finder, and
-`launchbrowser` is a documented `max` message that needs no [shell] external and
-survives freezing. Fallback if a frozen device refuses it: [js] `max.launchbrowser()`
-call. Verify on Windows AND macOS before closing; the path must be URI-encoded (Live
-library paths contain spaces).
-
-### 3. FEAT - offline sample cache for Superdough
-
-**Assessment.** Still needed, and the shape changed. There is no render step any
-more: superdough fetches samples at PLAY time, so no network means silence for
-`s()` patterns (synths are unaffected). Chromium still blocks `fetch()` of
-`file://`, so "read the file back from disk" needs help. But jweb's Chromium also
-has page-side persistent storage, which the old design ignored - if it survives a
-Live restart, no bridge API is needed at all.
-
-**Preliminary design.** Two stages, cheapest first:
-1. **Page-side cache (probe first).** Wrap superdough's sample loading in a
-   CacheStorage/IndexedDB layer keyed by URL: on fetch success store the bytes, on
-   fetch failure serve from the cache. SPIKE: confirm jweb's CEF profile persists
-   IndexedDB across Live sessions and device reloads (open device, store a value,
-   restart Live, read it). If it persists, done - and the Drums Sampler gets the
-   same cache for free.
-2. **Bridge `readFile(path) -> ArrayBuffer`** only if storage does NOT persist:
-   wrapper-side [js] File object reads the bytes, base64-chunks them over the
-   bridge (the mirror of `saveToFile`'s save_chunk protocol). Slower and more code;
-   build it only when stage 1 fails the spike.
-
-### 4. FEAT - render a pattern to a WAV (export to audio) - DONE
-
-**DONE (0.9.9).** Live-tested: the render itself works (a 3-cycle pattern bounced), and
-one bug surfaced and was fixed - see "The `.part` that never became a `.wav`" below.
-Remaining follow-ups are listed at the end of this item.
-
-`src/lib/render/offline.ts` is restored from
-`main` intact - the S1-proven recipe (`loadWorklets()` + `setMaxPolyphony()`, never
-`initAudio()` which hangs offline; renders serialized behind one queue because
-superdough's context and controller are module-level singletons; `clearNodePools()`
-in `finally` because the pool is keyed across contexts). What is NOT restored is the
-conductor, the double buffer, the transport lock or the Max-side loop: this is a
-one-shot bounce.
-
-`exportAudio()` in `useSuperdoughRender.ts` compiles the pattern fresh on the MAIN
-thread (the worker's pattern lives in another one and is not transferable), takes
-`renderPeriod()` capped at 32 cycles, renders at the page AudioContext's own sample
-rate so Live imports without resampling, and `saveToFile`s a flat
-`superdough-export-<timestamp>.wav` into the device folder - flat because the drawer
-records that a subdirectory makes [maxurl]'s atomic place return -1, and timestamped
-so two device instances cannot clobber each other. The Export button sits next to Run.
-
-**The `.part` that never became a `.wav` (found in Live, fixed).** The first Live test
-rendered its 3 cycles, then sat on "Rendering 3 cycles..." forever, leaving
-`superdough-export-<n>.wav.part` on disk with the console showing only:
-
-```
-js: m4l-jweb: save place file:///.../superdough-export-1784648812844.wav.part
-    -> C:/.../superdough-export-1784648812844.wav
-```
-
-That line is `saveToFile` phase 3 asking `[maxurl]` to place the verified `.part` over
-the destination - and then nothing, because **there was no `[maxurl]` in the patcher**.
-The wrapper sends the request with `outlet(1, "maxurl", ...)`, and the object on the
-other end of that aux outlet belongs to the **`download` chain**. This device was
-simplified to `chains: ["webaudio"]` during the rewrite on the reasoning that it
-downloads nothing; the phases before the place use `[js] File` directly, so bytes hit
-disk and only the final rename silently went nowhere, with no reply to settle the
-promise. Fixed by restoring `chains: ["webaudio", "download"]`.
-
-**The rule that generalises:** `download` is not "the chain that downloads" - it owns
-`[maxurl]`, so **any device that WRITES a file needs it**, including one that only ever
-saves. The manifest entry now says so.
-
-Second fix, defensive: `exportAudio` wraps `saveToFile` in `withDeadline(30s)`. A reply
-that never comes is now a message naming the step, not a status stuck forever.
-
-**Next for this item:** the same call from the drums sampler, and a "reveal the file"
-affordance once item 2 lands.
-
-### 5. FEAT - one-click Freeze/flatten for Superdough
-
-**Assessment.** RECLASSIFIED: impossible in its original form, by design of Freeze.
-Freeze bounces the device OFFLINE and faster than realtime; a jweb~ page is a live
-Chromium instance that neither re-instantiates in time nor renders faster than
-realtime. No amount of our code changes that. The honest answers are (a) resampling
-onto an audio track, which works today, and (b) item 3's export-to-WAV, which is the
-"flatten" the user actually wants. Document the limitation in ABOUT.
-
-**Preliminary design.** Nothing to build - item 4 shipped the replacement (the Export
-button next to Run). All that is left is one ABOUT.md paragraph: "Freeze silences the
-device (the browser cannot run in Live's offline bounce); use Export to bounce the
-pattern to a WAV, or resample the track."
-
-### 6. FEAT - explicit knob binder (the remaining upgrade)
-
-**Auto-binding is DONE and Live-tested (0.9.9):** every `slider()` a pattern declares
-is captured in the worker, published to the device, rendered as a web slider on the
-MAIN screen (`shared/SliderRow.tsx`), and bound in SOURCE ORDER to a native dial from
-the S1..S8 pool (`shared/useSliderKnobs.ts`). Turning either the web slider or the
-native knob recompiles the pattern with the new value. The FX device renders the same
-row for the stages its line names, mapped to its own named dials, so the two devices
-behave alike. Knob NAMING and SCALE are their own item - see item 13.
-
-**What is still open: choosing the binding.** Auto-bind is source order, which is right
-by default and wrong in two cases - more than eight sliders (the ninth silently gets no
+Sliders already bind automatically, in source order, to the S1..S8 pool. That is right
+by default and wrong in two cases: more than eight sliders (the ninth silently gets no
 knob), and two patterns that fight over the order after an edit.
 
 **Preliminary design.** A small popover per slider: "knob S1..S8 / unbound", persisted
@@ -209,7 +138,7 @@ Auto-bind stays the default for the first eight unbound sliders, so zero-config
 behaviour does not change. Only worth building if the eight-slider ceiling is actually
 hit in use.
 
-### 7. FEAT - native MIDI input (`midiIn`/`kb()`) and MIDI output
+### 5. FEAT - native MIDI input (`midiIn`/`kb()`) and MIDI output
 
 **Assessment.** Valid, and cheaper than when written: the `midiin` chain already
 exists (the Drums Sampler uses it - `onNote()` delivers the track's MIDI to the
@@ -232,7 +161,7 @@ devices. What is missing is (in) feeding live notes into the pattern scope and
 
   NOTE: For this one, I would need examples on how to use (concrete strudel patterns) for midi routing from within the device
 
-### 8. FEAT - minimalist superdough synth
+### 6. FEAT - minimalist superdough synth
 
 **Assessment.** Went from "needs design" to "small": with live superdough in the
 page, a MIDI-driven synth is `onNote -> superdough(value, now)` - no timeline, no
@@ -244,9 +173,9 @@ specified, how much UI).
 a superdough VALUE, not a pattern), parsed once at eval into a control object; each
 incoming note plays it with `note` and `velocity` merged in, held notes tracked for
 release. The fx knobs pattern from the fx device applies (native dials writing into
-the value). Ship after item 0 (it reuses the samples() registration).
+the value). It reuses the sample-map registration the Superdough device already does.
 
-### 9. FEAT - orbit() support (multichannel out)
+### 7. FEAT - orbit() support (multichannel out)
 
 **Assessment.** Valid, UNVERIFIED at its foundation. superdough can already render
 orbits to separate channel pairs (`initAudio({ multiChannelOrbits: true })` exists),
@@ -264,7 +193,7 @@ build emits jweb~ with 2N channels and the `webaudio` chain fans pairs to
 `duck()` then works inside superdough with no Max help at all (it is orbit-level
 DSP in the page). If the spike fails: park in the drawer with the finding.
 
-### 10. FEAT - cross-device coordination in the Rack
+### 8. FEAT - cross-device coordination in the Rack
 
 **Assessment.** Valid, big, and last for a reason: it depends on nothing above but
 informs its value. Two separable halves that the original text mixed: (a) a
@@ -283,11 +212,11 @@ device consumes them exactly like its app's own `set_<id>` writes (the fan-in
 already exists in `fanParamInto`). The master `.adg` maps the Rack's 16 macros
 across both devices' dials. Explicitly out of scope: any cross-TRACK routing.
 
-### 11. TEST - verify offline behavior in Live
+### 9. TEST - verify offline behavior in Live
 
 **Assessment.** Still valid; the checklist shifts with the new architecture.
 Network use is now: catalog fetches (browser + sampler), page-side sample fetches
-(browser preview, sampler hits, superdough `s()` patterns after item 0). Disk cache
+(browser preview, sampler hits, superdough `s()` patterns). Disk cache
 only exists for the browser's saved files; the sampler's cache is in-memory
 (per-session) until item 2's persistent cache lands.
 
@@ -299,7 +228,7 @@ only exists for the browser's saved files; the sampler's cache is in-memory
 - **Session cache**: a sound already auditioned this session still plays.
 - **After item 2**: previously downloaded samples play across a Live restart.
 
-### 12. FEAT - hydra.js visuals (Code screen + View screen)
+### 10. FEAT - hydra.js visuals (Code screen + View screen)
 
 **Assessment.** Wanted, feasible, and CHEAPER than the framing suggests, because the
 audio-input problem the idea starts from mostly dissolves once the pieces are traced.
@@ -323,7 +252,7 @@ audio-input problem the idea starts from mostly dissolves once the pieces are tr
   SEPARATE audio-fx device is the hard version: `webaudioChain` (m4l-jweb
   `packages/build/src/chains.mjs`) only sums jweb~'s outlets 0/1 INTO the track, and
   whether jweb~ has a signal INLET is unverified (do not assume - same discipline as
-  item 8). Without one, the page can never see another track's audio.
+  item 7). Without one, the page can never see another track's audio.
 - **The real blocker is the worker/main split.** The pattern compiles and is queried in
   `engine.worker.js`; hydra, `@strudel/draw` and WebGL are DOM/canvas and must run on
   the main thread. The worker deliberately stubs the visual controls as plain params
@@ -373,9 +302,9 @@ not as a new device. No new chain, no new audio path, and the analyser is alread
    installed as a synthetic `a.fft` array. Hydra reads 4 bins by default, so the
    message path is cheap - the doubt is about jweb~, not bandwidth.
 
-### 13. FIX - the native knobs carry no NAME and no SCALE
+### 11. FIX - the native knobs carry no NAME and no SCALE
 
-Split out of the slider work (item 6), which is otherwise done: the sliders exist, and
+Split out of the slider work (item 4), which is otherwise done: the sliders exist, and
 turning a native knob does move the pattern. What the dials do NOT carry is any sense
 of WHAT they are or WHAT RANGE they span. In Live they all read `S1..S8`, all travel
 0..1, and a knob at 0.5 says nothing about whether that is 600 Hz or 0.5 gain.

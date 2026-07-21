@@ -59,7 +59,12 @@ To get you started instantly, we ship two ready-to-use Instrument Racks:
 ## Device Guide
 
 ### Strudel Superdough
-Type any Strudel pattern - whether it's synthesizers like `s("sawtooth")`, samples like `s("bd")`, or complex effect chains. Press **Run** and start Live's transport. The device renders the full cycle in the background and loops it seamlessly as real track audio. 
+Type any Strudel pattern - whether it's synthesizers like `s("sawtooth")`, samples like `s("bd")`, or complex effect chains. Press **Run** and start Live's transport. The pattern plays live, as real track audio: it goes through the fader, the sends and the meters like any other instrument, and you can resample or record it.
+
+**One limitation worth knowing: Freeze does not work on this device.** Live's Freeze renders a track offline and faster than real time, and the device's sound comes from a live browser engine that cannot run in that offline pass - so a frozen track goes silent. This is a property of how Live freezes, not something the device can work around. Two things do work, and either gives you the same result:
+
+- **Export** (the download icon) renders the pattern to a `.wav` next to the device. Use **Show folder** to find it and drag it onto an audio track.
+- **Resample** the track onto an audio track while it plays, the normal Live way.
 
 ### Strudel MIDI (`alienmind-strudel-midi.amxd`)
 
