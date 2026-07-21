@@ -62,7 +62,10 @@ export default [
 		ui: "drums-sampler",
 		type: "instrument",
 		mode: "drums-sampler",
-		chains: ["webaudio", "midiin"],
+		// `download` is here for [maxurl], which saveToFile's atomic place needs - the
+		// device downloads nothing to disk (samples are decoded in the page) but it does
+		// EXPORT bounces. Any device that writes a file needs this chain.
+		chains: ["webaudio", "midiin", "download"],
 		unmatchedTo: "js",
 	},
 	{

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Download, Play, Square, SlidersHorizontal } from "lucide-react";
+import { Download, FolderOpen, Play, Square, SlidersHorizontal } from "lucide-react";
+import { outlet } from "@m4l-jweb/bridge";
 import { useNativePanel, useParam, useStateSync, useWindow } from "@m4l-jweb/surface/react";
 import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
@@ -79,30 +80,20 @@ export default function App() {
 					icon={s.live ? Square : Play}
 					active={s.live}
 					onClick={s.live ? s.hush : s.run}
-					title={
-						s.live
-							? "Stop pattern"
-							: "Run this pattern natively with Jweb audio"
-					}
-				>
-					{s.live ? "Stop" : "Run"}
-				</Button>
+					title={s.live ? "Stop the pattern" : "Run the pattern (Ctrl+Enter)"}
+				/>
 				<Button
 					icon={Download}
 					onClick={s.exportAudio}
 					disabled={s.exporting}
 					active={s.exporting}
-					title="Render this pattern to a WAV next to the device - drag it from the device folder into a track (Export audio / bounce)"
-				>
-					{s.exporting ? "..." : "Export"}
-				</Button>
+					title="Export: render this pattern to a WAV next to the device, then drag it into a track"
+				/>
 				<Button
 					icon={SlidersHorizontal}
 					onClick={() => setShowTransport(true)}
-					title="Show the native controls panel - the mappable Play/Stop and the eight slider knobs (S1..S8). The native Back switch returns."
-				>
-					Controls
-				</Button>
+					title="Controls: the native panel with the mappable Play/Stop and the eight slider knobs (S1..S8). Its Back switch returns."
+				/>
 				<HelpButton onOpen={helpWindow.open} />
 			</div>
 
@@ -121,9 +112,18 @@ export default function App() {
 			<SliderRow sliders={s.sliders} />
 
 			{s.exportNote && (
-				<span className="truncate text-[10px] leading-none text-muted-foreground" title={s.exportNote}>
-					{s.exportNote}
-				</span>
+				<div className="flex items-center gap-2">
+					<span className="flex-1 truncate text-[10px] leading-none text-muted-foreground" title={s.exportNote}>
+						{s.exportNote}
+					</span>
+					{/* Only once something has been written - the folder may not exist before
+					    the first Export, and revealing nothing is worse than no button. */}
+					<Button
+						icon={FolderOpen}
+						onClick={() => outlet("reveal_folder")}
+						title="Show the device folder in Finder/Explorer"
+					/>
+				</div>
 			)}
 
 			{s.samplesNote && !error && !s.exportNote && (

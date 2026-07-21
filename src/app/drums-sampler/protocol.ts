@@ -20,6 +20,10 @@ import { CHAIN_IN, CHAIN_OUT, DEVICE_IN } from "@m4l-jweb/bridge";
 export const IN = {
 	...DEVICE_IN,
 	...CHAIN_IN,
+	/** wrapper -> UI: the ABSOLUTE path of the device's folder, as one symbol. Nothing is
+	 *  downloaded here any more, but Export writes a WAV into it - so the user needs a
+	 *  way to reach it. */
+	device_folder: "device_folder",
 } as const;
 
 /** UI -> device. */
@@ -27,4 +31,7 @@ export const OUT = {
 	...CHAIN_OUT,
 	/** UI -> wrapper: page ready; send me the current state. */
 	ui_ready: "ui_ready",
+	/** UI -> wrapper: reveal the device folder in Finder/Explorer. The page cannot open
+	 *  an OS file manager; the wrapper asks the Max application to. */
+	reveal_folder: "reveal_folder",
 } as const;
