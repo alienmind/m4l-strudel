@@ -30,6 +30,8 @@ Known issues in this release: **Export** on the Strudel device fails to write it
 
 ### The Main Instrument: Strudel
 
+![The Strudel device - a full Strudel expression playing as the track's audio](screenshot-strudel.png)
+
 The primary deliverable is **Strudel** (`alienmind-strudel`, called `alienmind-strudel-superdough` before 1.0.0). This instrument understands the full Strudel language and uses the real `@strudel/superdough` engine to natively produce sounds (synths, oscillators, samples) and effects, perfectly in sync with Ableton's transport clock.
 
 > ⚠️ **Experimental Limitations:** superdough now runs LIVE in the device, so edits and knob turns are audible immediately and there is no loop boundary to wait for. What remains:
@@ -49,6 +51,10 @@ We also deliver a set of specialized, lightweight devices - some translating Str
 | **Strudel Drums Sampler** | Instrument, **MIDI track** | A code-driven drum sampler. Write `s("bd sd, hh*8")`, pick a drum machine **bank**, and it plays that machine's sounds. |
 | **Strudel Audio FX** | Audio effect, **audio track** | Type a single line of Strudel's DSP effect vocabulary (e.g., `.lpf(800).gain(1.2)`) and it generates a real Max signal chain on the track. |
 | **Strudel Samples** | Instrument, **MIDI track** | Browse Strudel's sample-map universe. Audition samples beat-synced to your project and drag them straight into a Drum Rack. |
+
+They are meant to be combined. The chain below is the whole idea in one track: **Strudel MIDI** sequences the notes (`<c3 c3 <c3 c#3>>*16`), **Strudel Synth** turns each one into sound (`s("sawtooth")`), and **Strudel Audio FX** filters the result (`.lpf(6613)`). Every line is Strudel; every knob is a real, automatable Live parameter.
+
+![A chain of three devices: Strudel MIDI sequences notes, Strudel Synth turns them into sound, Strudel Audio FX filters the result](screenshot-all-three-microdevices.png)
 
 ---
 
