@@ -7,7 +7,7 @@
  * - hapToClipNote(hap, ctx): the same event in CYCLES, not ms (clip export).
  * - patternCycles(pat, cps, ctx): how many cycles before the pattern repeats.
  */
-import { evalScope, evaluate, silence, stack, Pattern, isPattern, noteToMidi } from "@strudel/core";
+import { evalScope, evaluate, silence, stack, Pattern, isPattern, noteToMidi, createParams } from "@strudel/core";
 import { transpiler } from "@strudel/transpiler";
 
 let pPatterns = {};
@@ -57,11 +57,58 @@ export function setLiveScale(name) {
 	globalThis.liveScale = name;
 }
 
+/**
+ * The repl-only helpers strudel.cc injects that a headless compile does not have.
+ *
+ * A pattern written on strudel.cc reaches for setcps() (the site's scheduler owns
+ * tempo), slider() (a codemirror widget), and _scope()/.fill() (canvas visualisers).
+ * Compiled here they throw `X is not defined` and the whole pattern fails to evaluate.
+ * None of them drive anything in this engine - Live owns tempo, native dials own any
+ * slider, there is no canvas - so they become the smallest shims that let the code
+ * evaluate to a Pattern:
+ *
+ *   setCps/setCpm (+ lowercase) : return silence, a valid no-op statement.
+ *   slider / sliderWithID       : return the numeric default, so `.lpf(slider(500))`
+ *                                 bakes 500 into the control. The DEVICE's knob binding
+ *                                 (src/lib/render/scope.ts installRenderScope) later
+ *                                 OVERRIDES these globals with capturing versions - it
+ *                                 runs after bootScope, so last-writer-wins is intended.
+ *   _scope/_pianoroll/...       : pass the pattern through unchanged.
+ *   draw visual params          : registered as real controls so `.fill()` etc. exist
+ *                                 without pulling @strudel/draw (canvas) into the bundle.
+ *
+ * Core-only, so this stays loadable under node (the engine unit tests) as well as in
+ * jweb's Chromium worker.
+ */
+export function installReplShims() {
+	const g = globalThis;
+	const setCps = () => silence;
+	g.setCps = setCps;
+	g.setcps = setCps;
+	g.setCpm = setCps;
+	g.setcpm = setCps;
+	g.setGainCurve = g.setGainCurve ?? (() => {}); // real one is injected on the audio thread
+	// slider(value, min?, max?, step?); the transpiler rewrites the bare call to
+	// sliderWithID(id, value, ...), so the id-prefixed form is the one compiled code hits.
+	const sliderValue = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+	g.slider = (value) => sliderValue(value);
+	g.sliderWithID = (_id, value) => sliderValue(value);
+	const passthrough = function () {
+		return this;
+	};
+	const proto = Pattern.prototype;
+	for (const name of ["_scope", "_pianoroll", "_spectrum", "_punchcard", "_pitchwheel"]) {
+		if (typeof proto[name] !== "function") proto[name] = passthrough;
+	}
+	createParams("x", "y", "w", "h", "angle", "r", "fill", "smear");
+}
+
 let booted = false;
 export async function bootScope() {
 	if (booted) return;
 	await evalScope(import("@strudel/core"), import("@strudel/mini"), import("@strudel/tonal"));
 	installDollarCollector();
+	installReplShims();
 	booted = true;
 }
 
