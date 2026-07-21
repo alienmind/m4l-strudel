@@ -27,18 +27,14 @@ export interface Sound {
 }
 
 /**
- * The formats [buffer~] can read, and it is SHORTER than the list of formats a
- * sample map may name.
+ * The formats we will preview, which is SHORTER than the list a sample map may name.
  *
- * `replace` takes WAV, AIFF and Next/Sun, per its reference page - and NOT MP3. MP3,
- * OGG, FLAC and M4A are [sfplay~]'s list, which streams from disk instead of filling
- * a buffer, and is therefore a different chain that this device does not have.
- *
- * The trap this exists to close is SILENT: a file Max cannot decode downloads
- * perfectly, and then [buffer~] produces no event at all - just a line in the Max
- * console. loadSample() has nothing to await and times out. So the catalog says which
- * sounds are playable BEFORE anyone waits ten seconds to find out.
- * tidal-drum-machines and dirt-samples are WAV throughout; a shabda result may not be.
+ * This began as [buffer~]'s list (WAV, AIFF, Next/Sun - never MP3), because Max was
+ * what played the audio. The page's `decodeAudioData` is more permissive, but the gate
+ * stays: these are the formats the sample universe actually ships, an unexpected one
+ * is far more likely to be a broken entry than a deliberate MP3, and saying so up front
+ * beats a decode error after a download. tidal-drum-machines and dirt-samples are WAV
+ * throughout; a shabda result may not be.
  */
 const PLAYABLE = [".wav", ".aif", ".aiff", ".au", ".snd"];
 
@@ -143,7 +139,7 @@ export function parseSampleMap(json: Record<string, unknown>, base: string): Sou
  * block jweb's UI thread - it is a promise - but with no route to the host it can hang
  * for the OS connect timeout (a minute or more), and a device that says "Loading..."
  * for a minute reads as broken. An AbortController turns that into a clean, fast failure
- * the UI can report. See doc/SPIKE-OFFLINE.md.
+ * the UI can report.
  */
 export async function loadSampleMap(pseudo: string, timeoutMs = 12_000): Promise<Sound[]> {
 	const url = catalogUrl(pseudo);
@@ -183,12 +179,12 @@ export async function fetchWithTimeout(url: string, timeoutMs: number): Promise<
 /**
  * Race a promise against a deadline, for the ones that cannot be aborted.
  *
- * `fetchToFile()` and `loadSample()` cross the bridge into Max, and there is no handle to
- * cancel a `[maxurl]` request or a `[buffer~]` read in flight. So this does not STOP the
- * work - it stops the app WAITING on it, which is the part the user sees: a row stuck on
- * "Fetching..." with no network unsticks, the status can say "offline", and the list stays
- * usable. If the abandoned work does eventually finish, its resolver falls on the floor
- * harmlessly (see the bridge). The UI thread was never blocked; this bounds the wait.
+ * `saveToFile()` crosses the bridge into Max, and there is no handle to cancel a
+ * `[maxurl]` request in flight. So this does not STOP the work - it stops the app
+ * WAITING on it, which is the part the user sees: a row stuck on "Fetching..." with no
+ * network unsticks, the status can say "offline", and the list stays usable. If the
+ * abandoned work does eventually finish, its resolver falls on the floor harmlessly
+ * (see the bridge). The UI thread was never blocked; this bounds the wait.
  */
 export function withDeadline<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 	let timer: ReturnType<typeof setTimeout>;
@@ -204,14 +200,14 @@ export function withDeadline<T>(p: Promise<T>, ms: number, label: string): Promi
 /**
  * Where a variation lands on disk, RELATIVE to the device's folder.
  *
- * Relative, and that is the contract: fetchToFile() writes next to the .amxd, and the
- * wrapper resolves the same relative path for [buffer~]. Hand both of them this
- * string and they agree. Build an absolute path in the app and they will not - the
- * app cannot know where Live put the device, and a real install has spaces in that
- * path ("Ableton Library"), which a Max message would split into atoms.
+ * Relative, and that is the contract: saveToFile() writes next to the .amxd, and the
+ * wrapper resolves the relative path on the Max side. Build an absolute path in the
+ * app instead and the two will not agree - the app cannot know where Live put the
+ * device, and a real install has spaces in that path ("Ableton Library"), which a Max
+ * message would split into atoms.
  *
- * The extension is carried over from the URL, not assumed: Max opens the file by what
- * it IS, and renaming an .aiff to .wav on the way to disk helps nobody.
+ * The extension is carried over from the URL, not assumed: renaming an .aiff to .wav
+ * on the way to disk helps nobody who later opens it.
  */
 export function localPath(sound: Sound, n: number, pseudo: string): string {
 	const pack = pseudo.replace(/[^a-z0-9-]+/gi, "_");

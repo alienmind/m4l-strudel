@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, FolderOpen, GripVertical, Search, Square } from "lucide-react";
-import {
-	bindInlet,
-	fetchToFile,
-	loadSample,
-	outlet,
-	playSample,
-	stopSample,
-	uiReady,
-} from "@m4l-jweb/bridge";
+import { bindInlet, outlet, saveToFile, uiReady } from "@m4l-jweb/bridge";
+import { decodeSample, playBuffer } from "../shared/webaudio";
 import { cn } from "@/lib/utils";
 import {
 	DEFAULT_QUANT,
@@ -30,10 +23,6 @@ import { PRESET_MAPS } from "./banks";
  *  opens the custom-map screen rather than loading anything. */
 const CUSTOM = "__custom__";
 
-/** The one [buffer~] the manifest declares. A preview is one voice, auditioning one
- *  sample at a time; the name has to match `slots` in patcher/devices.mjs. */
-const SLOT = "preview";
-
 /** 4/4, as everything else in this repo assumes. A "bar" for the loop below. */
 const BEATS_PER_BAR = 4;
 
@@ -51,17 +40,16 @@ interface RowState {
 /**
  * Strudel Samples - browse Strudel's sample maps, hear them, drag them out.
  *
- * THE PREVIEW IS THE WHOLE DESIGN OF THIS DEVICE, and it is not what it looks like.
- * The obvious implementation - `new Audio(url).play()`, right here in the page - is
- * wrong in a way that is easy to miss: [jweb] has no signal outlets, so audio a page
- * plays goes straight to the OS output device, PAST the track, the fader and the
- * monitor cue. It would be the only sound in the set that Live could not touch.
+ * THE PREVIEW plays through the TRACK: under jweb~ the page's Web Audio output is
+ * the device's signal path (the `webaudio` chain), so an AudioBufferSourceNode here
+ * is heard past the fader and the monitor cue like any other device. The [buffer~]/
+ * [groove~] round-trip this device used to need is gone with [jweb]'s missing signal
+ * outlets (doc/DRAWER_OF_FAILED_IDEAS.md).
  *
- * So the file has to be on DISK, and Max has to be the one to play it:
- *
- *   1. fetchToFile()  - [maxurl] writes it next to the device.
- *   2. loadSample()   - [buffer~] reads it, and resolves with what [info~] MEASURED.
- *   3. playSample()   - [groove~], summed into the track, on the user's grid.
+ * The DOWNLOAD stays: auditioning still writes the file next to the device
+ * (saveToFile, the `download` chain's [maxurl] atomic place), because the file on
+ * disk is the drag-out handle. One fetch feeds both: the bytes are decoded for
+ * playback AND saved for the library.
  *
  * WHICH IS WHY THERE IS NO "DOWNLOAD" BUTTON. There used to be one, next to a play
  * button, and the pair was a lie: previewing a sample downloads it, permanently, to
@@ -93,6 +81,10 @@ export default function App() {
 	/** Paths already fetched in this session, so re-auditioning does not re-download.
 	 *  The file outlives the session; this only remembers what we know is there. */
 	const onDisk = useRef(new Set<string>());
+	/** Decoded audio per path, so re-auditioning replays from memory. */
+	const decoded = useRef(new Map<string, Awaited<ReturnType<typeof decodeSample>>>());
+	/** Stop function of the currently sounding voice, if any. */
+	const voice = useRef<(() => void) | null>(null);
 	/** The pending "play on the grid" timer, so moving the cursor twice quickly plays
 	 *  the second sample, not both. */
 	const armed = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -108,6 +100,8 @@ export default function App() {
 		if (looper.current) clearInterval(looper.current);
 		armed.current = null;
 		looper.current = null;
+		voice.current?.();
+		voice.current = null;
 	}, []);
 
 	useEffect(() => {
@@ -188,42 +182,51 @@ export default function App() {
 	const audition = useCallback(
 		async (sound: Sound, n: number) => {
 			const url = variationUrl(sound, n);
-			// Say so BEFORE fetching a file that will never become audio: [buffer~] reads
-			// WAV/AIFF and not MP3, and what it cannot decode produces no event at all -
-			// just a line in the Max console, and then a ten-second timeout.
+			// decodeAudioData reads more than [buffer~] ever did, but the gate stays: a
+			// format the map should not carry is still worth saying no to up front.
 			if (!isPlayable(url)) {
-				setStatus(`Cannot preview ${sound.name}: [buffer~] reads WAV/AIFF, not ${extLabel(url)}`);
+				setStatus(`Cannot preview ${sound.name}: not WAV/AIFF (${extLabel(url)})`);
 				return;
 			}
 			clearPreview();
 			setPlaying(sound.name);
 			const path = localPath(sound, n, mapUrl);
 			try {
-				if (!onDisk.current.has(path)) {
+				let s = decoded.current.get(path);
+				if (!s) {
 					setStatus(`Fetching ${sound.name}:${n}...`);
-					// Deadlined: [maxurl] cannot be cancelled, so with no network this promise
-					// would hang and the row would read "Fetching..." forever. The wait is
-					// bounded instead; onDisk is only marked on a real success below it.
-					await withDeadline(
-						fetchToFile(url, path, (done, total) =>
-							// Not every server sends a content length, so `total` can legitimately
-							// be 0. Never divide by it to make a percentage.
-							setStatus(
-								total > 0
-									? `Fetching ${sound.name}:${n} - ${Math.round((done / total) * 100)}%`
-									: `Fetching ${sound.name}:${n} - ${Math.round(done / 1024)} kB`,
-							),
-						),
+					// Deadlined, so no network cannot leave the row on "Fetching..." forever.
+					const bytes = await withDeadline(
+						fetch(url).then((r) => {
+							if (!r.ok) throw new Error(`HTTP ${r.status}`);
+							return r.arrayBuffer();
+						}),
 						30_000,
 						`Download of ${sound.name}:${n}`,
 					);
-					onDisk.current.add(path);
-					setDownloaded(true);
+					s = await decodeSample(bytes);
+					decoded.current.set(path, s);
+					// The same bytes go to disk too - the file is the drag-out handle. Not
+					// awaited before playing: the preview should not wait on the disk.
+					if (!onDisk.current.has(path)) {
+						void saveToFile(path, bytes)
+							.then(() => {
+								onDisk.current.add(path);
+								setDownloaded(true);
+								setRows((r) => ({ ...r, [sound.name]: { ...r[sound.name], path } }));
+							})
+							.catch((err) => setStatus(`Saved nothing: ${message(err)}`));
+					}
 				}
-				const s = await loadSample(SLOT, path);
 				setRows((r) => ({
 					...r,
-					[sound.name]: { ...r[sound.name], n, path, durationMs: s.durationMs, channels: s.channels },
+					[sound.name]: {
+						...r[sound.name],
+						n,
+						path: onDisk.current.has(path) ? path : r[sound.name]?.path ?? null,
+						durationMs: s.durationMs,
+						channels: s.channels,
+					},
 				}));
 
 				// Round the sample up to whole bars, so the loop restarts on a downbeat.
@@ -238,9 +241,13 @@ export default function App() {
 				);
 				// First hit on the grid; the loop is anchored to it, so every repeat lands on
 				// a bar line too. setInterval drifts over minutes, which no audition lasts.
+				const fire = () => {
+					voice.current?.();
+					voice.current = playBuffer(s!.buffer);
+				};
 				armed.current = setTimeout(() => {
-					playSample(SLOT);
-					looper.current = setInterval(() => playSample(SLOT), periodMs);
+					fire();
+					looper.current = setInterval(fire, periodMs);
 				}, wait);
 			} catch (err) {
 				setPlaying(null);
@@ -275,7 +282,6 @@ export default function App() {
 
 	const stop = useCallback(() => {
 		clearPreview();
-		stopSample();
 		setPlaying(null);
 	}, [clearPreview]);
 
@@ -400,7 +406,7 @@ export default function App() {
 										title={
 											playable
 												? "Click to hear it. Once loaded, drag the row out to a track."
-												: "[buffer~] reads WAV/AIFF only"
+												: "WAV/AIFF only"
 										}
 									>
 										<td className="px-1.5 py-1 font-mono">
