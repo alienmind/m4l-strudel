@@ -1,6 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
+// Wrap fetch() with the persistent sample cache before anything can fetch (doc/TODO
+// item 2). Must stay ABOVE the App import - import order is execution order.
+import "@/lib/sampleCache.install";
 
 /**
  * ONE DEVICE PER BUNDLE.
