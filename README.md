@@ -10,7 +10,7 @@ The result is a set of **Max for Live devices** that bring [Strudel](https://str
 > 
 > **Note:** The pattern language is fully supported, but Strudel's *sound engine* is not. For a full list of what is supported and how it differs from the web version, see [doc/STRUDEL-SUPPORT.md](doc/STRUDEL-SUPPORT.md).
 
-> ⚠️ **Highly Experimental Limitation:** This is not ready for real music production, just a fun experiment. Sound can be choppy and timing is unreliable. The main instrument (**Strudel**) plays the real superdough engine live in the device, so edits and knob turns are audible immediately - but it sequences its own pattern rather than reading incoming MIDI notes. For MIDI-played sound, see **Strudel Synth**.
+> ⚠️ **Highly Experimental Limitation:** This is not ready for real music production, just a fun experiment. Sound can be choppy and timing is unreliable. The main instrument (**Strudel**) plays the real superdough engine live in the device, so edits and knob turns are audible immediately - but performance is not ideal and can be easily go out of sync with the track.
 
 ## What this project does
 
@@ -35,13 +35,7 @@ The result is a set of **Max for Live devices** that bring [Strudel](https://str
 
 ![The Strudel device - a full Strudel expression playing as the track's audio](doc/screenshot-strudel.png)
 
-The main deliverable is one instrument called **Strudel** (`alienmind-strudel`) that understands the full Strudel language (with some exceptions, see [STRUDEL-SUPPORT.md](doc/STRUDEL-SUPPORT.md)) and sequences notes, sounds and effects natively with the superdough engine, in sync with Ableton's transport clock. It was called `alienmind-strudel-superdough` before 1.0.0; the engine is still superdough, but the device is the whole language, so it carries the plain name. **A set saved with the old device keeps its own copy of it and will not pick up the rename - re-add the device to move a set across.** **Caveat:** highly experimental, and it sequences its own pattern rather than playing incoming MIDI.
-
-We deliver a set of experimental devices (MIDI control, instrument, audio effect), and nothing else - the devices are the distribution.
-
-They also compose. Here is the whole idea in one chain: **Strudel MIDI** sequencing `<c3 c3 <c3 c#3>>*16`, feeding **Strudel Synth** playing `s("sawtooth")`, into **Strudel Audio FX** filtering it with `.lpf(6613)` - three devices, three lines of Strudel, one ordinary Ableton track.
-
-![A chain of three devices: Strudel MIDI sequences notes, Strudel Synth turns them into sound, Strudel Audio FX filters the result](doc/screenshot-all-three-microdevices.png)
+The main deliverable is one mini instrument **Strudel** (`alienmind-strudel`) that understands the full Strudel language (with some exceptions, see [STRUDEL-SUPPORT.md](doc/STRUDEL-SUPPORT.md)) and sequences notes, sounds and effects natively with the superdough engine, in sync with Ableton's transport clock.
 
 We also deliver **additional utility instruments** that showcase different capabilities, and are just some tools in the toolset for any curious and adventurous producer:
 
