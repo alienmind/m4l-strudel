@@ -5,10 +5,11 @@
  * entirely in the page since 0.9.9: samples are fetched with `fetch()`, decoded with
  * `decodeAudioData`, and played through the `webaudio` chain's signal path. The
  * `buffer_load` / `voice_play` exchange with a Max-side [poly~] is gone, and with it
- * the samples folder - nothing is written to disk here any more, so there is no
- * `device_folder` to receive and no `reveal_folder` to ask for.
+ * the samples folder - nothing is DOWNLOADED here any more. What still needs the
+ * wrapper is `device_folder`: Export writes a WAV next to the device, and only Max
+ * knows where that is.
  *
- * What remains crossing the bridge is MIDI in:
+ * What else crosses the bridge is MIDI in:
  *
  *   onNote(pitch, velocity)         notein                        (midiin chain)
  *
@@ -31,7 +32,4 @@ export const OUT = {
 	...CHAIN_OUT,
 	/** UI -> wrapper: page ready; send me the current state. */
 	ui_ready: "ui_ready",
-	/** UI -> wrapper: reveal the device folder in Finder/Explorer. The page cannot open
-	 *  an OS file manager; the wrapper asks the Max application to. */
-	reveal_folder: "reveal_folder",
 } as const;

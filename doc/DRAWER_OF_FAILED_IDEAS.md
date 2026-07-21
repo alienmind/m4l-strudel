@@ -70,7 +70,7 @@ one bundle.
 
 We attempted to use the `DownloadURL` Chromium drag type so that dragging a sample browser row onto Live's audio lane would prompt Chromium to download the file to `%TEMP%` and pass it to Live as a native `CF_HDROP` file drag. We tested passing the remote `https://` URL in the payload, but the file handoff did not occur. The drop target in Live (and even notepad.exe) only received the raw text payload, proving that the CEF runtime inside Max 8 strips the `DownloadURL` data entirely.
 
-Without native file drop support from the webview, there is no scripted way to create an audio clip from a file path in Ableton Live (LOM only supports `ClipSlot.create_clip` for MIDI). The shipping answer remains the **"Show folder"** button, which reveals the downloaded file in the OS file manager so the user can drag it into Live from there.
+Without native file drop support from the webview, there is no scripted way to create an audio clip from a file path in Ableton Live (LOM only supports `ClipSlot.create_clip` for MIDI). The shipping answer is the **"Copy folder path"** button: the user pastes the path into Explorer/Finder and drags the file into Live from there. It began as **"Show folder"** - see the reveal entry below for why that could not be made to work.
 
 ## Superdough rendering (Route B) - walls hit during the spikes (2026-07-19)
 
@@ -183,9 +183,7 @@ re-check, and when:
   the device view). On MIDI, Drums MIDI, Drums Sampler. Confirmed 0.9.0.
 - **Sampler samples folder** (if the wrapper's `HAS_SAMPLES_FOLDER` gate or `deviceFolder()`
   change): the `drums-sampler` mode resolves, so the device receives `device_folder` and the
-  **Show folder** button enables after a download. NOTE: the reveal ACTION itself
-  (`launchbrowser` in `reveal_folder`) does not open the OS file manager here on any device -
-  an open 1.0.0 item (TODO), not a regression.
+  **Copy folder path** button enables after a download.
 - **Push banks** (if the fx surface `banks` change): on a Push, the FX encoders page as
   **Tone** and **Space**, named - not "Bank 1"/"Bank 2". Confirmed 0.9.0.
 - **State-default seeding** (if the surface state slots or m4l-jweb's seeding change): a
@@ -445,3 +443,31 @@ The removed implementation, for archaeology: m4l-jweb's `renderplay`, `samples` 
 onRenderReady, loadSample/playVoice), and m4l-strudel's src/lib/render/offline.ts,
 src/lib/render/conductor.ts and their tests. All in git history before the 0.9.9
 webaudio rewrite.
+
+## Revealing a folder in the OS file manager (2026-07-21)
+
+**What we wanted.** A "Show folder" button that opens Explorer/Finder on the folder a
+device writes into, so the user can drag the file into Live.
+
+**Why it cannot be done from a device.** The page cannot open a file manager, so it has
+to ask Max, and Max offers exactly one door: `; max launchbrowser <arg>`, which hands the
+argument to the OS default handler. On Windows 11, in Live, across three rounds of
+testing:
+
+- A percent-encoded `file:///C:/...%20...` URL DOES reach the shell - pointed at a
+  non-existent folder it raised a real "Windows cannot find the file" dialog naming the
+  path. Pointed at a folder that exists, it opened nothing and reported nothing.
+- A native backslash path (`C:\Music\...`) behaved the same: silence.
+
+`[js]` has no shell call and no delete call; there is no second Max object that reveals a
+path. So there was no further form to try.
+
+**What shipped instead.** "Copy folder path" - the page puts the folder on the clipboard
+(`src/app/shared/clipboard.ts`) and the user pastes it into Explorer/Finder. It needs no
+Max message, has nothing platform-specific to verify, and cannot fail silently: the path
+is printed in the status line either way.
+
+**The transferable lesson.** `launchbrowser` failing silently is the trap. It is fire and
+forget - no reply, no error - so a device that relies on it looks correct in code, logs
+nothing, and simply does nothing. Prefer a mechanism that can report its own outcome, even
+a cruder one.

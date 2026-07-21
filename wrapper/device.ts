@@ -215,54 +215,20 @@ function sendFolder(): void {
 	else post("strudel: no device folder yet (unsaved patcher?) - the sample links will be off\n");
 }
 
-/**
- * Reveal the samples folder in the OS file manager - the app cannot. This is the shipping
- * answer, not a stopgap: the drag-into-Live alternative was tried and failed for good
- * (doc/DRAWER_OF_FAILED_IDEAS.md - CEF strips the DownloadURL payload, and LOM has no
- * create-audio-clip).
+/*
+ * NO reveal_folder HERE ANY MORE - "Show folder" became "Copy folder path".
  *
- * `messnamed("max", ...)` is the JS equivalent of a `; max ...` message box: it addresses
- * the Max APPLICATION. `launchbrowser` hands its argument to the OS default handler, and
- * the default handler for a DIRECTORY is the native file manager - Finder on macOS,
- * Explorer on Windows - not a web browser, despite the message name.
+ * `; max launchbrowser <folder>` was the only way a device could ask for the OS file
+ * manager, and two rounds of testing in Live on Windows 11 showed it does not do the
+ * job: a percent-encoded `file:///C:/...` URL reaches the shell (a WRONG path raised a
+ * real "cannot find the file" dialog naming it) but a correct one opened nothing and
+ * reported nothing, and a native backslash path fared no better. Max has no other
+ * reveal, and [js] cannot shell out.
  *
- * WHAT IT WANTS DIFFERS PER PLATFORM, measured in Live on Windows 11:
- *   - A `file:///C:/...%20...` URL reaches the shell (a wrong path raised a real
- *     "cannot find the file" dialog naming it) but a CORRECT one opens nothing at all.
- *     Windows' ShellExecute does not treat a percent-encoded file:// directory URL as a
- *     folder to browse, and fails silently rather than reporting it.
- *   - A native path with backslashes (`C:\Music\...\m4l-strudel`) is the form
- *     ShellExecute does open in Explorer.
- * macOS keeps the `file://` URL, which is what `open` expects there.
- *
- * A subfolder only exists once something has been written into it; before then the OS
- * reports a missing file rather than opening anything. Every app only offers the button
- * once it has put a file on disk, so by the time it is clicked the folder is there.
+ * So the page does the whole job instead: `device_folder` already tells it where the
+ * files are, and it copies that path to the clipboard (src/app/shared/clipboard.ts).
+ * One less Max message, and nothing platform-specific left to verify.
  */
-function reveal_folder(): void {
-	if (!HAS_DEVICE_FOLDER) return;
-	var folder = deviceFolder();
-	if (!folder) {
-		post("strudel: cannot reveal folder - the patcher is unsaved, so it has no path yet\n");
-		return;
-	}
-	// WHICH folder depends on what the device writes, and getting this wrong is not a
-	// cosmetic miss - the OS reports "cannot find the file" on a folder that was never
-	// created. The sample browser downloads into a `samples/` subfolder (localPath());
-	// superdough and the drums sampler export their WAVs to the device folder ITSELF.
-	var target = IS_SAMPLE_BROWSER ? folder + "/samples" : folder;
-
-	// A Windows path out of [js] is POSIX-shaped with a drive letter ("C:/Music/...").
-	var isWindows = /^[A-Za-z]:/.test(target);
-	// No trailing slash on either form: Explorer wants the folder itself, and a POSIX
-	// path is stripped of its leading slash so "/Users/x" becomes "file:///Users/x".
-	var arg = isWindows ? target.replace(/\//g, "\\") : encodeURI("file:///" + target.replace(/^\/+/, ""));
-
-	messnamed("max", "launchbrowser", arg);
-	// The exact string, because a silent no-op is the failure mode here: if nothing
-	// opens, this line in the Max console is what says which form was tried.
-	post("strudel: reveal " + arg + "\n");
-}
 
 /* ------------------------------------------------------------------ *
  * Knob renaming (superdough, H.7 "dynamic renaming") - SPIKE

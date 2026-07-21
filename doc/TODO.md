@@ -24,25 +24,26 @@ Items are ordered by priority
 The transport should be automatically triggering the device on. If it's a sequencing device (ie: superdough, midi)
 it should automatically start playing, and stop when the clip is disabled.
 
-### 1. FIX - "Show folder" is not functional
+### 1. VERIFY - "Copy folder path" replaced "Show folder"
 
-**Assessment.** Scope grew back: three devices write files and offer the button
-(sample browser downloads, superdough and drums sampler export WAVs). Two rounds of
-Live testing on Windows 11 fixed part of it and left one open question:
+**Why the reveal was dropped.** `; max launchbrowser <folder>` is the only reveal Max
+offers, and three rounds of testing in Live on Windows 11 showed it does not work:
+a percent-encoded `file:///C:/...` URL reaches the shell (a WRONG path raised a real
+"cannot find the file" dialog naming it) but a correct one opens nothing and reports
+nothing, and a native backslash path fared no better. [js] cannot shell out, so there
+was no third form to try. The wrapper handler is gone.
 
-- FIXED: the wrapper revealed `<device folder>/samples/` for EVERY device. Only the
-  sample browser writes there; the exporters write to the device folder itself, so
-  Windows raised "cannot find the file" naming a folder that never existed.
-- FIXED (unverified): `launchbrowser` with a percent-encoded `file:///C:/...` URL
-  reaches the shell - a wrong path raised a real error dialog - but a CORRECT one
-  opens nothing and reports nothing. The handler now sends a native backslash path
-  on Windows and keeps the `file://` URL on macOS.
+**What ships instead.** The three file-writing devices (sample browser, superdough,
+drums sampler) copy the folder path to the clipboard for pasting into Explorer/Finder
+(`src/app/shared/clipboard.ts`). The page already knows the path - the wrapper sends
+`device_folder` at ui_ready - so no Max message is involved at all.
 
-**Remaining.** Confirm the native-path form actually opens Explorer in Live, and
-that macOS still opens Finder. The Max console logs the exact string sent
-(`strudel: reveal ...`), so a silent no-op can be told apart from a bad path. If
-`launchbrowser` refuses the native form too, the fallback is a different Max object
-for the reveal - [js] cannot shell out on its own.
+**Remaining.** Confirm the copy actually lands on the system clipboard in Live. The
+page is loaded from `file://`, which is not a secure context, so `navigator.clipboard`
+is likely absent or rejects; the implementation therefore tries
+`document.execCommand("copy")` FIRST and keeps the Promise API as the fallback. The
+status line says `Path copied: <path>` on success and shows the path anyway on
+failure, so the path is never unreachable even if both mechanisms are blocked.
 
 ### 2. FEAT - offline sample cache for Superdough
 
@@ -85,45 +86,148 @@ the value). It reuses the sample-map registration the Superdough device already 
    
 ### 4. FEAT - Refactor the Superdough device into the "strudel" device
 
-**The Idea.** The superdough device becomes the main device of this chain and therefore changes its name to just `alienmind-strudel` (dropping the "superdough" moniker). The rest of the devices remain unchanged. This refactor combines two major improvements: replacing the Studio window with a real local `strudel.cc` instance, and integrating `hydra.js` visuals into the main device view.
+**The Idea.** The superdough device becomes the main device of this chain and therefore
+changes its name to just `alienmind-strudel` (dropping the "superdough" moniker). The
+rest of the devices remain unchanged. This refactor combines two major improvements:
+replacing the Studio window with a real local `strudel.cc` instance, and integrating
+`hydra.js` visuals into the main device view.
 
-#### Window Architecture & Roles
+#### Feasibility check (done, against the code as of 0.9.9)
 
-1. **Mini Window (Main Device View).** The minimal screen is not enough for writing any code. Instead, it serves as a mini window to represent a minimal visualization and to trigger/open external windows to any code related activity. It will have the minimal buttons we currently have. It will render a  `_scope()` by default (rendering the whole master chain of the superdough). Note: Do not necessarily use `_scope()`, we can create a mini oscillator if necessary.
-   - **Secondary Purpose (Hydra Sink):** If the strudel screen has `hydra()` code, the mini window becomes the rendering target of the hydra visuals.
-2. **External "Studio" Window.** Becomes a locally served version of the astro app that serves `strudel.cc` (copy/adapt the current design). The hand-rolled editor will never catch up with the real REPL's syntax highlighting, inline docs, and visualisers.
+The window architecture questions have answers in the m4l-jweb source; they are not
+open design space:
 
-#### Audio Routing & Inter-Window Communication
+1. **A floating window can never own the track's audio.** `applyWindows()`
+   (m4l-jweb `packages/build/src/surface.mjs`) emits a plain `[jweb]` inside a
+   `[p]` subpatcher, wired for MESSAGES only - there is no signal path, and a
+   `[jweb]` page's Web Audio goes to the SYSTEM output device, not to the track
+   (ARCHITECTURE.md: "[jweb] can not put audio on the track; [jweb~] can"). So the
+   CRITICAL CONSTRAINT resolves itself: the device view's `jweb~` page keeps the
+   engine and the audio, the Studio window is an editor/controller, and m4l-jweb's
+   external-window behaviour is not touched at all. This is route (a) from the
+   pre-merge item, now the ONLY route rather than a candidate.
+2. **Window-to-device communication already exists.** `useStateSync` slots fan out
+   to every open view (`broadcastState` in the wrapper), and the current Studio
+   already shares `code` this way. The REPL window needs the same slot plus an
+   eval trigger - no new bridge machinery upstream.
+3. **The hydra sink and the scope belong in the device view, and that is free.**
+   The mini window IS the `jweb~` page that owns superdough's AudioContext, so an
+   AnalyserNode and hydra's audio-reactive input read the real output directly.
+   No audio data ever crosses a window boundary.
+4. **"Both windows as independent jweb~ devices" contradicts one-AudioContext by
+   construction.** Two `jweb~` boxes are two Chromium pages with two contexts,
+   whatever patcher they sit in. The closest legal shape is one audio-owning
+   device plus a pure-editor device over `[send]`/`[receive]` (item 9's channel) -
+   which is the same editor/engine split with extra latency and a second `.amxd`
+   to install. Downgraded to a fallback spike, entered only if hosting the REPL in
+   a window fails outright.
+5. **The real upstream gap is payload shape, not audio.** Window bundles today are
+   ONE self-contained HTML file, base64-embedded in the wrapper `[js]` and
+   self-extracted next to the `.amxd`. The REPL is a multi-file Astro site and
+   will not fit that mechanism; serving it is the one m4l-jweb feature this item
+   needs (below).
 
-- Audio is routed from either the main window or the external window, but needs to be performant.
-- **CRITICAL CONSTRAINT:** If routing audio from the Studio fundamentally changes how an external window renders audio (so far it was a "subsidiary" window and the main window was the mini window), **DO NOT ALTER THE CURRENT BEHAVIOUR** of m4l-jweb external windows. Instead, add a new feature that allows to open up fully independent external windows, or where the priority is reversed and the mini window becomes a subsidiary.
-- **Independent `jweb~` Devices?** Regarding the communication between the two windows, explore if we can make them both independent `jweb~` devices: the first is the full external window, and the second (sink) is just an audio processor with another instance that renders the hydra visuals.
-- **One AudioContext:** Must still resolve the "exactly one stream of notes" constraint, ensuring the REPL's scheduler does not conflict with the audio sink.
+#### Target architecture
 
-#### Implementation Details from Previous Spikes
+- **Engine and audio: unchanged.** Pattern compiles in `engine.worker.js`, the
+  superdough sink in the device page schedules against the anchored audio clock
+  (`useSuperdoughRender`), `jweb~` carries the output. Exactly one stream of notes
+  regardless of how many views are open. Live's transport keeps driving the
+  scheduler through `tick`; the REPL's own clock is suppressed, not bridged.
+- **Mini window (device view).** Header keeps the current icon buttons, plus
+  Studio promoted from About > Advanced to the main row. The editor area becomes a
+  canvas: an oscilloscope on superdough's master output by default (an
+  AnalyserNode tap, drawn with requestAnimationFrame - our own mini scope, not
+  strudel's `_scope()`, which is coupled to the REPL's draw context). When the
+  evaluated pattern uses hydra, the same canvas becomes hydra's render target and
+  the scope stands down until the next non-hydra eval.
+- **Studio window.** The strudel.cc Astro app, built from the `strudel/`
+  submodule, served locally, patched into an editor: its audio boot and scheduler
+  are disabled, and evaluate writes the shared `code` slot and bumps an
+  `evalRequest` state slot; the device page picks that up and runs the same path
+  as the local Run button. Syntax highlighting, inline docs, autocompletion and
+  the pattern visualisers come with the site; sound always comes from the one
+  engine.
 
-**Serving the REPL:**
-- The REPL is an Astro site in the `strudel/` submodule. It must build to a self-contained bundle with no CDN.
-- **Bundle size is a risk**: Measure before committing so the `.amxd` does not become unusable.
-- **Transport:** The REPL's scheduler has to be driven from our `tick` (Live's clock).
+#### Concrete changes - this repo
 
-**Hydra Integration:**
-- The integration already ships in `strudel/packages/hydra/hydra.mjs`.
-- "Audio in" is already solved for superdough since the analyser and sound are on the same side of the bridge.
-- **Worker/main split:** The pattern compiles in `engine.worker.js`; hydra and `@strudel/draw` must run on the main thread.
-- **Unknowns:** WebGL inside jweb~'s CEF is unverified, as is a 60 fps GPU loop alongside the audio sink.
-- **Vendor hydra-synth:** Bundle it and pass `initHydra({ src: <bundled url> })`; never let the unpkg default run for offline support.
+- **Rename.** `src/app/superdough/` -> `src/app/strudel/`, device name
+  `alienmind-strudel` in the build's device list, docs, README, `.adg` presets.
+  Keep every param and state slot NAME as is (`play`, `s1..s8`, `code`,
+  `transport`) so values saved in old sets still land after the swap. A Live set
+  references the device by FILE name, so ship the old `.amxd` one release longer
+  with a deprecation note rather than breaking sets silently.
+- **`scripts/build-repl.mjs`.** Builds the submodule's Astro site into a static
+  offline bundle, then runs the patch pass: strip every CDN/network reference,
+  vendor `hydra-synth` (never let the unpkg default run), inject a small "m4l
+  shim" module that disables the REPL's audio init, rewires evaluate to the
+  bridge, and hides or repurposes its transport UI. Patches live as a documented
+  overlay (patch files or a build plugin over the submodule), never as a vendored
+  copy that can never be updated.
+- **Studio window swap.** `surface.ts` `studio` window points at the built site
+  (via the upstream `site:` window kind below). `shared/StudioWindow.tsx` (the
+  hand-rolled editor) is deleted once the REPL reaches parity; the `strudel`
+  window (the online strudel.cc redirect) becomes redundant and goes too.
+- **Eval trigger.** New state slot `evalRequest` (a nonce); `useStrudelEngine`
+  observes it and, on change, takes the current `code` and runs - identical to
+  pressing Run locally. One slot, no new selectors.
+- **Mini scope.** `webaudio.ts` (or superdough's output gain) exposes a master
+  tap; a small `<Scope>` component replaces `PatternEditor` in the device view.
+  Decide during build whether a read-only one-line pattern display stays (product
+  call, cheap either way).
+- **Hydra sink.** Vendor `strudel/packages/hydra/hydra.mjs` + `hydra-synth` into
+  the device bundle; after each eval, if the pattern used hydra, call
+  `initHydra({ src: <bundled url> })` against the device canvas. Hydra and
+  `@strudel/draw` run on the main thread; the pattern still compiles in the
+  worker - that split already holds today.
 
-#### Suggested Sequence
+#### Concrete changes - upstream m4l-jweb
 
-- **Spike 0 (REPL Bundle):** Build the REPL from `strudel/` as a static offline bundle. Confirm size and offline boot.
-- **Spike 1 (WebGL & Hydra):** Test a page in jweb~ that gets a WebGL context and runs hydra while a superdough pattern plays. Watch for clock drift / late events.
-- **Spike 2 (Window Architecture):** Test the independent `jweb~` devices vs. standard m4l-jweb window routing. Ensure audio priority and communication can be established without breaking existing `m4l-jweb` behaviour.
-- **Then:** Execute the rename to `alienmind-strudel`, replace the Studio window, setup the mini window default scope/hydra sink, and wire the communication.
+- **`window({ site: "<dir>" })`** - a window whose content is a prebuilt static
+  directory instead of an `entry` component. `site` and `entry` are mutually
+  exclusive. `build-ui.mjs` skips vite for site windows and copies the directory
+  to `dist/ui/<device>/<winId>/`.
+- **Sidecar payload delivery.** Base64-in-`[js]` will not scale to a whole site
+  (the device view alone is around a megabyte; the REPL will be tens). The
+  release artifact for a device with a `site:` window becomes the `.amxd` plus a
+  sibling folder; the wrapper checks the folder exists at load, reports a clear
+  error if it does not, and sends `url file:///<folder>/index.html` (with the
+  usual cache-buster) through `messnamed("window-read-<id>", ...)` exactly as it
+  does for extracted single-file windows today.
+- **Nothing else.** No `jweb~` in windows, no new audio routing, no change to how
+  existing external windows behave. That is the constraint, honoured by scoping
+  the feature to payload delivery only.
+
+#### Spikes (in order; each can kill or reshape the item)
+
+- **Spike 0 (REPL bundle).** `astro build` the submodule, open it from `file://`
+  with the network OFF - first in a plain browser, then in a scratch jweb window.
+  Astro emits root-absolute asset paths by default, so expect a `base` config or
+  a relative-links pass; a service worker or wasm under `file://` are the likely
+  hard failures. Measure total size. Gate: boots offline; size is acceptable as a
+  sidecar folder (the `.amxd` itself stays small under the sidecar plan).
+- **Spike 1 (WebGL and hydra in jweb~).** In the DEVICE view page, get a WebGL
+  context and run a hydra sketch while a superdough pattern plays. WebGL inside
+  jweb~'s CEF is unverified, as is a 60 fps GPU loop beside the audio sink. The
+  sink's re-anchor counter already logs clock trouble - watch it. Gate: no
+  audible degradation, usable fps.
+- **Spike 2 (editor takeover).** Patch the REPL's evaluate to write
+  `code` + `evalRequest`; confirm the device plays what the window evaluates,
+  exactly one stream of notes with both views open, and Ctrl+Enter-to-sound
+  latency comparable to today's Studio.
+- **Spike 3 (fallback only).** The two-device split over `[send]`/`[receive]`.
+  Entered only if spike 0 or 2 fails in the window-hosted form.
+- **Then:** the rename, the mini scope/hydra canvas, the Studio swap, delete the
+  hand-rolled editor and the strudel.cc redirect window.
 
 #### Acceptance
 
-Offline, in Live: The device is renamed to `alienmind-strudel`. The Studio opens the real REPL; evaluating there plays performantly. The mini window acts as a launchpad, visualizer, and hydra sink. The two windows communicate seamlessly, and the `.amxd` is still a size a user will accept.
+Offline, in Live: the device is `alienmind-strudel`, and old sets keep their knob
+and code values. The Studio opens the real REPL from disk; evaluating there plays
+through the track via the device's one engine, with no second audio stream and no
+audible scheduling seam. The mini window shows the scope by default and renders
+hydra when the pattern asks for it. The `.amxd` stays small; the sidecar folder is
+documented as part of the install.
 
 ### 5. FEAT - rework native knobs
 
