@@ -5,6 +5,7 @@ import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
 import { Button } from "../shared/Button";
 import { HelpButton } from "../shared/HelpButton";
+import { SliderRow } from "../shared/SliderRow";
 import { tokenAtCaret } from "@/lib/reference";
 import { useSuperdoughRender } from "./useSuperdoughRender";
 import surface from "./surface";
@@ -115,6 +116,9 @@ export default function App() {
 			/>
 
 			{error && <span className="truncate text-[10px] leading-none text-destructive">{error}</span>}
+
+			{/* Every slider() in the pattern, live, on a native knob (S1..S8). */}
+			<SliderRow sliders={s.sliders} />
 
 			{s.exportNote && (
 				<span className="truncate text-[10px] leading-none text-muted-foreground" title={s.exportNote}>

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { uiReady } from "@m4l-jweb/bridge";
 import { useNativePanel, useParam, useStateSync, useWindow } from "@m4l-jweb/surface/react";
+import { SliderRow } from "../shared/SliderRow";
+import type { SliderKnob } from "../shared/useSliderKnobs";
 import { Button } from "../shared/Button";
 import { HelpButton } from "../shared/HelpButton";
 import { tokenAtCaret } from "@/lib/reference";
@@ -113,6 +115,32 @@ export default function App() {
 		() => (sourcesState && typeof sourcesState === "object" && !Array.isArray(sourcesState) ? (sourcesState as Partial<Record<FxParam, string>>) : {}),
 		[sourcesState],
 	);
+
+	/**
+	 * The visible stages as web sliders, mapped onto their OWN native dial (fx dials are
+	 * named - `cutoff` is always the cutoff knob - so unlike Superdough's S1..S8 pool
+	 * there is nothing to allocate). Ranges come from the surface declaration, so a
+	 * slider can never disagree with the dial it drives. A modulated stage is skipped:
+	 * a live.remote~ owns that parameter exclusively and a slider would fight it.
+	 */
+	const fxSliders: SliderKnob[] = useMemo(() => {
+		const declared = (surface as unknown as { params: Record<string, { range?: [number, number] }> }).params ?? {};
+		return RACK.filter((r) => named.includes(r.param) && !sources[r.param]).map((r, i) => {
+			const [min, max] = declared[r.param]?.range ?? [0, 1];
+			const raw = Number(params[r.param] ?? r.neutral);
+			const span = max - min;
+			return {
+				label: r.call,
+				min,
+				max,
+				norm: span === 0 ? 0 : Math.min(1, Math.max(0, (raw - min) / span)),
+				raw,
+				set: (n: number) => setters[r.param](min + Math.min(1, Math.max(0, n)) * span),
+				knob: i + 1,
+			};
+		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [named, sources, params]);
 
 	// THE MODULATION, derived from `sources` alone - not from the visible line. The
 	// visible line includes the draft (half-typed modulation must not move a dial) and
@@ -258,11 +286,15 @@ export default function App() {
 			)}
 
 
-			{/* No HTML sliders here any more: the seven parameters render as native
-			    live.dial objects in the device view (surface.ts `layout.native`),
-			    beside this [jweb]. They follow automation and Push, and a dial turn
-			    still reaches the app - so the line above redraws from them, for free.
-			    An empty line is the only hint the user needs. */}
+			{/* The stages this line names, as sliders, on the main screen - the same
+			    interaction the Superdough device gives `slider()`. These are VIEWS of the
+			    native live.dial objects (surface.ts `layout.native`), not a second set of
+			    controls: dragging one writes the parameter an automation lane or a Push
+			    encoder writes, and the line above redraws from it. The dials themselves
+			    live behind the Knobs switch, because a frozen device cannot reposition
+			    native objects - which is exactly why reaching them from here matters. */}
+			<SliderRow sliders={fxSliders} />
+
 			{shown.length === 0 && (
 				<div className="mt-auto text-center text-muted-foreground py-2 text-xs">
 					Turn a dial, type an effect, or use (+) to add one.
