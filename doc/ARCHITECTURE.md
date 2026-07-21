@@ -141,6 +141,42 @@ DSP into the page.
 
 Strudel's `$:` assignment is not part of the standard engine build. We implement this collector inside `engine.mjs`, registering `$:` patterns and evaluating them together at `compile()`. Check this against `strudel/packages/core/repl.mjs` when updating the submodule.
 
+### 2d. Writing files: the `download` chain is not about downloading
+
+Learned the hard way while building Export, and it generalises well past this repo.
+
+**`download` owns `[maxurl]`, so ANY device that writes a file needs that chain** - even
+one that never downloads anything. `saveToFile` runs in three phases: `[js] File` writes
+the bytes to a scratch file, the wrapper verifies the byte count, and phase three asks
+`[maxurl]` to place the scratch file over the destination with a `file://` GET. The first
+two phases need no chain at all, so a device without `download` writes its bytes
+perfectly and then fails **silently** at the last step: the request leaves on an aux
+outlet with nothing on the other end, no reply ever comes, the promise never settles, and
+the UI sits on "Rendering..." forever beside a `.part` file that looks almost right. That
+is exactly how the Superdough device shipped for a day.
+
+**Why the place step exists: atomicity.** The destination is not touched until the bytes
+on disk have been counted and match what the app promised. A crash, a Live quit or a
+short write leaves the scratch file behind and the real filename either absent or still
+holding its previous, valid contents - never a half-written WAV that Live will try to
+load.
+
+**The scratch file is one fixed name per folder, not `<dest>.part`.** `[js]` cannot
+delete a file - there is no such call in Max's JS API - so a spent scratch file is
+truncated to zero bytes and left behind. Naming it after the destination was fine while
+the only writer was the sample browser, whose filenames come from the sample's URL: the
+same sample re-fetched reused the same scratch file. An audio export names its file after
+the moment it was rendered, so every bounce stranded another zero-byte
+`superdough-export-<timestamp>.wav.part` next to the real one, accumulating forever. The
+wrapper uses one `m4l-jweb-save.part` per device folder now - reused, overwritten, and at
+worst a single stray empty file however many exports are made. (Upstream in
+`@m4l-jweb/wrapper`; `tests/wrapper-max.test.mjs` pins it.)
+
+**The rule to carry forward:** a device that writes a file gets `download` in its chain
+list AND `HAS_DEVICE_FOLDER` in `wrapper/device.ts`. The two travel together - the second
+is how the page learns where the file went, and what gives "Show folder" something to
+reveal.
+
 ## 3. Message Protocol (jweb ⇄ js)
 
 Each device defines its selectors in `src/app/<device>/protocol.ts`, extending `@m4l-jweb/bridge` base events.
