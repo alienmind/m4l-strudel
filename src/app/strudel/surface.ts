@@ -1,5 +1,5 @@
 /**
- * surface.ts (superdough) - the render device's Live parameters.
+ * surface.ts (strudel) - the main device's Live parameters.
  *
  * The MIDI device's surface minus what does not apply: no scale (nothing here is a
  * MIDI pitch) and no clip I/O (the output is the track's audio, not notes). What

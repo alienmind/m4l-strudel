@@ -9,5 +9,5 @@ import surface from "./surface";
  */
 export default function Studio() {
 	const [code, setCode] = useStateSync(surface, "code");
-	return <StudioWindow text={typeof code === "string" ? code : ""} onChange={setCode} device="superdough" />;
+	return <StudioWindow text={typeof code === "string" ? code : ""} onChange={setCode} device="strudel" />;
 }

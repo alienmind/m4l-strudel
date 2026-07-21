@@ -12,7 +12,7 @@
  * compress two events together. Re-anchoring happens only when the mapping is
  * meaningless: first event, tempo change, fallen behind, or absurdly ahead.
  *
- * `schedule()` mirrors useSuperdoughRender's sink exactly. It is duplicated rather than
+ * `schedule()` mirrors useStrudelRender's sink exactly. It is duplicated rather than
  * imported because the hook needs React and a live AudioContext; the arithmetic does
  * not, and the arithmetic is the part that was wrong.
  */
