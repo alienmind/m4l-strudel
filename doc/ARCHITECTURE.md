@@ -175,7 +175,24 @@ worst a single stray empty file however many exports are made. (Upstream in
 **The rule to carry forward:** a device that writes a file gets `download` in its chain
 list AND `HAS_DEVICE_FOLDER` in `wrapper/device.ts`. The two travel together - the second
 is how the page learns where the file went, and what gives "Show folder" something to
-reveal.
+reveal. Where it writes is per device, and the reveal must agree with it: the sample
+browser downloads into a `samples/` subfolder, the exporters write flat into the device
+folder. A reveal pointed at a folder nobody created is not a no-op, it is an OS error
+dialog.
+
+**Rendering while playing: superdough is a singleton, so a bounce is a handover.**
+`getAudioContext()`, the output controller and the node pool are all module-level in
+superdough, and the node pool is keyed by node type ACROSS contexts. `renderCycles`
+swaps the context for an `OfflineAudioContext`, so anything the live path does in that
+window - a hap the sink schedules, or a node it pooled beforehand - can end up connecting
+across two contexts: *"cannot connect to an AudioNode belonging to a different audio
+context"*. It presents as intermittent, because whether it throws depends on what the
+pool happens to be holding. The fix is a deliberate handover rather than a lock: the
+sink stands down for the render (`bouncing`), the pool is cleared on BOTH sides of it,
+and the previous context and controller are put back afterwards - not set to `null`,
+which would make the next `getAudioContext()` build a fresh realtime context and leave
+a `[jweb~]` device playing out of a context that reaches no signal outlet. Playback goes
+quiet for the length of the bounce, re-anchors, and resumes.
 
 ## 3. Message Protocol (jweb ⇄ js)
 
