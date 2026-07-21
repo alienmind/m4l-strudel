@@ -1,31 +1,32 @@
 import { useEffect, useState } from "react";
-import { ClipboardCopy, Download, Play, Square, SlidersHorizontal } from "lucide-react";
+import { ClipboardCopy } from "lucide-react";
 import { useNativePanel, useParam, useStateSync, useWindow } from "@m4l-jweb/surface/react";
 import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
 import { Button } from "../shared/Button";
+import { ControlsButton, ExportButton, RunButton } from "../shared/DeviceButtons";
 import { HelpButton } from "../shared/HelpButton";
 import { SliderRow } from "../shared/SliderRow";
 import { tokenAtCaret } from "@/lib/reference";
-import { useSuperdoughRender } from "./useSuperdoughRender";
+import { useStrudelRender } from "./useStrudelRender";
 import surface from "./surface";
 
 /**
- * Strudel Superdough - an instrument. Write ANY Strudel - multi-line `$:`, samples,
+ * Strudel - THE device of this repo, and an instrument. Write ANY Strudel - multi-line `$:`, samples,
  * synths, orbits, superdough's real effects - and it becomes the track's audio: the
  * real superdough runs LIVE in this page and jweb~ routes its Web Audio output
  * straight into the track's signal path. Edits are audible immediately; there is no
  * render, no loop boundary to wait for, and a random pattern is simply random.
  *
  * EXPORT is the one place the offline renderer survives: it bounces the pattern to a
- * WAV next to the device (see useSuperdoughRender's exportAudio). The old
+ * WAV next to the device (see useStrudelRender's exportAudio). The old
  * render-and-loop pipeline it descends from is parked in doc/DRAWER_OF_FAILED_IDEAS.md.
  *
  * Same 169px budget as every device: header (14) + editor (flex) + notice rows +
  * bottom status row.
  */
 export default function App() {
-	const s = useSuperdoughRender();
+	const s = useStrudelRender();
 	const [showAbout, setShowAbout] = useState(false);
 
 	// The native transport panel behind the view switch - the MIDI device's mechanism.
@@ -72,27 +73,14 @@ export default function App() {
 					onClick={() => setShowAbout(true)}
 					className="shrink-0 text-xs font-semibold tracking-tight hover:text-primary transition-colors cursor-pointer"
 				>
-					Strudel Superdough
+					Strudel
 				</button>
-				<Button
-					className="ml-auto"
-					icon={s.live ? Square : Play}
-					active={s.live}
-					onClick={s.live ? s.hush : s.run}
-					title={s.live ? "Stop the pattern" : "Run the pattern (Ctrl+Enter)"}
-				/>
+				<RunButton className="ml-auto" live={s.live} onRun={s.run} onStop={s.hush} />
 				{/* Allowed while playing: the bounce takes superdough's context over for its
-				    duration, so playback goes quiet and resumes (useSuperdoughRender). */}
-				<Button
-					icon={Download}
-					onClick={s.exportAudio}
-					disabled={s.exporting}
-					active={s.exporting}
-					title="Export: render this pattern to a WAV next to the device, then drag it into a track"
-				/>
-				<Button
-					icon={SlidersHorizontal}
-					onClick={() => setShowTransport(true)}
+				    duration, so playback goes quiet and resumes (useStrudelRender). */}
+				<ExportButton onExport={s.exportAudio} busy={s.exporting} />
+				<ControlsButton
+					onShow={() => setShowTransport(true)}
 					title="Controls: the native panel with the mappable Play/Stop and the eight slider knobs (S1..S8). Its Back switch returns."
 				/>
 				<HelpButton onOpen={helpWindow.open} />

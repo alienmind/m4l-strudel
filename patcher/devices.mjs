@@ -70,8 +70,10 @@ export default [
 	},
 	{
 		/**
-		 * Strudel Superdough - ALL of Strudel, as the track's real audio. The page
-		 * runs the real superdough engine LIVE (synths, samples, orbits, effects -
+		 * Strudel - the MAIN device of this repo: ALL of Strudel, as the track's real
+		 * audio. It was `alienmind-strudel-superdough` until 1.0.0; the engine is still
+		 * superdough, but the DEVICE is the whole language, so it carries the plain name.
+		 * The page runs the real superdough engine LIVE (synths, samples, orbits, effects -
 		 * everything strudel.cc plays, because it IS superdough) and jweb~ routes
 		 * its Web Audio output into the track. The offline WAV render pipeline this
 		 * device used to need is parked in doc/DRAWER_OF_FAILED_IDEAS.md.
@@ -79,16 +81,32 @@ export default [
 		 * type "instrument": it fills the Rack's instrument slot - the sound source
 		 * of the track, not an effect on one.
 		 */
-		name: "alienmind-strudel-superdough",
-		ui: "superdough",
+		name: "alienmind-strudel",
+		ui: "strudel",
 		type: "instrument",
-		mode: "superdough",
+		mode: "strudel",
 		// `download` is NOT about downloading here: it owns the [maxurl] object, and
 		// saveToFile's last phase places the verified .part over the destination with a
 		// file:// GET through it. Drop the chain and Export writes a .part that is never
 		// renamed, with no reply - so the promise never settles and the UI hangs on
 		// "Rendering...". Anything that writes a file needs this chain.
 		chains: ["webaudio", "download"],
+		unmatchedTo: "js",
+	},
+	{
+		/**
+		 * Strudel Synth - one superdough sound, played by the track's MIDI (TODO item 3).
+		 *
+		 * The smallest instrument here: no pattern, no transport, no engine worker. The
+		 * page compiles a superdough VALUE once and plays it per incoming note, so
+		 * `midiin` is the trigger and `webaudio` carries the result into the track. No
+		 * `download` chain - it writes no files.
+		 */
+		name: "alienmind-strudel-synth",
+		ui: "synth",
+		type: "instrument",
+		mode: "synth",
+		chains: ["webaudio", "midiin"],
 		unmatchedTo: "js",
 	},
 ];

@@ -1,36 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { registerSynthSounds, samples, setGainCurve, superdough, initAudio, getAudioContext } from "superdough";
+import {
+	registerSynthSounds,
+	samples,
+	setGainCurve,
+	superdough,
+	initAudio,
+	getAudioContext,
+} from "superdough";
 import { bindInlet, saveToFile } from "@m4l-jweb/bridge";
-import { copyText } from "../shared/clipboard";
+import { copyMessage, copyPath } from "../shared/clipboard";
 import { bootScope, compile } from "../../max/shared/engine.mjs";
 import { renderPeriod } from "../../lib/render/determinism";
 import { renderCycles } from "../../lib/render/offline";
 import { asStrudelCode } from "../../lib/strudelCode";
 import { withDeadline } from "../../lib/samples";
+import { sampleCacheStatus } from "../../lib/sampleCache";
+import { SAMPLE_MAPS, loadSampleMaps } from "../../lib/sampleMaps";
 import { useStrudelEngine } from "../shared/useStrudelEngine";
 import { useSliderKnobs } from "../shared/useSliderKnobs";
 import surface, { INITIAL_TEXT } from "./surface";
 
 /**
- * The sample maps strudel.cc prebakes (strudel/packages/repl/prebake.mjs). Without
- * them `s("bd")`, `s("piano")`, and the drum machines resolve to nothing and
- * superdough logs "sound not found". Synths (registerSynthSounds) need no network;
- * these do, so they are loaded best-effort - a failed map must not sink the others,
- * nor block synth playback. Offline caching of these fetches is TODO item 2.
- */
-const DOUGH = "https://raw.githubusercontent.com/felixroos/dough-samples/main";
-const UZU = "https://raw.githubusercontent.com/tidalcycles/uzu-drumkit/main";
-const SAMPLE_MAPS = [
-	`${DOUGH}/tidal-drum-machines.json`,
-	`${DOUGH}/piano.json`,
-	`${DOUGH}/Dirt-Samples.json`,
-	`${DOUGH}/vcsl.json`,
-	`${DOUGH}/mridangam.json`,
-	`${UZU}/strudel.json`,
-];
-
-/**
- * The native Web Audio sink for the Superdough device.
+ * The native Web Audio sink for the Strudel device.
  *
  * TWO CLOCKS, AND WHY delayMs IS THE WRONG BRIDGE BETWEEN THEM. The worker schedules
  * against Live's transport and hands each hap a `delayMs` measured from the beat
@@ -73,7 +64,7 @@ const MAX_EXPORT_CYCLES = 32;
  *  stable - an inline `{}` would be a new object every render. */
 const EMPTY_CTX = {} as const;
 
-export function useSuperdoughRender() {
+export function useStrudelRender() {
 	const [samplesNote, setSamplesNote] = useState<string | null>("Loading samples...");
 	const initialized = useRef(false);
 	/** Pattern time pinned to audio time: events derive from this, not from delayMs. */
@@ -97,9 +88,16 @@ export function useSuperdoughRender() {
 				// offline) fetch never holds up synth patterns. allSettled: one dead map
 				// must not silence the rest.
 				setSamplesNote("Loading sample maps...");
-				void Promise.allSettled(SAMPLE_MAPS.map((m) => samples(m))).then((results) => {
-					const failed = results.filter((r) => r.status === "rejected").length;
-					setSamplesNote(failed ? `${failed}/${SAMPLE_MAPS.length} sample maps offline - synths still play` : null);
+				void loadSampleMaps((m) => samples(m)).then(async (failed) => {
+					if (!failed) return setSamplesNote(null);
+					// Offline is not necessarily silence any more: every sample fetched in a
+					// previous session is served from the page-side cache (lib/sampleCache.ts).
+					// Say which of the two situations this is, because they sound different.
+					const cache = await sampleCacheStatus();
+					const stored = cache.entries
+						? ` - ${cache.entries} cached sound${cache.entries === 1 ? "" : "s"} still play`
+						: " - synths still play";
+					setSamplesNote(`${failed}/${SAMPLE_MAPS.length} sample maps offline${stored}`);
 				});
 			})
 			.catch((e) => setSamplesNote("Failed to load sounds: " + e.message));
@@ -139,7 +137,9 @@ export function useSuperdoughRender() {
 					const wall = Date.now();
 					if (wall - s.lastLogged > 5000) {
 						s.lastLogged = wall;
-						console.warn(`[superdough-sink] re-anchored ${s.count}x - transport jump, tempo change or clock drift`);
+						console.warn(
+							`[superdough-sink] re-anchored ${s.count}x - transport jump, tempo change or clock drift`,
+						);
 					}
 				}
 			}
@@ -156,7 +156,9 @@ export function useSuperdoughRender() {
 	 *  Max cannot perform (doc/TODO.md item 1). */
 	const copyFolder = useCallback(async () => {
 		if (!folder) return;
-		setExportNote((await copyText(folder)) ? `Path copied: ${folder}` : `Could not copy - the folder is ${folder}`);
+		setExportNote(
+			copyMessage(await copyPath(folder), folder),
+		);
 	}, [folder]);
 
 	// Every slider() in the pattern, on a native S1..S8 dial.
@@ -207,7 +209,7 @@ export function useSuperdoughRender() {
 			// Render at the page's own rate, so the bounce matches what Live is running
 			// rather than forcing a resample on import.
 			const { wav, seconds } = await renderCycles(pat, cps, 0, cycles, getAudioContext().sampleRate);
-			const name = `superdough-export-${Date.now()}.wav`;
+			const name = `strudel-export-${Date.now()}.wav`;
 			// Deadlined: saveToFile settles only when the wrapper replies, and a request
 			// that never reaches [maxurl] gets no reply at all - which showed up as a
 			// status stuck on "Rendering..." forever while a .part sat on disk. A bounded

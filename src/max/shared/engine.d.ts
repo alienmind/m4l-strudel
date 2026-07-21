@@ -18,5 +18,8 @@ declare module "*/max/shared/engine.mjs" {
 	export function patternCycles(pat: any, cps: number, ctx?: any, maxCycles?: number): number;
 	export function setLiveScale(name: string | undefined): void;
 	export function installDollarCollector(): void;
+	export function beginSliderCapture(): void;
+	export function getSliderSpecs(): { id: string; value: number; min: number; max: number }[];
+	export function setSliderOverrides(values: (number | null)[]): void;
 	export function installReplShims(): void;
 }
