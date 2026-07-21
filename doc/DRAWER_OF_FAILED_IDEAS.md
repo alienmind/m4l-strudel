@@ -399,3 +399,49 @@ The honest framing for docs/ABOUT: "Live does not let plugins open EQ Eight
 style panels in the main window; the arrow opens the device full-size in a
 floating window instead, and it remembers where you put it." Setting the
 expectation kills the bug report before it is filed.
+
+## Offline superdough rendering and the double-buffered WAV loop - superseded by jweb~
+
+**Verdict: parked for good. Not wrong, just obsolete: Max 9's [jweb~] made the whole
+pipeline unnecessary.**
+
+The problem it solved was real. [jweb] has no signal outlets, so a page that plays
+audio is heard past the track, the fader and the monitor cue - the one sound in the
+set Live cannot touch. The Route B design ("SUPERDOUGH Rendering") answered that wall
+with a full offline pipeline:
+
+- the page rendered one loop period of the pattern OFFLINE with the real superdough
+  (OfflineAudioContext plus the DSP worklets), encoded it to WAV;
+- saveToFile placed the WAV next to the device via [maxurl] (write .part, then a
+  file:// GET as the atomic move);
+- the `renderplay` chain looped it Max-side through a double-buffered pair of
+  [buffer~]/[groove~] slots, crossfading to a fresh render at the loop boundary,
+  pinned to Live's transport phase via render_sync;
+- a conductor state machine in the app tracked which slot played and which loaded,
+  with progress UI, sliders re-rendering at boundaries, and a determinism notice for
+  random patterns (each audible cycle was one frozen roll of the dice).
+
+It shipped, it worked, and it carried the project to 0.9.x. Its costs were structural,
+not bugs: every edit took a render round-trip to be heard, disk I/O per render, a
+whole Max-side transport-lock/crossfade mechanism to keep loops seamless, and a
+conductor whose state machine was the hardest code in the repo.
+
+Then [jweb~] (Max 9) gave the embedded browser SIGNAL outlets. The page's Web Audio
+output now flows straight into the device's signal path (the `webaudio` chain sums it
+in), so superdough plays LIVE in the page and Live hears it through the track. No
+render, no WAV, no buffers, no conductor. The same discovery also retired the
+`samples` chain ([buffer~]/[groove~] preview) and the `instrument` chain ([poly~]
+voice allocation over buffer keymaps): decoding and playing in the page does the same
+job in a fraction of the code.
+
+What survives from the era: saveToFile and the `download` chain (a file on disk is
+still the sample browser's drag-out handle), and the lesson that the engine clock and
+the page's audio clock are different clocks - the offline renderer dodged that by
+rendering against its own timeline, and the live path has to clamp against it
+(src/app/superdough/useSuperdoughRender.ts).
+
+The removed implementation, for archaeology: m4l-jweb's `renderplay`, `samples` and
+`instrument` chains and their bridge APIs (renderLoad/renderArm/renderSync/
+onRenderReady, loadSample/playVoice), and m4l-strudel's src/lib/render/offline.ts,
+src/lib/render/conductor.ts and their tests. All in git history before the 0.9.9
+webaudio rewrite.

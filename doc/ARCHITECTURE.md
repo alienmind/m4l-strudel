@@ -1,8 +1,14 @@
 # m4l-strudel - Architecture
 
-One repo → four self-contained Max for Live devices, each with its own React UI bundle, built on the [M4L-JWEB](https://github.com/alienmind/m4l-jweb) library. 
+One repo → six self-contained Max for Live devices, each with its own React UI bundle, built on the [M4L-JWEB](https://github.com/alienmind/m4l-jweb) library.
 
 This document describes the high-level architecture, the build pipeline, the runtime anatomy, the message protocol, and exactly how we integrate with upstream Strudel. For the underlying M4L-JWEB approach itself (the `.amxd` container writer, generated patchers, the `[js]` lifecycle, the Surface) see [m4l-jweb's own doc/ARCHITECTURE.md](https://github.com/alienmind/m4l-jweb/blob/main/doc/ARCHITECTURE.md).
+
+> **0.9.9 - now migrated to `jweb~`.** Max 9's `[jweb~]` is an audio-capable browser object.
+> Until 0.9.5 used older [jweb] and everything was built on the assumption that a page could not put
+> sound on the track so lots of nasty workarounds were in place.
+> `[jweb~]` has signal outlets, so the page's Web Audio output *is* the device's
+> audio now.
 
 ```
 ┌──────────────────────────── one repo ────────────────────────────┐
@@ -10,11 +16,13 @@ This document describes the high-level architecture, the build pipeline, the run
 │  src/app/drums-midi/    the Drums MIDI device's UI                │
 │  src/app/drums-sampler/ the Drums Sampler device's UI             │
 │  src/app/sample-browser/ the sample browser's UI                  │
+│  src/app/superdough/    the Superdough device's UI                │
 │  src/app/fx/            the Audio FX device's UI                  │
-│  src/app/shared/        engine hook + worker + shared Button, etc │
+│  src/app/shared/        engine hook + worker + webaudio + Button  │
 │  src/lib/mini/          the mini-notation parser + resolver       │
 │  src/lib/fx.ts          the effects-line reader                   │
 │  src/lib/samples.ts     the sample-map catalog (fetched in page)  │
+│  src/lib/render/        the offline bounce (Export audio)         │
 │  src/max/shared/        engine.mjs, transport.mjs (engine devices)│
 │  wrapper/device.ts      [js] glue shared by all devices, ES5      │
 │  patcher/devices.mjs    the manifest; patcher/chains.mjs: chains  │
@@ -22,11 +30,18 @@ This document describes the high-level architecture, the build pipeline, the run
 └──────────────────────────────┬────────────────────────────────────┘
                           pnpm build
                  (@m4l-jweb/build under the hood)
-  ┌───────────┬───────────┬─────────┴──────┬──────────────┬─────────────┐
-  ▼           ▼           ▼                ▼              ▼             ▼
--midi.amxd  -drums-midi  -drums-sampler  -sample-browser -fx.amxd
-(MIDI)      .amxd (MIDI)  .amxd (instr.)  .amxd (audio)   (audio)
+  ┌──────────┬────────────┬─────────┴─────┬───────────────┬──────────┐
+  ▼          ▼            ▼               ▼               ▼          ▼
+-midi      -drums-midi  -drums-sampler  -sample-browser  -superdough -fx
+.amxd      .amxd        .amxd           .amxd            .amxd       .amxd
+(MIDI)     (MIDI)       (instrument)    (instrument)     (instrument)(audio)
 ```
+
+An **instrument** originates sound and fills a track's
+instrument slot (superdough, the drums sampler, and the sample browser - a preview is a
+sound source, not a process).
+An **audio** effect processes what is already on the track (fx).
+A **MIDI** device emits notes and has no signal path at all (midi, drums-midi).
 
 ## 1. The Build Pipeline
 
@@ -50,28 +65,73 @@ The build writes self-contained `.amxd` files from scratch. The UI html (and inl
 
 ## 2. Runtime Anatomy of a Device
 
-Every device runs entirely within `[jweb]` and `[js] wrapper.js`. **We do not use `[node.script]` anywhere in this repository.**
+Every device runs entirely within `[jweb~]` and `[js] wrapper.js`. **We do not use `[node.script]` anywhere in this repository.**
 
 ```
  [live.thisdevice] ─▶ [js wrapper.js <mode>]  (ES5, LiveAPI work - wrapper/device.ts
                           │ outlet0 ▲          on top of @m4l-jweb/wrapper's core.ts/liveapi.ts)
                           ▼         │ (unmatched [route] output: ui_ready, write_clip, read_notes)
-                       [jweb] ──────┘  
-                       │    ▲
-   React UI (+ engine  │    │
-   worker, MIDI only)  │    └── ticks + tempo from [js] (LiveAPI poll/observer)
-                       ▼
-              [route midinote flush]        (packaged `midiout` chain)
+                      [jweb~] ──────┘  outlet 2 = messages
+                    ╱  │  ╲   ▲
+       outlet 0 ───╯   │    ╲ └── ticks + tempo from [js] (LiveAPI poll/observer)
+       outlet 1 ────╲  │     ╲
+      (signal L/R)   ╲ ▼      ╲
+                      React UI (+ engine worker)
                        │
-        pipe→makenote→midiformat→midiout
-
- sample browser only:  [maxurl] writes the file  (`download` chain)
-                       [buffer~] -> [groove~] -> +~ -> plugout~  (`samples` chain)
+                       ├── audio devices: signal L/R ─▶ [+~] ─▶ ... ─▶ [plugout~]
+                       │                                (`webaudio` chain)
+                       └── MIDI devices: [route midinote flush] (`midiout` chain)
+                                            │
+                              pipe→makenote→midiformat→midiout
 ```
 
-- **`[jweb]`**: Hosts each device's own React UI bundle. For MIDI devices, it also runs the Strudel engine in a dedicated Web Worker (`engine.worker.js`).
-- **`[js] wrapper.js`**: Owns the lifecycle, payload extraction, and transport observers. `wrapper/device.ts` extends this with specific mode resolution, clip I/O, and Live 12 scale observers. It also responds to `buffer_load` and `fetch_to_file` requests from `[jweb]`.
-- **Transport Ticks**: The wrapper polls Live's transport and emits `tick <playing> <beats>` into `[jweb]`. Every device sequences against those ticks.
+- **`[jweb~]`**: Hosts each device's own React UI bundle, and carries the page's Web Audio output on its two signal outlets. The MIDI devices and the pattern devices also run the Strudel engine in a dedicated Web Worker (`engine.worker.js`).
+- **`[js] wrapper.js`**: Owns the lifecycle, payload extraction, and transport observers. `wrapper/device.ts` extends this with specific mode resolution, clip I/O, and Live 12 scale observers. It also responds to `fetch_to_file` and the `save_*` (saveToFile) requests from the page.
+- **Transport Ticks**: The wrapper polls Live's transport and emits `tick <playing> <beats>` into the page. Every device sequences against those ticks.
+
+### 2c. Audio: `[jweb~]` and the `webaudio` chain
+
+**`[jweb~]` capabilities.** It has **three** outlets - signal L, signal R, then messages -
+so the browser's Web Audio output lands *in Max's audio graph*. Two consequences the build
+must honour:
+
+- **The message stream moved to outlet 2.** Everything in the bridge that read `[jweb, 0]`
+  now reads `[jweb~, 2]` (`claimAppMessages` in m4l-jweb's `chains.mjs`). This is the one
+  breaking change for any device built on the framework.
+- **A new `webaudio` chain** takes signal outlets 0 and 1 and sums them into the device's
+  signal path with `[+~]`, then hands the path on (`ctx.setAudioOut`). Summing rather than
+  claiming means an audio effect stays a pass-through of what the track already carries,
+  while an instrument simply has silence to sum onto. Max-side chains still compose after
+  it: `chains: ["webaudio", "lowpass"]` is the page's audio through a `[onepole~]`.
+
+**Simplifications after migrating from [jweb] to [jweb~]** The `renderplay`, `samples` and
+`instrument` chains and their bridge APIs are gone from m4l-jweb; `offline.ts`'s loop-playback
+role, the conductor state machine, the double buffer, the transport-locked crossfade and
+the render progress UI are gone from here. Sample playback is `decodeAudioData` + `AudioBufferSourceNode`
+in the page (`src/app/shared/webaudio.ts`); polyphony is the browser's problem,
+which is to say it is not a problem.
+
+**The one new hazard: two clocks.** The engine worker schedules haps against *Live's*
+transport (or its own free-run timer when the transport is stopped) and hands each event a
+`delayMs`. The page's `AudioContext` under `[jweb~]` runs on a *different* clock. They
+drift. Superdough refuses to schedule an event whose target time is already in the past, so
+unbounded drift silently turns into silence once it exceeds the lookahead window - the
+audio appears to "collapse" after a while. The sink therefore **clamps**: an event that
+arrives late plays at `currentTime + 10 ms` instead of being dropped, and sustained lateness
+is logged to the jweb console (`[superdough-sink] N late events, worst Xms`) so the drift is
+visible rather than mysterious. If that warning shows *growing* lateness in Live, suspect a
+sample-rate mismatch between the page's `AudioContext` and Live's audio driver before
+anything else.
+
+**Devices that stayed on Max DSP, deliberately.** The fx device's graph is unchanged. Its
+whole point is native `live.dial` parameters that automate, MIDI-map and reach Push; that is
+a Max-side property, not an audio-quality one, so there is nothing to gain by moving its
+DSP into the page.
+
+**Two side consequences:**
+
+- **MIDI-only devices keep `[jweb~]` too.** They have no signal path and their audio outlets
+  simply go unconnected. This is just simplification.
 
 ### Transport → Pattern Scheduling
 
@@ -92,9 +152,13 @@ Each device defines its selectors in `src/app/<device>/protocol.ts`, extending `
 | UI → js (midi) | `write_clip ...`, `read_notes` | clip I/O |
 | js → UI (midi) | `notes ...`, `clip_available`, `read_error`, `write_error`, `scale` | clip replies + Live scale (`*_error` carry `no_track`/`no_clip`/`no_slot`) |
 | UI → Max (midi) | `midinote ...`, `flush` | scheduled engine output, via `sendNote()`/`flushNotes()` |
-| UI ⇄ worker (midi) | `code`/`hush`/`tick` in, `ready`/`evalok`/`evalerr`/`notes`/`flush` out | postMessage, not Max messages |
-| UI ⇄ Max (browser) | `fetch_to_file` / `fetch_done`, `buffer_load` / `buffer_ready`, `buffer_play` | the `download` and `samples` chains |
+| UI ⇄ worker (pattern devices) | `code`/`hush`/`tick` in, `ready`/`evalok`/`evalerr`/`notes`/`voices`/`doughEvents`/`flush` out | postMessage, not Max messages |
+| UI ⇄ Max (browser, superdough) | `fetch_to_file` / `fetch_done`, `save_begin`/`save_chunk`/`save_end` / `save_done` | the `download` chain: file acquisition and `saveToFile` |
 | UI ⇄ js (drums, fx) | `sync_state <id> <json>`, `state_<id> <json>` | state slots, via `useStateSync()` |
+
+Audio itself is **not** in this table any more: it leaves the page as a signal on
+`[jweb~]`'s outlets 0 and 1, not as messages. The `buffer_load`/`buffer_play`/`voice_play`
+selectors of the 0.9.x `samples` and `instrument` chains no longer exist.
 
 ## 4. Device Features
 
@@ -126,16 +190,16 @@ The MIDI devices support both bare mini-notation (`0 [2 ~] bd*2`) and full Strud
 **Pattern modulation (`.lpf(sine.range(200, 2000))`):** a signal argument parses into a `patterned` stage carrying the Strudel pattern AND its source text; `src/app/fx/useModulation.ts` makes it move, on the library's `remote` chain (one `live.remote~` per slot, `remotes: 9` in the manifest, mapped by RACK index - no allocator). Verified end to end in Live. The design in one paragraph:
 
 - **The clock**: one cycle = one 4/4 bar (`beats/4`), locked to `current_song_time` from the wrapper's 20 Hz `tick` - sweeps land on the downbeat at any tempo and survive loop jumps. No cps to honour: a one-line fx chain has no `setcpm()`.
-- **Bind/stream/release**: `resolveParamId()` + `bindRemote()` when a stage becomes modulated; `queryFxPattern()` + `writeRemote()` per tick while the transport runs; `bindRemote(slot, 0)` when the stage stops - a bound `live.remote~` owns the parameter exclusively and would freeze the dial. LOM ids are resolved on mount and never persisted (a set reload reloads `[jweb]`, so the hook re-resolves; ids do not survive a reload).
+- **Bind/stream/release**: `resolveParamId()` + `bindRemote()` when a stage becomes modulated; `queryFxPattern()` + `writeRemote()` per tick while the transport runs; `bindRemote(slot, 0)` when the stage stops - a bound `live.remote~` owns the parameter exclusively and would freeze the dial. LOM ids are resolved on mount and never persisted (a set reload reloads the page, so the hook re-resolves; ids do not survive a reload).
 - **The units warp**: `live.remote~` takes knob TRAVEL, not the parameter's units (measured upstream - see m4l-jweb's ARCHITECTURE.md). `toRemote()` clamps into the dial's range and aims the travel at `norm(v)^(1/exponent)` so Live's re-applied exponent lands where the pattern asked. Exponent-1 dials pass through untouched.
 - **Source persistence**: a modulated stage's expression is the only record of what the user asked for - a Pattern cannot say what it was written as, and the parameter holds only where the sweep last was. The `sources` state slot (param -> expression) persists it; without it a committed `.lpf(sine.range(200, 2000))` reprinted as `.lpf(18000)`.
-- **Cost, so it is not a surprise:** `@strudel/core` in the fx app took the UI bundle from 269 kB to 448 kB.
 
 **The Two-Screen Native UI (m4l-jweb 0.7.0):** The nine fx parameters are NATIVE `live.dial` objects, declared in `src/app/fx/surface.ts` via `layout: { native: { ..., panel: true, switch: "knobs" } }`. This shed the HTML sliders, so the dials automate, MIDI-map and hit Push like any factory device. Nine dials broke the Push bank budget (8 per page - the library throws on a ninth), so the banks split where the rack splits: **Tone** (cutoff, hpfreq, drive, crush) and **Space** (delay, delaytime, delayfeedback, room, gain).
 
-Because a frozen M4L device can hide/show native objects at runtime but **cannot reposition them** (measured — see m4l-jweb's ARCHITECTURE.md), the device is not one reflowing view but **two layered screens**, flipped by `useNativePanel`:
-- **Web mode** — the `[jweb]` (full width) shows the Strudel line UI; all dials hidden.
-- **Knob panel** — the `[jweb]` is hidden, revealing all nine dials in two rows, plus a "Back" `button` (a `live.text`, top-right) that returns to the web UI. The web UI paints a matching "Knobs" button at the same spot.
+Because a frozen M4L device can hide/show native objects at runtime but **cannot reposition them**,
+the device is not one reflowing view but **two layered screens**, flipped by `useNativePanel`:
+- **Web mode** — the `[jweb~]` (full width) shows the Strudel line UI; all dials hidden.
+- **Knob panel** — the `[jweb~]` is hidden, revealing all nine dials in two rows, plus a "Back" `button` (a `live.text`, top-right) that returns to the web UI. The web UI paints a matching "Knobs" button at the same spot.
 
 **Defensive state coercion:** `App.tsx` coerces the `named` slot to an array and `sources` to an object before use. The two bugs that motivated it are both fixed upstream (the `[dict]` envelope, and state-default seeding - see m4l-jweb's ARCHITECTURE.md), but the coercion stays: a malformed slot must degrade to "nothing named yet", not unmount the device to a black screen.
 
@@ -149,121 +213,117 @@ The **Full Studio window** is the same pattern grown up: a big editor over the s
 
 ### 4c. Sample Browser: Downloader and Preview
 
-The sample browser browses, downloads, and previews Strudel sample maps.
+The sample browser browses, downloads, and previews Strudel sample maps. An **instrument**:
+it originates the preview and processes nothing.
 
-- **The Catalog:** A `fetch()` request directly in the browser page reads `strudel.json` data, resolving pseudo-URLs into fully qualified absolute URLs.
-- **The Download:** Handled by the `download` chain. `fetchToFile()` calls `[maxurl]` which downloads the audio to the local `samples/` directory relative to the device.
-- **The Preview:** Handled by the `samples` chain. Files are read via `[buffer~]` and auditioned by `[groove~]`, summed into the Live track's signal path using `[+~]`. Previews are quantized to Live's `clip_trigger_quantization` grid and loop appropriately based on tempo.
+- **The Catalog:** A `fetch()` request directly in the page reads `strudel.json` data, resolving pseudo-URLs into fully qualified absolute URLs.
+- **The Preview:** One `fetch()` per audition, `decodeAudioData` into an `AudioBuffer`, played through `playBuffer()` (`src/app/shared/webaudio.ts`) - and therefore out of `[jweb~]` into the track, past the fader and the monitor cue. Previews are still quantized to Live's `clip_trigger_quantization` grid and loop on a whole number of bars at the current tempo.
+- **The Download:** the same bytes are also written to disk via `saveToFile()` (the `download` chain's `[maxurl]` atomic place). Playback no longer needs the file - but the *drag-out handle* will potentially need it. A row you can drag into a Simpler is the point of the device, and that requires a real file. The save is not awaited before playing: the preview should not wait on the disk.
 
-All file handling is asynchronous and will never hang the UI thread. The system is designed to degrade gracefully if offline (playing already downloaded samples seamlessly).
+Auditioning is still acquiring - there is no separate Download button, because previewing a sample writes it, and two buttons would imply two outcomes. Decoded samples are cached per path in memory, so re-auditioning replays instantly.
 
 ### 4d. Strudel Drums Sampler: a code-driven, bank-based sampler
 
-`alienmind-strudel-drums-sampler` (`src/app/drums-sampler/`) is the repo's first INSTRUMENT device (`type: "instrument"`), built on the library's `instrument` chain: a `[poly~]` of sample voices over a keymap of sixteen named `[buffer~]`s. It keeps its MIDI input ports (an instrument does) and loads samples via the `download` chain - the same acquire path the browser uses, fired automatically. It is NOT a pad rack: sounds are keyed by NAME, and the device is driven by CODE first.
+`alienmind-strudel-drums-sampler` (`src/app/drums-sampler/`) is an INSTRUMENT device (`type: "instrument"`) on the `webaudio` + `midiin` chains: samples are fetched, decoded and played *in the page*, and it keeps its MIDI input ports (an instrument does). It is NOT a pad rack: sounds are keyed by NAME, and the device is driven by CODE first.
 
 - **`s()` -> sound, via a bank.** The CODE screen runs a Strudel `s("bd sd, hh*8")` pattern through the shared engine (`voiceSink`, §3a) - bare mini-notation (`bd sd, hh!6`) is wrapped in `s(...)` by `asSampleCode`, not resolved to pitches. Each hap's sample name resolves against the selected BANK - a tidal-drum-machine, strudel's `bank()` prefix: `bd` with bank `RolandTR909` is the catalog key `RolandTR909_bd`. A `.bank("AkaiLinn")` in the pattern overrides the dropdown per-hap. The catalog is strudel's own generated `tidal-drum-machines.json` (`DRUM_MACHINES_URL` in `lib/samples.ts`, base rewritten ritchse->geikha for the moved repo).
 - **MIDI notes drive it too.** A note into the track maps to a drum sound by the Drum Rack / General MIDI convention (`NOTE_SOUND`: 36 = bd, 38 = sd, 42 = hh, ...) and plays the selected bank's sample for it - so a MIDI sequencer (or the Drums MIDI device) in front of the Sampler plays the same bank.
-- **Auto-download + a name->slot allocator.** The first time a sound is named, it is fetched to disk (`fetchToFile`, cached) and read into a slot (`loadSample`); it sounds from the next cycle. Up to 16 distinct sounds are resident at once (one `[buffer~]` each); the 17th evicts the least-recently-used. A slot is reserved the moment its load starts, so two concurrent loads never grab the same one. `playVoice({ slot, rate, velocity, durationMs, channels })`; `[poly~]` (16 voices) allocates a free voice or steals the oldest, so overlapping sounds never cut each other. The wrapper's samples-folder paths (`device_folder`, `reveal_folder`) are shared with the browser via `HAS_SAMPLES_FOLDER`, so "Show folder" works here too.
-- **Instance-scoped buffers.** The slot buffers are `---`-prefixed (device-scoped), so two Sampler instances in one set keep their own sounds - the same mechanism the browser preview relies on.
+- **Auto-load, decoded in the page.** The first time a sound is named it is fetched and decoded to an `AudioBuffer` (deadlined at 30 s, deduped by an in-flight set so a repeated hap does not fire a second download); it sounds from the next cycle. Up to `MAX_RESIDENT` (64) decoded sounds stay in memory, LRU past that - a full drum machine and change, against the 16 the `[poly~]` era could hold. Playback is one `AudioBufferSourceNode` per hit with velocity as gain, so **polyphony is free**: no voice allocation, no stealing, no slot bookkeeping. Nothing touches the disk, so there is no folder to reveal and no "Show folder" button here any more.
+- **Instances are naturally independent.** Each device instance is its own page with its own cache, so two Samplers in one set cannot collide - the `---`-scoped buffer names that used to guarantee this are no longer needed.
 
 ### 4e. Shared device chrome
 
-Every device draws from one set of parts, so the five faces read as one product rather than five apps:
+Every device draws from one set of parts, so the six faces read as one product rather than six apps:
 
 - **`shared/Button.tsx`** - one black-and-white (grey) button. `active` is the only lift (a faint primary wash, e.g. Run while playing); there are no accent/primary/destructive colours any more. Primary actions sit in the top bar, the `?` (`HelpButton`) rightmost.
 - **`shared/AboutPanel.tsx`** - the title opens it. It carries an **Advanced** section with the device's set-once, native affordances so they do not clutter the top bar: **Full Studio** (the pattern devices' big editor window, `onOpenStudio`) and **Controls** (`onShowControls`, revealing the native panel - the MIDI device's mappable Play/Stop). The FX device is the exception: its native **Knobs** panel is the primary interaction, so it keeps that button in the top bar.
 
-### 4f. Superdough render device (Route B)
+### 4f. Superdough device: all of Strudel, live
 
-The REAL superdough (samples, synths, effects) in the track, as audio. Proven end to end in Live: the
-render (browser spike S1), the disk + loop pipe (m4l-jweb `hello-render`, S2/S3), the
-transport lock (S3b), and the device itself on real superdough content (synths, the full
-trance example, transport lock - confirmed by ear). Shape:
+`alienmind-strudel-superdough` is the REAL superdough - every synth, sample, orbit and
+effect strudel.cc plays, because it *is* superdough, not a port - running live in the page
+and heard through the track. An instrument on the `webaudio` chain alone.
 
-- **Render offline, on the main thread.** `src/lib/render/offline.ts` injects an
-  `OfflineAudioContext` into superdough's singletons and schedules each hap through the real
-  `superdough()`; `wav.ts` encodes the result. `scope.ts` supplies the eval-scope shims a
-  full strudel.cc pattern needs (`setCpm`, `slider`, `register`'d draw params) that the
-  headless engine's `bootScope` (core+mini+tonal) does not. `OfflineAudioContext` does not
-  exist in a Worker, so this runs where the UI does, not in the engine worker. Renders are
-  **serialized** (one at a time): superdough's context is a module-level singleton, so two
-  overlapping renders would connect nodes across two contexts ("cannot connect to an
-  AudioNode belonging to a different audio context"). A superseded render is discarded by
-  the conductor's generation guard. The finally step also clears superdough's node POOL
-  (`clearNodePools`): the pool is keyed by node type, not by context, so a node built in
-  one render's OfflineAudioContext would otherwise be handed to the next and throw on
-  connect - the same cross-context error, seen intermittently on rapid Play/Stop.
-- **The conductor** (`src/lib/render/conductor.ts`) is a pure, deps-injected state machine:
-  compile -> probe period -> determinism -> render -> `saveToFile` -> `render_load` -> arm.
-  Design decisions worth keeping (all unit-tested):
-  - **Loop period is `renderPeriod` (`determinism.ts`), not engine.mjs `patternCycles`.**
-    The latter signatures haps by MIDI pitch, so `s("bd <sd cp>")` (no pitch) and
-    `.lpf("<400 800>")` (effect-only variation) collapse to period 1. `renderPeriod`
-    signatures the full hap value - what the renderer actually plays.
-  - **No engine worker.** A second compile (for a playhead) would run in a scope without
-    the full-Strudel shims and throw on the very patterns this device is for; and the
-    playhead spans are bare-mini-only, empty for full code. The conductor's compile is the
-    single source of truth for errors; `tick`/`tempo` are bound by the hook directly.
-  - **Per-instance WAV filenames** (`superdough-<id>-rndA.wav`, conductor `filePrefix`):
-    two instances share the device folder, so bare `rndA.wav` would clobber.
-  - **Rolling mode** (random patterns) renders one cycle ahead, each a fresh realization.
-    Paced by the transport when playing (kick the next render on the loop-boundary
-    crossing in `tick()`), and self-timed at the loop period when the transport is stopped
-    (the groove keeps looping self-clocked, so the render window must keep advancing or the
-    randomness freezes). Never chained off `ready()` - that free-runs many-x realtime,
-    racing ahead of playback.
-- **Playback is Max's** via the m4l-jweb `renderplay` chain: a double-buffered `[buffer~]`
-  pair, crossfaded at cycle boundaries. `saveToFile` writes the WAV to disk (flat filename -
-  a subdir fails the maxurl place).
-- **Transport sync comes from LiveAPI, not `[plugsync~]`.** The wrapper polls `is_playing` +
-  `current_song_time` (beats) and emits `tick <playing> <beats>` at 20 Hz; the conductor
-  aligns the loop to the exact transport phase on (re)start / relocate, then a rate-1
-  `@loop` holds the lock (shared clock, no drift within a tempo). `[plugsync~]` outlet 6
-  read 0 in Live - a dead end (see the drawer). The strudel wrapper (`wrapper/device.ts`)
-  gates its clip poll and scale observers OFF for mode `superdough` (an instrument with no
-  clips and no MIDI pitches - running the midi defaults threw LiveAPI noise).
-- **The render FOLLOWS Live's tempo** (`beatsPerCycleForTempoLock`, `tempo.ts`). One cycle
-  occupies a FIXED number of Live beats (default 4 = one bar), set by the pattern's own cps,
-  NOT by the current bpm - so the render `cps = bpm/60/beatsPerCycle` scales with the
-  transport and the WAV is exactly `lengthBeats` long at whatever tempo it renders at, the
-  premise the rate-1 lock needs. Raise Live's BPM and the pattern speeds up and stays
-  bar-locked, like any track instrument; a tempo change re-renders (debounced) into a buffer
-  of the new length. A `setcpm(x)` in the code is a FEATURE, not a fight with this: it
-  OVERRIDES the default tracking, so the pattern runs at its own declared rate relative to
-  the grid (a `setcpm(100)` under a 120 bpm set runs the Strudel clock proportionally
-  faster) - default = follow Live, `setcpm` = pin your own tempo.
-- **Slider knobs (H.7 v1).** Each compile captures the code's `slider()` occurrences in
-  source order (`scope.ts` `beginSliderCapture`/`getSliderSpecs`) and auto-binds slider N
-  to native dial `s<N>` (a static pool of eight, in the panel behind the transport switch).
-  The web slider row and the dial write the same normalized parameter; a turn re-renders
-  (debounced) with the value denormalized into the slider's own range (`setSliderOverrides`).
-  The wrapper's `knob_label` renames the dial after the code's term for it
-  (`.lpf(slider(...))` -> "lpf") via `_parameter_shortname`, and resets unused dials back to
-  `S<n>`. Live finding: the rename takes on the DEVICE PANEL but does NOT reach the Rack
-  macro / Live parameter registry (those stay `s1..s8`) - a frozen-device limit, accepted.
-  A parallel spike to carry the slider's real min..max on the dial via runtime
-  `_parameter_range` was tried and REVERTED: it takes but also shifts the value domain the
-  dial reports, breaking the normalized knob math (the dial stuck at its minimum). The dials
-  stay normalized 0..1; the generalisation (a native-knob POOL the Surface declares, dials
-  that borrow their range) is an m4l-jweb backlog item.
+- **The split: worker schedules, page sounds.** The engine worker owns pattern time exactly
+  as it does for the MIDI devices - it compiles, queries a lookahead window per transport
+  tick, and posts events out. The only new sink is `superdough`: each hap goes over as
+  `{value, durMs, delayMs, cps, cycle}` and the UI thread calls the real `superdough()` with
+  it. `cps` and `cycle` are carried deliberately: without them superdough assumes 0.5 cps and
+  tempo-synced effects (`.delay()`, phaser) run at the wrong rate.
+- **Scheduling is clamped, not trusted.** See §2c - the worker's clock and the page's
+  `AudioContext` are different clocks, and superdough drops events scheduled in the past.
+  `useSuperdoughRender.ts` clamps a late event to `currentTime + 10 ms` and reports
+  sustained lateness to the console.
+- **The eval scope.** A pattern written on strudel.cc reaches for helpers the headless engine
+  does not have (`setcps`, `slider`, `_scope`, draw params). `installReplShims()` in
+  `engine.mjs` supplies them from `bootScope()`, so *every* compile path gets them - the
+  worker, the export renderer, and the node tests - with no per-caller opt-in. Covered by the
+  "repl eval shims" tests in `src/max/__tests__/engine.test.mjs`.
+- **Sounds must be registered.** `registerSynthSounds()` for the oscillators, then strudel's
+  six prebaked sample maps (the same URLs as `strudel/packages/repl/prebake.mjs`) loaded in
+  the background with `allSettled` - a dead map cannot silence the others, and synth patterns
+  never wait on the network. Persistent caching of those fetches is open (TODO item 2).
+- **Export audio: the one surviving offline render.** `src/lib/render/offline.ts` is the
+  0.9.x renderer kept for a *bounce*, not for playback: `exportAudio()` compiles the pattern
+  fresh on the main thread (the worker's pattern lives in another thread and cannot be
+  transferred), takes `renderPeriod()` capped at 32 cycles, renders through an
+  `OfflineAudioContext` at the page's own sample rate, and `saveToFile`s a flat
+  `superdough-export-<timestamp>.wav` into the device folder. Three details in that renderer
+  are hard-won and must not be "simplified":
+  - `loadWorklets()` + `setMaxPolyphony()`, **never** `initAudio()` - the latter awaits
+    `initKabelsalat()` unconditionally, which hangs under `OfflineAudioContext`.
+  - Renders are **serialized**: superdough's context and output controller are module-level
+    singletons, so two overlapping renders connect nodes across contexts ("cannot connect to
+    an AudioNode belonging to a different audio context").
+  - `clearNodePools()` in the `finally`: the pool is keyed by node type, *not* by context, so
+    a node from one render's context would otherwise be handed to the next and throw.
+  - **Loop period is `renderPeriod` (`determinism.ts`), not engine.mjs `patternCycles`.** The
+    latter signatures haps by MIDI pitch, so `s("bd <sd cp>")` (no pitch) and `.lpf("<400
+    800>")` (effect-only variation) both collapse to period 1.
+- **Why there is no Freeze.** Live's Freeze bounces a device offline and faster than
+  realtime. A `[jweb~]` page is a live Chromium instance that does neither, so Freeze
+  silences the device - a structural limit, not a bug we can fix. Export (or resampling the
+  track) is the answer.
+- **Wrapper mode.** `wrapper/device.ts` gates the clip poll and scale observers OFF for mode
+  `superdough` - an instrument with no clips and no MIDI pitches; running the MIDI defaults
+  threw LiveAPI noise.
+- **Slider knobs, partially restored.** Eight native dials `s1..s8` still build (a static
+  pool in the panel behind the transport switch) and `slider()` now evaluates, returning the
+  code's default. What does NOT yet flow is the *value*: turning a dial does not reach the
+  worker's compile. `scope.ts` still holds the capture machinery
+  (`beginSliderCapture`/`getSliderSpecs`/`setSliderOverrides`) with its own tests, waiting to
+  be wired to the worker (TODO item 5). Two findings from the 0.9.x version worth keeping:
+  the wrapper's `knob_label` rename takes on the DEVICE PANEL but never reaches the Rack
+  macro / Live parameter registry (those stay `s1..s8`), and a spike to carry each slider's
+  real min..max via runtime `_parameter_range` was REVERTED - it shifts the value domain the
+  dial reports and breaks the normalized knob math.
 
 ## 5. Strudel Integration
 
-We consume Strudel by bundling the `@strudel/core`, `mini`, `transpiler`, and `tonal` packages directly from a pinned git submodule.
-The submodule points to our own fork (`https://github.com/alienmind/strudel.git`) instead of upstream. This is a temporary measure required for the `superdough` offline render path. Specifically, we added a `clearNodePools()` export to `@strudel/superdough`'s `nodePools.mjs`. The offline renderer generates a new `OfflineAudioContext` for every render pass, and because superdough's node pool is a module-level singleton keyed by node type (not audio context), nodes from a previous render pass linger in the pool. When handed to the next pass, they throw a cross-context error ("cannot connect to an AudioNode belonging to a different audio context"). Our fork allows the host to clear the pool between contexts. This will be cleaned up in a future release once an upstream solution is available.
+We consume Strudel by bundling `@strudel/core`, `mini`, `transpiler`, `tonal`, `webaudio` and `superdough` directly from a pinned git submodule.
+The submodule points to our own fork (`https://github.com/alienmind/strudel.git`) instead of upstream, for one patch: a `clearNodePools()` export on `@strudel/superdough`'s `nodePools.mjs`. The export renderer builds a new `OfflineAudioContext` per bounce, and because superdough's node pool is a module-level singleton keyed by node type (not by audio context), nodes from a previous pass linger and throw a cross-context error when handed to the next. Our fork lets the host clear the pool between contexts. To be dropped once there is an upstream solution.
 
-- **No runtime dependency on strudel.cc** (except for the sample browser which reaches out to fetch sample packs).
+- **No runtime dependency on strudel.cc** for code execution. The sample-taking devices do fetch sample packs and map JSON over the network.
 - **No npm dependencies on `@strudel/*`.**
 
-Audio generation inside Chromium using `AudioContext` or `@strudel/webaudio` is intentionally **not** used. All sound is handled natively via Max MIDI streams or Max DSP objects.
+**Audio generation inside Chromium is now the primary path.** This reverses the rule that
+governed the project until 0.9.5 ("all sound is handled natively via Max MIDI streams or Max
+DSP objects"), and the reversal is the whole point of the `jweb~` rewrite - see §2c. What
+remains true is the division of labour: **Max still owns MIDI** (the `midiout` chain, with
+`[pipe]` applying delays so note timing never depends on a Chromium timer), and Max still
+owns the fx device's DSP, because native `live.dial` parameters are what make it automatable
+and Push-mappable.
 
 ## 6. Verification Gates
 
 When testing manually, ensure:
 1. **Engine boot**: The MIDI device's status line must show *Strudel engine ready* shortly after load.
 2. **Timing**: `[pipe]` inside `midiout` must successfully route delay amounts to correctly synchronize notes.
-3. **Sample browser preview**: Downloading and previewing a sample must play audio through the track's native fader in Live.
+3. **Sample browser preview**: Auditioning a sample must play through the track's native fader in Live (not the OS output), and the file must be draggable out afterwards.
 4. **State persistence**: Edited settings must survive a full save/close/reopen of the Live set.
+5. **Web Audio reaches the track**: superdough must be audible on the track, respond to the fader, and RECORD when the track is resampled - the proof that `[jweb~]`'s signal outlets are really in the signal path.
+6. **No collapse over time**: a pattern left playing for several minutes must not fade into silence. If it does, check the jweb console for `[superdough-sink] ... late events` and treat growing lateness as the two-clock drift of §2c.
+7. **Export audio**: the Export button must write a non-silent WAV next to the device, for a synth pattern and for a sample pattern.
 
 ## 7. File Map
 
@@ -276,17 +336,22 @@ When testing manually, ensure:
 │   ├── app/
 │   │   ├── fx/                # the Audio FX device: App.tsx, protocol.ts, surface.ts
 │   │   ├── midi/              # the MIDI device: App.tsx, useStrudel.ts
-│   │   ├── midi-drums/        # the Drums device: App.tsx, useStrudel.ts, DrumMapPanel.tsx
-│   │   ├── sample-browser/   # the sample browser: App.tsx, protocol.ts, surface.ts
-│   │   └── shared/            # shared engine and UI: PatternEditor.tsx, protocol.ts, engine.worker.js, surface.ts
+│   │   ├── drums-midi/        # the Drums device: App.tsx, useStrudel.ts, DrumMapPanel.tsx
+│   │   ├── drums-sampler/     # the Drums Sampler: App.tsx, surface.ts
+│   │   ├── sample-browser/    # the sample browser: App.tsx, protocol.ts, surface.ts
+│   │   ├── superdough/        # the Superdough device: App.tsx, useSuperdoughRender.ts
+│   │   └── shared/            # shared engine and UI: PatternEditor.tsx, engine.worker.js,
+│   │                          #   useStrudelEngine.ts, webaudio.ts (decode + play), surface.ts
 │   ├── lib/
 │   │   ├── mini/              # the mini-notation parser & resolver logic
+│   │   ├── render/            # the Export-audio bounce: offline.ts, wav.ts,
+│   │   │                      #   determinism.ts (renderPeriod), scope.ts (slider capture)
 │   │   ├── fx.ts              # the effects line -> parameter values (a recorder, not a parser)
 │   │   ├── samples.ts         # sample map URL resolution and fetch logic
 │   │   └── strudelCode.ts     # bare mini vs code; wraps mini in note(...)
 │   └── max/
 │       └── shared/
-│           ├── engine.mjs     # headless engine eval Scope
+│           ├── engine.mjs     # headless engine eval scope + repl shims
 │           └── transport.mjs  # LiveTransport tick processing
 ├── strudel/                   # upstream Strudel monorepo (git submodule)
 └── wrapper/
