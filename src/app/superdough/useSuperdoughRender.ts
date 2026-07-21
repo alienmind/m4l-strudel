@@ -80,6 +80,9 @@ export function useSuperdoughRender() {
 	const reanchors = useRef({ count: 0, lastLogged: 0 });
 	const [exporting, setExporting] = useState(false);
 	const [exportNote, setExportNote] = useState<string | null>(null);
+	/** True while a bounce holds superdough's context. A ref, not the `exporting` state:
+	 *  the sink closes over its render's values and must see the flag the instant it flips. */
+	const bouncing = useRef(false);
 
 	useEffect(() => {
 		if (initialized.current) return;
@@ -105,6 +108,11 @@ export function useSuperdoughRender() {
 		liveScale: "C4:major",
 		superdoughSink: (ev) => {
 			if (!initialized.current) return;
+			// A bounce owns superdough's singleton context for its duration (renderCycles).
+			// A live hap scheduled into that OfflineAudioContext is the "cannot connect to
+			// an AudioNode belonging to a different audio context" failure, so playback
+			// stands down for the render and re-anchors when it comes back.
+			if (bouncing.current) return;
 			const ac = getAudioContext();
 			const now = ac.currentTime;
 			let a = anchor.current;
@@ -153,9 +161,23 @@ export function useSuperdoughRender() {
 	 * (the worker's pattern lives in another one), find the true loop period, render
 	 * it offline with the real superdough, and saveToFile the WAV. The file lands
 	 * flat in the device folder - the same drag-out handle the sample browser writes.
+	 *
+	 * IT TAKES THE ENGINE OVER FOR THE DURATION, and that is structural. superdough's
+	 * audio context and output controller are MODULE-LEVEL singletons (audioContext.mjs,
+	 * superdough.mjs) and renderCycles swaps both to an OfflineAudioContext; the node
+	 * pool is shared across contexts on top of that. Live playback drives the same
+	 * singletons, so without a handover a live hap gets scheduled into the offline
+	 * context - "cannot connect to an AudioNode belonging to a different audio context",
+	 * intermittently, depending on what the pool happens to be holding. `bouncing` stands
+	 * the sink down for the render; renderCycles clears the pool on both sides and puts
+	 * the live context back. Playback therefore goes quiet for the bounce and resumes.
 	 */
 	const exportAudio = useCallback(async () => {
 		if (exporting) return;
+		bouncing.current = true;
+		// The seam is unavoidable: pattern time has moved on while the sink was down, so
+		// the next event must re-pin rather than derive from a stale anchor.
+		anchor.current = null;
 		setExporting(true);
 		setExportNote("Compiling...");
 		try {
@@ -180,6 +202,8 @@ export function useSuperdoughRender() {
 		} catch (e) {
 			setExportNote("Export failed: " + (e instanceof Error ? e.message : String(e)));
 		} finally {
+			bouncing.current = false;
+			anchor.current = null;
 			setExporting(false);
 		}
 	}, [exporting, engine.tempo, engine.beatsPerCycle, engine.text, engine.noteCtx]);
