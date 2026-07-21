@@ -5,6 +5,7 @@ import { useNativePanel, useParam, useStateSync, useWindow } from "@m4l-jweb/sur
 import { SliderRow } from "../shared/SliderRow";
 import type { SliderKnob } from "../shared/useSliderKnobs";
 import { Button } from "../shared/Button";
+import { ControlsButton } from "../shared/DeviceButtons";
 import { HelpButton } from "../shared/HelpButton";
 import { tokenAtCaret } from "@/lib/reference";
 import { cn } from "@/lib/utils";
@@ -224,12 +225,13 @@ export default function App() {
 					<span className="text-[10px] text-muted-foreground">audio effect</span>
 				</div>
 				<div className="flex items-center gap-1">
-					{/* Knobs stays in the top bar (unlike the other devices' native panels, which
-					    moved to About): on the FX device the native knob panel IS the primary
-					    interaction, not an advanced extra. The ? sits rightmost, as everywhere. */}
-					<Button onClick={() => setKnobs(true)} title="Show the native knob panel">
-						Knobs
-					</Button>
+					{/* The same Controls chip every device draws - on this device the panel it opens
+					    is the knob pool, which IS the primary interaction here rather than an
+					    advanced extra. The ? sits rightmost, as everywhere. */}
+					<ControlsButton
+						onShow={() => setKnobs(true)}
+						title="Controls: the native knob panel. Its Knobs switch returns."
+					/>
 					<HelpButton onOpen={helpWindow.open} />
 				</div>
 			</div>

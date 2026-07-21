@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, ClipboardCopy, GripVertical, Search, Square } from "lucide-react";
 import { bindInlet, saveToFile, uiReady } from "@m4l-jweb/bridge";
 import { decodeSample, playBuffer } from "../shared/webaudio";
-import { copyText } from "../shared/clipboard";
+import { copyMessage, copyPath } from "../shared/clipboard";
 import { cn } from "@/lib/utils";
 import {
 	DEFAULT_QUANT,
@@ -116,7 +116,7 @@ export default function App() {
 	const copyFolder = useCallback(async () => {
 		if (!folder) return;
 		const path = `${folder}/samples`;
-		setStatus((await copyText(path)) ? `Path copied: ${path}` : `Could not copy - the folder is ${path}`);
+		setStatus(copyMessage(await copyPath(path), path));
 	}, [folder]);
 
 	/** The list actually on screen. The cursor indexes THIS, not the catalog: a

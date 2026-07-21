@@ -14,7 +14,7 @@ import type { SliderKnob } from "./useSliderKnobs";
 export function SliderRow({ sliders }: { sliders: SliderKnob[] }) {
 	if (!sliders.length) return null;
 	return (
-		<div className="flex items-center gap-2 overflow-x-auto text-[10px] leading-none text-muted-foreground">
+		<div className="no-scrollbar flex shrink-0 items-center gap-2 overflow-x-auto text-[10px] leading-none text-muted-foreground">
 			{sliders.map((s, i) => (
 				<label
 					key={i}

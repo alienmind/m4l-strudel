@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ClipboardCopy, Download, LayoutGrid, Play, Square } from "lucide-react";
+import { ArrowLeft, ClipboardCopy, LayoutGrid } from "lucide-react";
 import { bindInlet, onNote, saveToFile, uiReady } from "@m4l-jweb/bridge";
 import { audioContext, decodeSample, playBuffer, type DecodedSample } from "../shared/webaudio";
-import { copyText } from "../shared/clipboard";
+import { copyMessage, copyPath } from "../shared/clipboard";
 import { bootScope, compile, queryWindow, hapToVoice } from "../../max/shared/engine.mjs";
 import { renderPeriod } from "../../lib/render/determinism";
 import { audioBufferToWav } from "../../lib/render/wav";
@@ -24,6 +24,7 @@ import {
 } from "@/lib/samples";
 import { AboutPanel } from "../shared/AboutPanel";
 import { Button } from "../shared/Button";
+import { ExportButton, RunButton } from "../shared/DeviceButtons";
 import { HelpButton } from "../shared/HelpButton";
 import { PatternEditor } from "../shared/PatternEditor";
 import { useStrudelEngine, type VoiceEvent } from "../shared/useStrudelEngine";
@@ -299,7 +300,7 @@ export default function App() {
 	/** The export folder on the clipboard - Max cannot open a file manager (TODO item 1). */
 	const copyFolder = useCallback(async () => {
 		if (!folder) return;
-		setExportNote((await copyText(folder)) ? `Path copied: ${folder}` : `Could not copy - the folder is ${folder}`);
+		setExportNote(copyMessage(await copyPath(folder), folder));
 	}, [folder]);
 
 	const helpWindow = useWindow(surface, "help");
@@ -389,19 +390,8 @@ export default function App() {
 								</option>
 							))}
 						</select>
-						<Button
-							icon={engine.live ? Square : Play}
-							active={engine.live}
-							onClick={() => (engine.live ? engine.hush() : engine.run())}
-							title={engine.live ? "Stop the pattern" : "Run the pattern (Ctrl+Enter)"}
-						/>
-						<Button
-							icon={Download}
-							onClick={exportAudio}
-							disabled={exporting}
-							active={exporting}
-							title="Export: render this pattern to a WAV next to the device, then drag it into a track"
-						/>
+						<RunButton live={engine.live} onRun={engine.run} onStop={engine.hush} />
+						<ExportButton onExport={exportAudio} busy={exporting} />
 						<Button icon={LayoutGrid} onClick={() => setView("browse")} title="Sounds: browse the bank" />
 						<HelpButton onOpen={helpWindow.open} />
 					</>

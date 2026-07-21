@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Drum, FolderOpen, Play, Square, ChevronLeft, Maximize2, RotateCcw } from "lucide-react";
+import { Drum, ChevronLeft, Maximize2, RotateCcw } from "lucide-react";
 import { useStateSync, useWindow } from "@m4l-jweb/surface/react";
 import { isBareMini } from "@/lib/strudelCode";
 import surface from "./surface";
@@ -7,6 +7,7 @@ import { DrumRack } from "./DrumRack";
 import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
 import { Button } from "../shared/Button";
+import { ClipButton, RunButton } from "../shared/DeviceButtons";
 import { ClipPanel } from "../shared/ClipPanel";
 import { HelpButton } from "../shared/HelpButton";
 import { tokenAtCaret } from "@/lib/reference";
@@ -113,21 +114,9 @@ export default function App() {
 				>
 					Strudel Drums MIDI
 				</button>
-				<Button
-					className="ml-auto"
-					icon={s.live ? Square : Play}
-					active={s.live}
-					onClick={s.live ? s.hush : s.run}
-					title={s.live ? "Stop the running pattern" : "Evaluate and run this pattern, locked to Live's transport (Ctrl+Enter)"}
-				>
-					{s.live ? "Stop" : "Run"}
-				</Button>
-				<Button icon={FolderOpen} onClick={() => setShowClip(true)} title="Open Clip Import/Export controls">
-					Clip
-				</Button>
-				<Button icon={Drum} onClick={() => setShowDrums(true)} title="Map drum words (bd, sd, hh) onto Drum Rack pads">
-					Kit
-				</Button>
+				<RunButton className="ml-auto" live={s.live} onRun={s.run} onStop={s.hush} />
+				<ClipButton onOpen={() => setShowClip(true)} />
+				<Button icon={Drum} onClick={() => setShowDrums(true)} title="Kit: map drum words (bd, sd, hh) onto Drum Rack pads" />
 				<HelpButton onOpen={helpWindow.open} />
 			</div>
 
