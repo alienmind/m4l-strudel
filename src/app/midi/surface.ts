@@ -16,7 +16,7 @@ import { codeSlot, helpQuerySlot, transportParams } from "../shared/surface";
  * pulled the engine - and its `?worker&inline` import - into the build, which esbuild
  * cannot resolve. A surface must stay reachable with no app runtime behind it.
  */
-export const INITIAL_TEXT = "<c1 c1 <c2 c#2>>*16";
+export const INITIAL_TEXT = "<c3 c3 <c3 c#3>>*16";
 
 export default defineSurface({
 	params: {

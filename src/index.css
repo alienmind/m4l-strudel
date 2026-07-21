@@ -107,3 +107,25 @@ body:has(.dev-layout) {
 	height: 169px;
 	max-width: 640px;
 }
+
+/*
+ * SCROLL WITHOUT A SCROLLBAR.
+ *
+ * A device view is ~169px tall and its rows are a few pixels each; Chromium's
+ * scrollbar is 15px of that, and it lands directly under the slider row - so the
+ * bar the user is dragging shares its space with a bar they are not. Scrolling
+ * still works (wheel, drag, keyboard); only the gutter goes.
+ *
+ * Deliberately NOT `overflow: hidden` on those rows: with eight sliders the row
+ * genuinely is wider than the device, and content that cannot be reached at all
+ * would be the worse bug.
+ */
+.no-scrollbar {
+	scrollbar-width: none; /* Firefox, and Chromium 121+ */
+	-ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+	height: 0;
+	width: 0;
+}

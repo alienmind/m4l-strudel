@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { FolderOpen, Play, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isBareMini } from "@/lib/strudelCode";
 import { useNativePanel, useParam, useStateSync, useWindow } from "@m4l-jweb/surface/react";
 import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
-import { Button } from "../shared/Button";
+import { ClipButton, ControlsButton, RunButton } from "../shared/DeviceButtons";
 import { ClipPanel } from "../shared/ClipPanel";
 import { HelpButton } from "../shared/HelpButton";
 import { tokenAtCaret } from "@/lib/reference";
@@ -85,9 +84,11 @@ export default function App() {
 
 	return (
 		<div className="device flex h-full w-full flex-col gap-1 overflow-hidden bg-background p-1.5 text-foreground">
-			{/* TOP BAR: title + the primary buttons, grey and consistent with the other
-			    devices. The pattern options (octave, shift, scale) moved to the small bottom
-			    row - they are set once, not reached for while playing. Studio moved to About. */}
+			{/* TOP BAR: title + the primary buttons - ICON ONLY, the same chips the Strudel
+			    device draws. The labels ("Run", "Clip") cost a third of the bar for words the
+			    icons already say, and the tooltips still carry the full sentence. The pattern
+			    options (octave, shift, scale) live in the small bottom row - they are set once,
+			    not reached for while playing. Studio stays in About. */}
 			<div className="flex items-center gap-1 text-[11px]">
 				<button
 					onClick={() => setShowAbout(true)}
@@ -95,20 +96,12 @@ export default function App() {
 				>
 					Strudel MIDI
 				</button>
-				<Button
-					className="ml-auto"
-					icon={s.live ? Square : Play}
-					active={s.live}
-					onClick={s.live ? s.hush : s.run}
-					title={s.live ? "Stop the running pattern" : "Evaluate and run this pattern, locked to Live's transport (Ctrl+Enter)"}
-				>
-					{s.live ? "Stop" : "Run"}
-				</Button>
-				<Button icon={FolderOpen} onClick={() => setShowClip(true)} title="Open Clip Import/Export controls">
-					Clip
-				</Button>
-				{/* The native Play/Stop panel (for mapping a Rack macro / Push button) moved to
-				    About > Advanced > Controls - an advanced, set-once affordance. */}
+				<RunButton className="ml-auto" live={s.live} onRun={s.run} onStop={s.hush} />
+				<ClipButton onOpen={() => setShowClip(true)} />
+				<ControlsButton
+					onShow={() => setShowTransport(true)}
+					title="Controls: the native panel with the mappable Play/Stop. Its Back switch returns."
+				/>
 				<HelpButton onOpen={helpWindow.open} />
 			</div>
 
