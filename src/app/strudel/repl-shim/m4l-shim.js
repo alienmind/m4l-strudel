@@ -80,8 +80,13 @@
 	 * A dial can also DESCRIBE ITSELF, which is what the surface declarations do for
 	 * every other parameter in this repo - a name, a unit, a range:
 	 *
-	 *     m4lKnob(1, { name: "cutoff", unit: "Hz", range: [200, 2200] })
-	 *     m4lKnob(2, { name: "room" })
+	 *     m4lKnob(1, { name: 'cutoff', unit: 'Hz', range: [200, 2200] })
+	 *     m4lKnob(2, { name: 'room' })
+	 *
+	 * Single quotes there are not a style choice, though double ones are handled
+	 * too: in the REPL a DOUBLE-quoted string is mini notation, rewritten into a
+	 * pattern before the code runs, so `name: "cutoff"` arrives as an object. See
+	 * asText().
 	 *
 	 * All of it optional, and `range` here is the same range `.range()` applies -
 	 * given here, the returned signal is already scaled, so it reads once rather
@@ -129,12 +134,39 @@
 	 * worked on, and `knob_label` writes a Live parameter attribute - resending an
 	 * unchanged name on every keystroke is work for nothing.
 	 */
+	/**
+	 * The text of something the REPL may have turned into a PATTERN.
+	 *
+	 * In the REPL every DOUBLE-quoted string is mini notation: the transpiler
+	 * rewrites `"cutoff"` into a pattern before the code ever runs, so a name passed
+	 * that way arrives as an object and `String()` of it is "[object Object]" - which
+	 * is exactly what landed on the dial. Single quotes stay plain strings.
+	 *
+	 * Rather than making the caller remember which quote to use, take either: a
+	 * pattern is asked for its first value.
+	 */
+	function asText(v) {
+		if (v === null || v === undefined) return "";
+		if (typeof v === "string") return v;
+		if (typeof v === "number") return String(v);
+		try {
+			if (typeof v.queryArc === "function") {
+				var haps = v.queryArc(0, 1);
+				if (haps && haps.length) return String(haps[0].value);
+			}
+		} catch (e) {
+			/* not a pattern, or an empty one - fall through */
+		}
+		return String(v);
+	}
+
 	var knobLabels = [];
 	function describeKnob(index, o) {
 		if (index < 0 || index > 7) return;
-		var name = o.name || o.label;
+		var name = asText(o.name || o.label);
 		if (!name) return;
-		var label = o.unit ? name + " (" + o.unit + ")" : name;
+		var unit = asText(o.unit);
+		var label = unit ? name + " (" + unit + ")" : name;
 		if (knobLabels[index] === label) return;
 		knobLabels[index] = label;
 		if (max) max.outlet("knob_label", index, label);
