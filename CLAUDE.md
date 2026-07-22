@@ -43,7 +43,8 @@ But never use cliche formulas like "this is the trap that costed us a day".
 Just state the point without overextending it.
 
 Commit messages should be schematic, one line per feature, prepend with prefixes such as:
-doc -, chore -, feat -, fix -
+doc -, chore -, feat -, fix -. No overextending in the commit messages. Details are
+for the markdown documents.
 
 ## Recording what was learned
 
@@ -61,8 +62,8 @@ and its worth noting for the future. This is the "How" is implemented, with the 
 technical - code-based details.
 
 `doc/README.md` is TODO items that actually became a feature that is high-level worth
-mentioning for a final user because its perceivable. We don't log implementation details here,
-that's for the architecture document above.
+mentioning for a final user because its directly observable.
+We don't log implementation details here, that's for the architecture document above.
 
 ## The two repos
 
