@@ -65,6 +65,31 @@ if (!existsSync(path.join(site, "package.json"))) {
 	);
 }
 
+/**
+ * --shim-only: refresh JUST our injected script in an already-built bundle.
+ *
+ * This exists because of a bug it shipped. `pnpm build` packages whatever is in
+ * dist/repl-site, and nothing in that path rebuilds the shim - so an edit to
+ * m4l-shim.js typechecked, passed its tests, and then went to Live as the PREVIOUS
+ * version, silently. The device looked broken in a way no error explained.
+ *
+ * It is a file copy, so the main build now always does it.
+ */
+if (process.argv.includes("--shim-only")) {
+	if (!existsSync(out)) {
+		console.log("m4l-repl: no dist/repl-site yet - run `pnpm build:repl` once");
+		process.exit(0);
+	}
+	cpSync(shim, path.join(out, "m4l-shim.js"));
+	const index = path.join(out, "index.html");
+	const html = readFileSync(index, "utf8");
+	if (!html.includes("m4l-shim.js")) {
+		writeFileSync(index, html.replace("</body>", '<script src="./m4l-shim.js"></script></body>'));
+	}
+	console.log("m4l-repl: shim refreshed in dist/repl-site");
+	process.exit(0);
+}
+
 if (!process.argv.includes("--no-build")) {
 	if (!existsSync(path.join(submodule, "node_modules"))) {
 		throw new Error(`the strudel submodule has no node_modules - run: pnpm --dir strudel install`);
