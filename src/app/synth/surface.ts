@@ -64,12 +64,5 @@ export default defineSurface({
 
 	windows: {
 		help: window({ title: "Strudel Reference", width: 420, height: 620, entry: "Help", alwaysOnTop: true }),
-		studio: window({
-			title: "Strudel Studio",
-			width: 720,
-			height: 560,
-			entry: "StudioWindow",
-			alwaysOnTop: true,
-		}),
 	},
 });
