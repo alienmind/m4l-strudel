@@ -56,16 +56,43 @@
 	var lastSentCode = null;
 	var knobs = [0, 0, 0, 0, 0, 0, 0, 0];
 
-	/**
-	 * The eight native dials, readable from a pattern as `m4lKnob(1)`..`m4lKnob(8)`.
-	 *
-	 * Defined before the REPL evaluates anything, so a pattern that opens with a
-	 * knob reference works on the first evaluation rather than the second.
-	 */
-	window.m4lKnob = function (n) {
+	/** The current position of dial n (1..8), 0..1. A plain number, read once. */
+	function knobValue(n) {
 		var v = knobs[(n | 0) - 1];
 		return typeof v === "number" ? v : 0;
+	}
+
+	/**
+	 * The eight native dials, for a pattern to read: `m4lKnob(1)`..`m4lKnob(8)`.
+	 *
+	 * IT RETURNS A SIGNAL, NOT A NUMBER, and that is the whole point.
+	 *
+	 * A pattern is evaluated once and then plays for as long as you leave it. So a
+	 * plain number is read at EVALUATION time and frozen there - `.lpf(200 +
+	 * m4lKnob(1) * 2000)` sounds right, and then the knob does nothing until you
+	 * evaluate again. That is not a knob, it is a default.
+	 *
+	 * A signal is queried by the scheduler every cycle instead, so the value is read
+	 * WHILE THE PATTERN PLAYS and the dial moves the sound under your hand. The
+	 * idiom is therefore pattern arithmetic, not JavaScript arithmetic:
+	 *
+	 *     note("c3 e3 g3").s("sawtooth").lpf(m4lKnob(1).range(200, 2200))
+	 *
+	 * `signal` reaches globalThis when the REPL loads its modules (evalScope in
+	 * @strudel/core), which is after this file runs - hence the lookup at call time.
+	 * Before it exists, the number is the honest fallback.
+	 *
+	 * `m4lKnobValue(n)` is the raw number, for a pattern that genuinely wants the
+	 * value frozen at evaluation.
+	 */
+	window.m4lKnob = function (n) {
+		var signal = globalThis.signal;
+		if (typeof signal !== "function") return knobValue(n);
+		return signal(function () {
+			return knobValue(n);
+		});
 	};
+	window.m4lKnobValue = knobValue;
 
 	function ready(fn) {
 		var tries = 0;
@@ -168,10 +195,21 @@
 			}
 		});
 
+		// Say ONCE, in the REPL's own console, that the dials are arriving. Without it
+		// a knob that does nothing is ambiguous: the value may not be reaching the
+		// page at all, or it may be arriving and the pattern may have frozen it (see
+		// m4lKnob above). This distinguishes the two without a debugger.
+		var announced = false;
 		for (var i = 1; i <= 8; i++) {
 			(function (n) {
 				max.bindInlet("set_s" + n, function (v) {
 					knobs[n - 1] = Number(v) || 0;
+					if (announced) return;
+					announced = true;
+					var log = globalThis.logger;
+					var msg = "m4l: the device's dials are live - use m4lKnob(1..8), e.g. .lpf(m4lKnob(1).range(200,2200))";
+					if (typeof log === "function") log(msg);
+					else console.log(TAG, msg);
 				});
 			})(i);
 		}

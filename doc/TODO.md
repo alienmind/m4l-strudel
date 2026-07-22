@@ -331,13 +331,20 @@ A spike is only ticked once the observation is written down here.
   was not listening yet.
   Nine tests run the shim against a faked page (`__tests__/repl-shim.test.ts`) -
   every one of its behaviours fails SILENTLY in Live, which is why they exist.
-  **TEST NEXT, in Live** (delete and re-drag the device first):
-  1. Open REPL, type a pattern, evaluate. Sound on the track, no click needed
-     anywhere first.
-  2. Save the set, close it, reopen: the REPL comes back with that pattern.
-  3. The device's native Play/Stop starts and stops the REPL.
-  4. Put `m4lKnob(1)` in a pattern - e.g.
-     `note("c3 e3 g3").s("sawtooth").lpf(200 + m4lKnob(1) * 2000)` - and turn S1.
+  **Tested in Live 2026-07-22: audio-with-no-click, save-with-the-set and native
+  Play/Stop all PASS. The knobs did not**, and the bug was in the shim's API, not
+  the plumbing: `m4lKnob(n)` returned a plain NUMBER, so a pattern read it once at
+  evaluation and froze it - the dial then did nothing until the pattern was
+  evaluated again. It returns a strudel SIGNAL now, queried per cycle, so the
+  idiom is pattern arithmetic rather than JavaScript arithmetic:
+
+      note("c3 e3 g3").s("sawtooth").lpf(m4lKnob(1).range(200, 2200))
+
+  `m4lKnobValue(n)` is still the raw number for a pattern that wants it frozen.
+  The first dial to arrive also logs a line into the REPL's own console, so "the
+  knob does nothing" can be told apart from "the value never reached the page"
+  without a debugger.
+  **TEST NEXT:** the knob check above, with the `.range()` form.
   Still expected at this stop: the mini view's own engine is still there and still
   sounds separately. That goes with the mini rebuild.
 
