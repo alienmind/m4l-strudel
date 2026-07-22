@@ -29,7 +29,6 @@ export default function App() {
 	// The floating reference follows the caret. It is a different Chromium context, so a
 	// state slot is the only way to tell it what you are typing about.
 	const [, setHelpQuery] = useStateSync(surface, "helpQuery");
-	const studioWindow = useWindow(surface, "studio");
 	const strudelWindow = useWindow(surface, "strudel");
 	const [showDrums, setShowDrums] = useState(false);
 	// The bottom-left note of the mini rack's 16-pad window (C1 = 36, like Live).
@@ -43,7 +42,7 @@ export default function App() {
 	const codeMode = !isBareMini(s.text);
 
 	if (showAbout) {
-		return <AboutPanel amxdBuild={s.amxdBuild} onOpenStudio={studioWindow.open} onOpenStrudel={strudelWindow.open} onClose={() => setShowAbout(false)} />;
+		return <AboutPanel amxdBuild={s.amxdBuild} onOpenStrudel={strudelWindow.open} onClose={() => setShowAbout(false)} />;
 	}
 
 	if (showClip) {

@@ -1,10 +1,8 @@
-import { ChevronLeft, ExternalLink, Maximize2, SlidersHorizontal } from "lucide-react";
+import { ChevronLeft, ExternalLink } from "lucide-react";
 import { Button } from "./Button";
 
 export function AboutPanel({
 	amxdBuild,
-	onOpenStudio,
-	onShowControls,
 	onOpenStrudel,
 	onClose,
 	debug,
@@ -13,12 +11,10 @@ export function AboutPanel({
 	/** Opens the Full Studio - a bigger editor for the same pattern. An ADVANCED feature,
 	 *  so it lives here rather than cluttering every device's top bar. Omitted (undefined)
 	 *  on devices that have no studio window (FX, the sample browser), which hide the row. */
-	onOpenStudio?: () => void;
 	/** Reveals the device's NATIVE controls panel (the mappable play/stop, or knobs),
 	 *  hiding the web UI - the native "Back" switch in that panel returns. Advanced, so it
 	 *  lives here. Omitted on devices with no native panel (FX keeps its own Knobs button in
 	 *  the top bar, where it is the primary interaction). */
-	onShowControls?: () => void;
 	/** Opens strudel.cc in a floating window - the full web playground, beside the Full
 	 *  Studio. Present on the pattern devices; omitted elsewhere. */
 	onOpenStrudel?: () => void;
@@ -72,29 +68,13 @@ export function AboutPanel({
 					)}
 				</div>
 
-				{(onOpenStudio || onShowControls || onOpenStrudel) && (
+				{onOpenStrudel && (
 					<div className="flex w-full max-w-[220px] flex-col gap-1">
 						<span className="text-[9px] uppercase tracking-wide text-muted-foreground/70">Advanced</span>
 						<div className="flex flex-wrap justify-center gap-1">
-							{onShowControls && (
-								<Button
-									icon={SlidersHorizontal}
-									onClick={onShowControls}
-									title="Show the native controls (mappable Play/Stop) - the native Back switch returns"
-								>
-									Controls
-								</Button>
-							)}
-							{onOpenStudio && (
-								<Button icon={Maximize2} onClick={onOpenStudio} title="Open the Full Studio - a bigger editor for the same pattern">
-									Full Studio
-								</Button>
-							)}
-							{onOpenStrudel && (
-								<Button icon={ExternalLink} onClick={onOpenStrudel} title="Open strudel.cc in a floating window">
-									Go to https://strudel.cc
-								</Button>
-							)}
+							<Button icon={ExternalLink} onClick={onOpenStrudel} title="Open strudel.cc">
+								Take me to Strudel.cc
+							</Button>
 						</div>
 					</div>
 				)}

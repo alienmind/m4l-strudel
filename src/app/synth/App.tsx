@@ -32,18 +32,12 @@ export default function App() {
 	}, [showKnobs, applyPanel]);
 
 	const helpWindow = useWindow(surface, "help");
-	const studioWindow = useWindow(surface, "studio");
 	const [, setHelpQuery] = useStateSync(surface, "helpQuery");
 
 	if (showAbout) {
 		return (
 			<AboutPanel
 				amxdBuild={s.amxdBuild}
-				onOpenStudio={studioWindow.open}
-				onShowControls={() => {
-					setShowKnobs(true);
-					setShowAbout(false);
-				}}
 				onClose={() => setShowAbout(false)}
 				debug={`${s.status}\n${s.debug}`}
 			/>

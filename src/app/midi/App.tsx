@@ -47,21 +47,15 @@ export default function App() {
 	// The floating reference follows the caret. It is a different Chromium context, so a
 	// state slot is the only way to tell it what you are typing about.
 	const [, setHelpQuery] = useStateSync(surface, "helpQuery");
-	const studioWindow = useWindow(surface, "studio");
 	const strudelWindow = useWindow(surface, "strudel");
 
 	if (showAbout) {
 		return (
 			<AboutPanel
 				amxdBuild={s.amxdBuild}
-				onOpenStudio={studioWindow.open}
 				onOpenStrudel={strudelWindow.open}
 				// Reveal the native panel (the mappable Play/Stop). It replaces the web UI, and
 				// its own native Back switch returns - so close About on the way in.
-				onShowControls={() => {
-					setShowTransport(true);
-					setShowAbout(false);
-				}}
 				onClose={() => setShowAbout(false)}
 			/>
 		);
