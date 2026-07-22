@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ClipboardCopy } from "lucide-react";
+import { Activity, ClipboardCopy, Code, SlidersVertical } from "lucide-react";
 import { useNativePanel, useParam, useStateSync, useWindow } from "@m4l-jweb/surface/react";
 import { PatternEditor } from "../shared/PatternEditor";
 import { AboutPanel } from "../shared/AboutPanel";
@@ -20,9 +20,9 @@ import surface from "./surface";
  * this playing, and what is it doing.
  */
 const VIEWS = [
-	{ id: "visual", short: "~", title: "Visualizer: what the Studio is playing" },
-	{ id: "knobs", short: "|||", title: "Controls: the pattern's faders, full size" },
-	{ id: "code", short: "{}", title: "Code: a scratchpad for seeing and controlling" },
+	{ id: "visual", icon: Activity, title: "Visualizer: what the Studio is playing" },
+	{ id: "knobs", icon: SlidersVertical, title: "Controls: the pattern's faders, full size" },
+	{ id: "code", icon: Code, title: "Code: a scratchpad for seeing and controlling" },
 ] as const;
 
 type ViewId = (typeof VIEWS)[number]["id"];
@@ -131,23 +131,24 @@ export default function App() {
 			<div className="flex min-h-0 flex-1 gap-1">
 				<div className="flex shrink-0 flex-col gap-0.5">
 					{VIEWS.map((v) => (
-						<button
+						<Button
 							key={v.id}
+							icon={v.icon}
+							title={v.title}
+							active={view === v.id}
 							onClick={() => {
 								setView(v.id);
 								setViewPinned(true);
 							}}
-							title={v.title}
-							className={`rounded px-1 py-0.5 text-[9px] leading-none transition-colors cursor-pointer ${
-								view === v.id ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-primary"
-							}`}
-						>
-							{v.short}
-						</button>
+							className="px-1"
+						/>
 					))}
 				</div>
 
-				<div className="min-w-0 flex-1">
+				{/* A COLUMN, so a child asking for flex-1 actually fills it. Without this
+				    the editor fell back to its own min-height and sat at 48 px in a pane
+				    three times that tall. */}
+				<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 					{view === "visual" && <Visualizer />}
 					{view === "knobs" && <FaderBank faders={faders.length ? faders : s.sliders} />}
 					{view === "code" && (
