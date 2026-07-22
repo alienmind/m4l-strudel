@@ -31,6 +31,16 @@ Example of the whole thing:
 >
 > Expected still broken: the mini view's own engine still sounds separately.
 
+## Scratch work goes in `tmp/`
+
+Anything exploratory - an unpacked `.amxd`, a standalone spike, a scratch harness, a
+dump you are reading once - goes under `tmp/`, which is gitignored. Not the repo root.
+
+A spike that answered its question is DELETED once the answer is written down (in
+`doc/MAX-FACTS.md` upstream, or `doc/DRAWER_OF_FAILED_IDEAS.md` here). The finding is
+what has value; the scaffolding that produced it is noise in a tree everyone else has
+to read.
+
 ## Writing
 
 Plain ASCII punctuation in documentation, commit messages and code comments. No

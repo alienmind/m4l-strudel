@@ -161,27 +161,16 @@ the timeouts and the UI's behaviour while a fetch is failing.
 
 ---
 
-## What needs testing in Live, right now
+---
 
-Everything below is BUILT and INSTALLED and none of it has been run in Live. Device
-under test is **`alienmind-strudel`** unless a row says otherwise. Report back by row
-number plus the Max console output.
+## What has been verified in Live (1.1.0)
 
-| # | Do this | Should happen |
-|---|---------|---------------|
-| 1 | Load the device | Three buttons down the left; `~` is up and reads "silent" |
-| 2 | Press Controls | Play alone on the top row, then two rows of four dials, aligned |
-| 3 | Open the Studio (REPL), evaluate `note("c3 e3 g3").s("sawtooth")`, close the window | Trace moves in the device view with the window shut |
-| 4 | Click `{}` | Scratchpad is EMPTY. Nothing plays from it |
-| 5 | Type `s("bd*4")` in the scratchpad and Run | It plays, and it is the only thing playing besides the Studio |
-| 6 | Save the set, reopen it | Studio has its pattern; scratchpad has its own text; the two never swapped |
-| 7 | In the Studio evaluate `note("c3 e3").s("sawtooth").lpf(m4lKnob(1,{name:'cutoff',unit:'Hz',range:[200,2200]}))` | View switches to the faders; one fader named `cutoff`; console shows `param_label`, `param_unit`, `param_range` all taking |
-| 8 | Drag that fader; then turn native S1 | Filter follows both; the two never disagree |
-| 9 | Click `~` yourself, then evaluate another knob in the Studio | View stays where you put it |
-| 10 | Drag the Studio window bigger | REPL UI grows to fill it |
-| 11 | Device: **`alienmind-strudel-synth`**, press Controls | Two rows of four dials, aligned |
-| 12 | Synth: type `s("sawtooth").lpf(slider(800,200,4000))`, Run, play a note, turn S1 | Filter moves; S1 reads in the slider's own range, not 0..1 |
+The whole device view and the Studio, on 2026-07-22: the three views and the
+auto-switch, the visualizer with the Studio window shut, the scratchpad empty and
+separate from the Studio's pattern across a save and reload, a pattern naming and
+re-ranging a dial, a fader and its native dial agreeing, the Studio window resizing,
+and the synth's own `slider()` path reading in real units.
 
-Row 12 is the one I would bet against: it is the OLD `useSliderKnobs` path taking the
-library's range handshake for the first time. If the knob sticks at its minimum, the
-handshake did not arrive and the page is scaling twice.
+The one thing that broke and is worth remembering: the shim shipped STALE, because
+`pnpm build` packaged whatever was in `dist/repl-site` and nothing rebuilt it there.
+The device looked broken with no error to explain it. `pnpm build` refreshes it now.

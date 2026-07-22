@@ -15,7 +15,7 @@ import type { SliderKnob } from "../shared/useSliderKnobs";
 export function FaderBank({ faders }: { faders: SliderKnob[] }) {
 	if (!faders.length) {
 		return (
-			<div className="flex h-full items-center justify-center text-center text-[10px] leading-tight text-muted-foreground">
+			<div className="flex h-[80%] items-center justify-center text-center text-[10px] leading-tight text-muted-foreground">
 				No controls yet. Put a <span className="mx-1 font-mono">slider()</span> or
 				<span className="mx-1 font-mono">m4lKnob(1)</span> in the pattern.
 			</div>
@@ -23,11 +23,15 @@ export function FaderBank({ faders }: { faders: SliderKnob[] }) {
 	}
 
 	return (
-		<div className="flex h-full items-stretch justify-between gap-1 px-0.5">
+		// LEFT ALIGNED and column-width, not stretched across the view: the faders sit
+		// under the same slots the native dials occupy in the panel, so the two read as
+		// one control surface rather than two arrangements of the same eight things.
+		// 80% tall leaves the row breathing room in a 169 px view.
+		<div className="flex h-[80%] items-stretch justify-start gap-1 px-0.5">
 			{faders.map((f) => (
 				<label
 					key={f.knob}
-					className="flex min-w-0 flex-1 flex-col items-center gap-0.5"
+					className="flex w-11 min-w-0 shrink-0 flex-col items-center gap-0.5"
 					title={`${f.label} (${f.min}..${f.max}) - native knob S${f.knob}, so it automates and maps to Push`}
 				>
 					<span className="w-full truncate text-center text-[9px] leading-none text-muted-foreground">{f.label}</span>
