@@ -386,6 +386,54 @@ function knob_label(_index?: number, ..._label: unknown[]): void {
 var UNITSTYLE: { [name: string]: number } = { int: 0, float: 1, ms: 2, Hz: 3, dB: 4, "%": 5, pan: 6, st: 7, midi: 8 };
 var UNITSTYLE_CUSTOM = 9;
 
+/**
+ * Give a dial the pattern's OWN travel, so it reads 600 Hz and not 0.44.
+ *
+ * ------------------------------------------------------------------------------
+ * THIS WAS TRIED BEFORE AND REVERTED, and the difference this time is the reply.
+ *
+ * `_parameter_range` takes. What broke it was the consequence: the dial then
+ * reports its value IN THE NEW DOMAIN, and the page was still normalizing 0..1 on
+ * the way in and out, so the two scalings fought and the knob sat at its minimum.
+ *
+ * So the range is not applied blind. Whether it took is answered back to the page
+ * that asked (`knob_range_ok` / `knob_range_failed`), and the shim stops scaling
+ * that dial when it did - one scaling, wherever it ends up living.
+ *
+ * KNOWN, while the old mini-view engine is still here: `useSliderKnobs` in the
+ * device page normalizes the same eight parameters and does NOT hear this reply,
+ * so a dial given a real range reads oddly THERE until that engine is retired
+ * (doc/TODO.md item 1, the mini rebuild). Nothing else rides on it.
+ */
+function knob_range(_index?: number, _lo?: number, _hi?: number): void {
+	if (!IS_STRUDEL) return;
+	var index = Number(arguments[0]);
+	var lo = Number(arguments[1]);
+	var hi = Number(arguments[2]);
+	if (!(index >= 0 && index < 8) || !(hi > lo)) return;
+	var varname = "param-s" + (index + 1);
+	try {
+		var obj = this.patcher.getnamed(varname);
+		if (!obj) {
+			post("strudel: knob_range " + varname + " -> getnamed() null\n");
+			return;
+		}
+		if (typeof obj.setattr === "function") {
+			obj.setattr("_parameter_range", lo, hi);
+		} else {
+			obj.message("_parameter_range", lo, hi);
+		}
+		var after = obj.getattr("_parameter_range");
+		var took = !!after && Number(after[0]) === lo && Number(after[1]) === hi;
+		post("strudel: knob_range " + varname + " -> " + String(after) + (took ? "" : " (did NOT take)") + "\n");
+		// The page has to know which domain its values are now in. reply() goes back
+		// to whichever window asked, which is the Studio (see core.ts).
+		reply(took ? "knob_range_ok" : "knob_range_failed", index);
+	} catch (e) {
+		post("strudel: knob_range " + varname + " error: " + (e as Error).message + "\n");
+	}
+}
+
 function knob_unit(_index?: number, ..._unit: unknown[]): void {
 	if (!IS_STRUDEL) return;
 	var index = Number(arguments[0]);
@@ -453,6 +501,10 @@ function onWindowMessage(): void {
 	}
 	if (selector === "knob_unit") {
 		knob_unit(Number(args[0]), Array.prototype.slice.call(args, 1).join(" "));
+		return;
+	}
+	if (selector === "knob_range") {
+		knob_range(Number(args[0]), Number(args[1]), Number(args[2]));
 		return;
 	}
 	if (selector === "shim_ready") {
