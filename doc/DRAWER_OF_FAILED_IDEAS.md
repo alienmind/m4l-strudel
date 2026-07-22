@@ -468,6 +468,13 @@ path. So there was no further form to try.
 and the user pastes it into Explorer/Finder. It needs no Max message and nothing
 platform-specific. It came with a tar pit of its own; see the next entry.
 
+**IT IS THE ARGUMENT, NOT THE CALL (measured 2026-07-22).** `launchbrowser` works
+perfectly for an `http(s)://` URL: every device's About panel opens github.com and
+strudel.cc in the user's real browser through it, outside Live. So the door is open and
+only `file://` paths fall through it - do not read this entry as "launchbrowser is
+dead". Opening a web page from a device is a solved problem
+(`src/app/shared/openExternal.ts`); revealing a FOLDER is the part that is not.
+
 **The transferable lesson.** `launchbrowser` failing silently is the trap. It is fire and
 forget - no reply, no error - so a device that relies on it looks correct in code, logs
 nothing, and simply does nothing. Prefer a mechanism that can report its own outcome, even
