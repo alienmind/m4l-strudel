@@ -296,12 +296,38 @@ A spike is only ticked once the observation is written down here.
   in-page engine, and both engines exist at once - so expect to hear the mini
   device and the REPL separately.
 
-- **[ ] Spike 3 - audio into the mini window.** Check the `jweb~` reference for
-  signal INLETS first (expected: none). If absent, the feed is a `[peakamp~]`
-  message tap off the window's own outlets at ~20 Hz, delivered as
-  `window_level <id> <l> <r>`. Also the first hydra render inside a jweb page -
-  WebGL in CEF is still unverified. Gate: a moving visual in the mini window
-  driven by the Studio's sound.
+- **[ ] Spike 3 - the mini view shows what the Studio is DRAWING.**
+
+  **The requirement changed, and it is bigger than a level meter.** The mini view
+  should show whatever the Studio window is rendering behind its editor - a
+  `.scope()` in the pattern, a `.pianoroll()`, hydra, anything. Not a visual of
+  our own that happens to move with the sound: the Studio's actual picture.
+
+  That rules out the original plan (a `[peakamp~]` tap driving a canvas of ours),
+  and it rules out re-running hydra in the mini page from mirrored code, because
+  neither reproduces `.scope()` or anything else strudel draws.
+
+  Pixels are the only thing that satisfies it, and pixels cannot cross between two
+  Chromium contexts directly - no shared memory, no server, and jweb has no
+  documented frame-grab. So the spike is a TRANSPORT question:
+
+  1. In the Studio page the shim reads the REPL's canvas (`getDrawContext()` gives
+     it, and hydra draws to its own) with `toDataURL("image/jpeg", ~0.5)` at a
+     small size - 320x180 or less.
+  2. That string crosses as an ordinary Max message
+     (`window_send` in reverse - page to wrapper to the device view's page).
+  3. The mini page paints it into an `<img>`.
+
+  **What the spike has to measure, because any of them can kill it:** the size of
+  a frame at that quality (a Max symbol carrying ~10 kB, several times a second),
+  the frame rate that survives the round trip, and the CPU cost of
+  `toDataURL` on the Studio's render loop - it is a synchronous read of the GPU
+  and it runs in the page that is making the SOUND, so a stall there is a dropout,
+  not a dropped frame. Gate: a recognisable moving picture in the mini view at 10
+  fps or better, with no audible cost.
+  If the cost lands on the audio, the fallbacks in order: drop the rate to 2-4
+  fps (a slideshow of the scope is still the Studio's picture), or accept a
+  level meter of our own and record that the real thing was not affordable.
 
 - **[x] Spike 4 - the shim and the controls. PASS (2026-07-22), in Live.**
   All four: the audio arms with no click, the pattern saves with the set and comes

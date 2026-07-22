@@ -177,6 +177,35 @@ describe("m4l-shim", () => {
 		expect(m4lKnob(1)).toBe(0.75);
 	});
 
+	it("scales the signal itself when the pattern declares a range", () => {
+		const queried: number[] = [];
+		(globalThis as Record<string, unknown>).signal = (fn: () => number) => ({ query: () => queried.push(fn()) });
+		mount();
+		page.inlets.set_s1(0.5);
+
+		const knob = (page.win.m4lKnob as (n: number, o: unknown) => { query: () => void })(1, { range: [200, 2200] });
+		knob.query();
+		expect(queried).toEqual([1200]);
+
+		delete (globalThis as Record<string, unknown>).signal;
+	});
+
+	it("carries a dial's name and unit to the device, once per change", () => {
+		mount();
+		const m4lKnob = page.win.m4lKnob as (n: number, o?: unknown) => unknown;
+
+		m4lKnob(1, { name: "cutoff", unit: "Hz" });
+		m4lKnob(1, { name: "cutoff", unit: "Hz" }); // a re-evaluation, same name
+		expect(sent(page.outlets, "knob_label")).toEqual([["knob_label", 0, "cutoff (Hz)"]]);
+
+		// A dial with no description says nothing rather than clearing the name.
+		m4lKnob(2);
+		expect(sent(page.outlets, "knob_label")).toHaveLength(1);
+
+		m4lKnob(1, { name: "room" });
+		expect(sent(page.outlets, "knob_label").pop()).toEqual(["knob_label", 0, "room"]);
+	});
+
 	it("reads an untouched or out-of-range dial as 0, never undefined", () => {
 		// A pattern doing arithmetic on it must not get NaN.
 		mount();

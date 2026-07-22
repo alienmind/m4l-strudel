@@ -73,10 +73,26 @@
 	 * evaluate again. That is not a knob, it is a default.
 	 *
 	 * A signal is queried by the scheduler every cycle instead, so the value is read
-	 * WHILE THE PATTERN PLAYS and the dial moves the sound under your hand. The
-	 * idiom is therefore pattern arithmetic, not JavaScript arithmetic:
+	 * WHILE THE PATTERN PLAYS and the dial moves the sound under your hand.
 	 *
 	 *     note("c3 e3 g3").s("sawtooth").lpf(m4lKnob(1).range(200, 2200))
+	 *
+	 * A dial can also DESCRIBE ITSELF, which is what the surface declarations do for
+	 * every other parameter in this repo - a name, a unit, a range:
+	 *
+	 *     m4lKnob(1, { name: "cutoff", unit: "Hz", range: [200, 2200] })
+	 *     m4lKnob(2, { name: "room" })
+	 *
+	 * All of it optional, and `range` here is the same range `.range()` applies -
+	 * given here, the returned signal is already scaled, so it reads once rather
+	 * than twice. The name and unit are sent to the device as `knob_label`, which is
+	 * what a native dial is renamed from.
+	 *
+	 * KNOWN LIMIT, measured before this branch (doc/TODO.md item 5): the rename
+	 * takes on the DEVICE PANEL but does NOT reach Live's parameter registry or the
+	 * Rack macro picker, which keep showing S1..S8 - a frozen device cannot rename a
+	 * parameter there. The unit is carried for the same reason: so that when a route
+	 * to Live's own naming exists, the pattern is already saying what it means.
 	 *
 	 * `signal` reaches globalThis when the REPL loads its modules (evalScope in
 	 * @strudel/core), which is after this file runs - hence the lookup at call time.
@@ -85,14 +101,44 @@
 	 * `m4lKnobValue(n)` is the raw number, for a pattern that genuinely wants the
 	 * value frozen at evaluation.
 	 */
-	window.m4lKnob = function (n) {
+	window.m4lKnob = function (n, opts) {
+		var index = (n | 0) - 1;
+		var o = opts || {};
+		describeKnob(index, o);
+
+		var range = o.range;
+		var lo = range ? Number(range[0]) : 0;
+		var hi = range ? Number(range[1]) : 1;
+		var read = range
+			? function () {
+					return lo + knobValue(n) * (hi - lo);
+				}
+			: function () {
+					return knobValue(n);
+				};
+
 		var signal = globalThis.signal;
-		if (typeof signal !== "function") return knobValue(n);
-		return signal(function () {
-			return knobValue(n);
-		});
+		return typeof signal === "function" ? signal(read) : read();
 	};
 	window.m4lKnobValue = knobValue;
+
+	/**
+	 * Tell the device what this dial IS, so the native knob can carry the name.
+	 *
+	 * Sent on change only. A pattern is re-evaluated constantly while it is being
+	 * worked on, and `knob_label` writes a Live parameter attribute - resending an
+	 * unchanged name on every keystroke is work for nothing.
+	 */
+	var knobLabels = [];
+	function describeKnob(index, o) {
+		if (index < 0 || index > 7) return;
+		var name = o.name || o.label;
+		if (!name) return;
+		var label = o.unit ? name + " (" + o.unit + ")" : name;
+		if (knobLabels[index] === label) return;
+		knobLabels[index] = label;
+		if (max) max.outlet("knob_label", index, label);
+	}
 
 	function ready(fn) {
 		var tries = 0;

@@ -85,6 +85,15 @@ export default defineSurface({
 		 * It stands NEXT TO the hand-rolled `studio` for now, deliberately: the old
 		 * editor and the online redirect are only deleted once this one has parity.
 		 */
-		repl: window({ title: "Strudel Studio", width: 1100, height: 760, audio: true, site: "dist/repl-site" }),
+		repl: window({
+			title: "Strudel Studio",
+			width: 1100,
+			height: 760,
+			audio: true,
+			site: "dist/repl-site",
+			// This is a window you WORK in while the set plays, so the default -
+			// falling behind Live the moment Live is clicked - is wrong for it.
+			alwaysOnTop: true,
+		}),
 	},
 });
