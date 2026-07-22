@@ -467,50 +467,41 @@ turning a native knob does move the pattern. What the dials do NOT carry is any 
 of WHAT they are or WHAT RANGE they span. In Live they all read `S1..S8`, all travel
 0..1, and a knob at 0.5 says nothing about whether that is 600 Hz or 0.5 gain.
 
-Two separate problems that happen to land on the same object.
+SOLVED FOR THE STUDIO PATH (2026-07-22), verified in Live. A pattern in the local
+strudel.cc can now describe a dial, and all three parts take:
 
-**1. Naming - partly a Max limit, partly ours.**
+    note("c3 e3").s("sawtooth").lpf(m4lKnob(1, { name: 'cutoff', unit: 'Hz', range: [200, 2200] }))
 
-The device already sends `knob_label <index> <name>` after each compile
-(`shared/useSliderKnobs.ts`), and the wrapper writes `_parameter_shortname` on
-`param-s<n>` (`wrapper/device.ts`). The label is derived from the method wrapping the
-call, so `.lpf(slider(500,100,1000))` should give a dial called `lpf`.
+    strudel: knob_label param-s1 'S1' -> 'cutoff'
+    strudel: knob_unit  param-s1 'Hz' -> style 3
+    strudel: knob_range param-s1 -> 200,2200
 
-Measured in Live previously: **the rename takes on the DEVICE PANEL but does not reach
-the Rack macro picker or Live's parameter registry**, which keep showing `S1..S8`. A
-frozen device cannot rename a parameter there. So a full fix may not exist - but before
-concluding that, confirm what is actually happening now:
+The dial reads `cutoff`, its value reads in Hz across 200..2200, and turning it
+still lands the right value in the pattern while it plays.
 
-- Does the Max console print `knob_label ... 'S1' -> 'lpf'`, or `(rename did NOT take)`,
-  or nothing at all? Nothing at all means the message is not arriving and this is our
-  bug, not Max's.
-- `getnamed("param-s<n>")` returning null would mean the varname convention changed.
-- If the panel rename works and only the registry lags, the honest answer is to document
-  it in help and stop - not to keep spiking a frozen-device limit.
+**What made the range work this time.** It is the same `_parameter_range` the
+earlier spike set and reverted. That attempt failed because the attribute TAKES:
+the dial then reports its value in the new domain, while the page went on
+normalizing 0..1, so two scalings fought and the knob sat at its minimum. Now the
+wrapper answers the page that asked - `knob_range_ok` / `knob_range_failed` - and
+the shim scales only while the answer is no. Exactly one scaling, wherever it
+lives.
 
-**2. Scale - ours, and fixable.**
+**What is left of this item.**
 
-The dials are declared 0..1 and the slider's real min..max is applied in the page
-(`useSliderKnobs` normalizes on the way in and out). So the dial is honest about its own
-travel and useless about the pattern's: `slider(500, 100, 1000)` shows `0.44`, not
-`500`.
+- The OLD path is unchanged and still 0..1: `shared/useSliderKnobs.ts` derives a
+  label from the method wrapping a `slider()` call and normalizes in the page. It
+  does not hear the range reply, so a dial given a real range reads oddly in the
+  mini view. That resolves itself when the mini engine is retired (item 1); if any
+  of it survives, it needs the same handshake.
+- Live's parameter REGISTRY was measured previously to keep showing `S1..S8` in
+  the Rack macro picker even when the panel rename takes, and nothing here changes
+  that - a frozen device cannot rename a parameter there. Worth re-checking now
+  that the panel side demonstrably works; if it still lags, document it in help
+  and stop rather than spiking a frozen-device limit again.
 
-A previous spike set `_parameter_range` at runtime and was **REVERTED**: it takes, but
-it also shifts the value domain the dial reports back, which broke the normalized math
-and left the knob stuck at its minimum. Do not simply retry it - if it is attempted
-again, the acceptance is that a dial at its midpoint reads the slider's midpoint IN REAL
-UNITS *and* that dragging it still lands the right value in the pattern.
-
-Cheaper alternatives worth costing first:
-- **Unit in the name.** Fold the range into the label the rename already sends
-  (`lpf 100-1k`). Costs nothing beyond what exists, and dies with problem 1 if the
-  rename does not take.
-- **Show it in the web row.** `SliderRow` already prints the real value next to each
-  slider; make that the place range is communicated, and treat the native dial as a
-  control surface rather than a display. This is probably the right answer.
-
-**Acceptance:** a user turning S1 on Push can tell which parameter they are moving and
-roughly where in its range they are - by whatever route proves possible.
+**Acceptance (met for the Studio path):** a user turning S1 on Push can tell which
+parameter they are moving and roughly where in its range they are.
 
 
 ### 6. FEAT - native MIDI input (`midiIn`/`kb()`) and MIDI output
