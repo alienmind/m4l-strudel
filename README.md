@@ -16,16 +16,21 @@ The result is a set of **Max for Live devices** that bring [Strudel](https://str
 
 - **Generative sequencing in one line.** `note("c3 e3 g3 b3").sometimesBy(.3, x=>x.fast(2))` is a whole evolving part. Euclidean rhythms, polymeter, per-cycle alternation - things that are tedious to click into a piano roll are one expression in Strudel.
 - **The ultimate hybrid workflow.** By exposing Strudel's engine states directly to Live, you can map them to your **Ableton Push** or external MIDI controllers. Start and stop complex algorithmic sequences with physical hardware!
+
+![Strudel driving a drum rack and effects](doc/screenshot-strudel-drum-rack-and-effects.gif)
 - **A dedicated drum machine.** The new **Strudel Drums MIDI** device brings Strudel's generative drum language (`bd`, `sd`, `hh`) straight to your Ableton Drum Racks. It features a visual **Kit** mapper that natively persists in your Live set, letting you easily route algorithmic sequences to any custom kit!
 
 ![Strudel Drums MIDI Kit Mapping](doc/screenshot-midi-drums-mapping.png)
 
 - **A code-driven drum sampler.** The **Strudel Drums Sampler** plays samples itself: write `s("bd sd, hh*8")`, pick a drum-machine **bank**, and it fetches and plays that machine's sounds - sixteen voices, driven by code (or by MIDI notes in front of it).
 
-![Strudel Drums Sampler - write s(), pick a bank, it plays the machine](doc/screenshot-drums-sampler.png)
+
 
 - **It's really Live-native.** Launch a clip on the device's track and the pattern starts; stop it and the pattern stops. On a track with no clips, Live's own Play does the same. Patterns start on the bar, follow tempo automation, and notes land on the track the device sits on. Everything renders inside the device UI.
 - **From sketch to clip.** The MIDI device can freeze any pattern into a regular MIDI clip (and read clips back into mini-notation), so generative sketches become ordinary arrangeable material. It also doubles as a two-way translator for *understanding* Strudel: freeze a pattern you cannot quite read into a clip and **see** it in the piano roll, or drop a clip you already know and read its mini-notation - each side explains the other.
+
+![Exporting MIDI and applying effects](doc/screenshot-strudel-midi-export-and-effects.gif)
+
 - **Room to type, help that follows you.** A **Full Studio** floating window (from **About > Advanced**) is a big editor over the same pattern as the device view (one pattern, one scheduler), and every Strudel-taking device has a `?` opening a pinned reference of exactly what THESE devices support - per device, offline, with an honest works / not-yet status on every entry, narrowing to whatever your caret is on.
 - **A synth you play with your hands.** The **Strudel Synth** takes a SOUND rather than a pattern - `s("sawtooth").lpf(800).room(.3)` - and every MIDI note the track sends plays it. Your clip, your keyboard or another Strudel device in front is the trigger, and any `slider()` in the sound lands on a native knob, so the timbre automates and reaches Push.
 - **It keeps its sounds when the network goes.** Every sample and sample map any device fetches is cached in the device page, so a set reopened offline still plays the sounds it played before. Synths never needed the network at all.
@@ -52,6 +57,8 @@ We also deliver **additional utility instruments** that showcase different capab
 
 ## Controls: your sliders on Ableton's knobs
 
+![Strudel playing with Studio and sliders](doc/screenshot-strudel-play-and-studio-with-sliders.gif)
+
 A `slider()` in your pattern becomes one of the device's eight native dials, in source
 order - automatable, MIDI-mappable, on Push:
 
@@ -59,18 +66,11 @@ order - automatable, MIDI-mappable, on Push:
 s("sawtooth").lpf(slider(500, 100, 1000))
 ```
 
-The dial travels the slider's own range (100..1000 here, not 0..1) and starts where the
-code says. Turning it changes the sound immediately.
-
-Name it, and give it a unit, and the dial says so too:
+As an extension to slider(), we can give it units and a name, and the dial says so too:
 
 ```js
 s("sawtooth").lpf(slider(500, 100, 1000, 1, { name: 'cutoff', unit: 'Hz' }))
 ```
-
-That is still ordinary Strudel - the same line runs on strudel.cc, which ignores the
-extra options rather than choking on them. See
-[STRUDEL-SUPPORT.md](doc/STRUDEL-SUPPORT.md) for what carries and what does not.
 
 ## Quick Examples
 

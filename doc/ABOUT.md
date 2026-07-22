@@ -54,7 +54,7 @@ We also deliver a set of specialized, lightweight devices - some translating Str
 
 They are meant to be combined. The chain below is the whole idea in one track: **Strudel MIDI** sequences the notes (`<c3 c3 <c3 c#3>>*16`), **Strudel Synth** turns each one into sound (`s("sawtooth")`), and **Strudel Audio FX** filters the result (`.lpf(6613)`). Every line is Strudel; every knob is a real, automatable Live parameter.
 
-![A chain of three devices: Strudel MIDI sequences notes, Strudel Synth turns them into sound, Strudel Audio FX filters the result](screenshot-all-three-microdevices.png)
+
 
 ---
 
@@ -79,6 +79,10 @@ Type any Strudel pattern - whether it's synthesizers like `s("sawtooth")`, sampl
 
 **Launching a clip on the track starts it.** You do not have to press Run as well: launch a clip on the device's track and the pattern starts; stop the clip and it stops. On a track with no clips at all, Live's global Play does the same job. Run and the mappable **Play/Stop** parameter still work, and whichever moved last wins.
 
+![Strudel playing with its Studio window and sliders](screenshot-strudel-play-and-studio-with-sliders.gif)
+
+![Strudel driving a drum rack and effects](screenshot-strudel-drum-rack-and-effects.gif)
+
 ### Strudel Synth (`alienmind-strudel-synth.amxd`)
 
 The synth is the one device here that takes a **sound**, not a pattern. Type `s("sawtooth")`, add an envelope and effects (`.attack(0.2).lpf(800).room(.3)`), press the tick (or **Ctrl+Enter**), and every MIDI note the track sends plays that sound - from a clip, from your keyboard, or from a Strudel MIDI device sitting in front of it.
@@ -91,9 +95,11 @@ Two things to know:
 
 Any `slider()` in the sound (`.lpf(slider(1200, 100, 8000))`) binds to one of the eight native knobs (**S1..S8**), so you can automate the timbre or turn it from Push.
 
+![Strudel knobs showing slider parameters](screenshot-strudel-knobs.png)
+
 ### Strudel MIDI (`alienmind-strudel-midi.amxd`)
 
-![Strudel MIDI device](screenshot-midi.png)
+
 
 Two workflows in one device:
 - **Live mode (Run / Stop)** - evaluate real Strudel code and stream the result as live MIDI into whatever instrument sits after the device.
@@ -101,14 +107,15 @@ Two workflows in one device:
 
 ![Clip export and import - a pattern frozen to a MIDI clip, and read back](screenshot-midi-export-import.png)
 
-The editor features a **Full Studio** floating window, a native **Play/Stop** panel for macro-mapping, and a comprehensive **Help (?)** reference tailored to exactly what the device supports.
+![Exporting MIDI and applying effects](screenshot-strudel-midi-export-and-effects.gif)
 
-![The About screen and the Full Studio window](screenshot-about-and-studio.png)
+The editor features a native **Play/Stop** panel for macro-mapping, and a comprehensive **Help (?)** reference tailored to exactly what the device supports.
+
 ![The Strudel reference window](strudel-help.png)
 
 ### Strudel Drums MIDI (`alienmind-strudel-drums-midi.amxd`)
 
-![Strudel Drums MIDI device](screenshot-midi-drums.png)
+
 
 Built for driving Drum Racks. Instead of writing absolute pitches, write Strudel drum words (`bd`, `sd`, `hh`). 
 
@@ -118,7 +125,7 @@ Clicking the **Kit** button opens a dedicated visual mapper to route Strudel's v
 
 ### Strudel Drums Sampler (`alienmind-strudel-drums-sampler.amxd`)
 
-![Strudel Drums Sampler - the CODE screen](screenshot-drums-sampler.png)
+
 
 A self-contained instrument that fetches and plays samples from **drum-machine banks** driven by Strudel code. 
 
@@ -132,14 +139,14 @@ You can also browse the selected bank's sounds via the **Sounds** screen and aud
 
 ### Strudel Audio FX (`alienmind-strudel-fx.amxd`)
 
-![Strudel Audio FX - the effect line and its native dials](screenshot-fx.png)
+
 
 Brings Strudel's chainable DSP vocabulary to any audio track. Type a chain of Strudel effects, such as `.lpf(800).room(0.3).gain(1.2)`, and hit Enter. The parameters appear as **native Live dials** beside the text.
 
 - **Native, not HTML**: the dials are real Live parameters - automatable, MIDI-mappable, and paged on Push.
 - **Add Effect Menu**: clicking `(+)` opens an overlay to quickly append new DSP stages.
 
-![Strudel Audio FX - the Add Effect menu](screenshot-fx-2.png)
+
 
 ### Strudel Sample Browser (`alienmind-strudel-sample-browser.amxd`)
 
