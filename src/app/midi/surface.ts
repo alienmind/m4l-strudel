@@ -55,19 +55,6 @@ export default defineSurface({
 	windows: {
 		/** The reference, one `?` away. Tall and narrow: it is a list you scroll. */
 		help: window({ title: "Strudel Reference", width: 420, height: 620, entry: "Help", alwaysOnTop: true }),
-		/**
-		 * THE FULL STUDIO - room to write, for a device view that is 169 px tall.
-		 *
-		 * An EDITOR, not an engine, and the distinction is the whole design: it binds the
-		 * `code` slot and nothing else. The DEVICE VIEW's engine is the only thing that
-		 * receives `tick`, so it does all the scheduling - which means Live's quantization
-		 * and scale are enforced for free, and there is exactly one scheduler no matter how
-		 * many views are open. A window that ran its own engine would double every note.
-		 *
-		 * It also makes no sound, ever: [jweb] has no `~` outlets, so audio a page plays
-		 * cannot reach the track (measured). The window edits; the track hears the device.
-		 */
-		studio: window({ title: "Strudel Studio", width: 720, height: 560, entry: "StudioWindow", alwaysOnTop: true }),
 		/** strudel.cc itself, in a floating window (About > Advanced). The bundled page just
 		 *  navigates to the site - a plain browser tab's worth of the web playground. */
 		strudel: window({ title: "strudel.cc", width: 1100, height: 760, entry: "StrudelSite" }),
