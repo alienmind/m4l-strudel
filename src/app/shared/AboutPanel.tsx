@@ -44,12 +44,13 @@ export function AboutPanel({
 					{/* NOT an <a>: a link followed inside the device's webview strands the
 					    user in a page with no back button and no way out but reloading the
 					    device. It opens in their own browser instead. */}
-					<button
+					<Button
+						variant="link"
 						onClick={() => openExternal("https://github.com/alienmind/m4l-strudel")}
-						className="mt-1 block w-full text-xs text-primary hover:underline"
+						className="mt-1 w-full text-xs"
 					>
 						github.com/alienmind/m4l-strudel
-					</button>
+					</Button>
 				</div>
 				
 				<div className="flex flex-col gap-1 text-[10px] text-muted-foreground bg-input/20 rounded p-2 border border-input w-full max-w-[200px]">

@@ -120,16 +120,10 @@ export default function App() {
 				{/* Allowed while playing: the bounce takes superdough's context over for its
 				    duration, so playback goes quiet and resumes (useStrudelRender). */}
 				<ExportButton onExport={s.exportAudio} busy={s.exporting} />
-				{/* SPIKE 2 (doc/TODO.md item 1): the local strudel.cc in its own window,
-				    playing straight into the track. Temporary placement - once it has
-				    parity it REPLACES the hand-rolled Studio instead of sitting beside it. */}
-				<button
-					onClick={openStudio}
-					title="Open the local strudel.cc - the full REPL, playing into this track"
-					className="shrink-0 rounded px-1 text-[10px] leading-none text-muted-foreground transition-colors hover:text-primary cursor-pointer"
-				>
+				{/* The local strudel.cc, in its own window, playing straight into the track. */}
+				<Button onClick={openStudio} variant="ghost" title="Open the local strudel.cc - the full REPL, playing into this track">
 					REPL
-				</button>
+				</Button>
 				<ControlsButton
 					onShow={() => setShowTransport(true)}
 					title="Controls: the native panel with the mappable Play/Stop and the eight slider knobs (S1..S8). Its Back switch returns."
@@ -146,13 +140,14 @@ export default function App() {
 						<Button
 							key={v.id}
 							icon={v.icon}
+							variant="ghost"
+							size="icon"
 							title={v.title}
 							active={view === v.id}
 							onClick={() => {
 								setView(v.id);
 								setViewPinned(true);
 							}}
-							className="px-1"
 						/>
 					))}
 				</div>
