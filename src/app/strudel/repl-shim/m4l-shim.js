@@ -90,8 +90,9 @@
 	 *
 	 * All of it optional, and `range` here is the same range `.range()` applies -
 	 * given here, the returned signal is already scaled, so it reads once rather
-	 * than twice. The name and unit are sent to the device as `knob_label`, which is
-	 * what a native dial is renamed from.
+	 * than twice. Name, unit and range are sent through the library's own parameter
+	 * vocabulary (`param_label` / `param_unit` / `param_range`), which is what renames
+	 * and re-ranges a native dial.
 	 *
 	 * KNOWN LIMIT, measured before this branch (doc/TODO.md item 5): the rename
 	 * takes on the DEVICE PANEL but does NOT reach Live's parameter registry or the
