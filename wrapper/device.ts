@@ -333,7 +333,10 @@ function sendFollow(force: boolean): void {
  * does, the dials stay "S1".."S8" - cosmetic only, nothing else rides on this.
  * ------------------------------------------------------------------ */
 
-function knob_label(): void {
+// The parameters are declared for the type checker only - Max dispatches
+// positionally, and a label with a space in it arrives as several arguments,
+// which is what the join below puts back together.
+function knob_label(_index?: number, ..._label: unknown[]): void {
 	if (!IS_STRUDEL) return;
 	var index = Number(arguments[0]);
 	var label = Array.prototype.slice.call(arguments, 1).join(" ");
@@ -397,7 +400,11 @@ function onWindowMessage(): void {
 	var args = Array.prototype.slice.call(arguments, 2);
 
 	if (selector === "knob_label") {
-		(knob_label as (...a: unknown[]) => void).apply(this, args);
+		// A PLAIN call, not .apply(this, ...). In Max's [js] the global object IS the
+		// jsthis, so a plainly-called function sees `this.patcher`; passing the `this`
+		// of a message handler instead hands it something that has no patcher, and
+		// the handler dies with "this.patcher is undefined".
+		knob_label(Number(args[0]), Array.prototype.slice.call(args, 1).join(" "));
 		return;
 	}
 	if (selector === "shim_ready") {
