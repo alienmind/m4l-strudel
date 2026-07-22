@@ -59,6 +59,19 @@ export function useReplKnobs(): { faders: SliderKnob[]; declared: boolean } {
 			if (i < 0 || !String(unit)) return;
 			setDescs((prev) => ({ ...prev, [i]: { ...(prev[i] ?? { label: `S${i + 1}`, min: 0, max: 1, real: false }), unit: String(unit) } }));
 		});
+		// The pattern dropped this slider: forget the fader, or one that drives nothing
+		// stays on screen.
+		bindInlet("slider_clear", (id: unknown) => {
+			const i = knobIndexOf(id);
+			if (i < 0) return;
+			seeded.current[i] = "";
+			setDescs((prev) => {
+				if (!prev[i]) return prev;
+				const next = { ...prev };
+				delete next[i];
+				return next;
+			});
+		});
 		bindInlet("param_desc_range", (id: unknown, lo: unknown, hi: unknown, took: unknown) => {
 			const i = knobIndexOf(id);
 			if (!(i >= 0 && i < 8)) return;

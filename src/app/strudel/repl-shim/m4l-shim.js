@@ -293,12 +293,22 @@
 		if (key === lastSliderKey) return;
 		lastSliderKey = key;
 
+		var previouslyOwned = sliderMap.slice();
 		sliderMap = [];
 		for (var n = 0; n < 8; n++) {
 			var w = ordered[n];
 			var param = "s" + (n + 1);
 			if (!w) {
 				sliderMap[n] = null;
+				// A slot this pattern no longer uses has to be RELEASED, or the fader
+				// of a slider that was deleted stays on screen driving nothing. Only
+				// slots a slider held are cleared: a dial described by m4lKnob() is
+				// not ours to reset.
+				if (previouslyOwned[n]) {
+					max.outlet("param_label", param, "S" + (n + 1));
+					max.outlet("param_range", param, 0, 1);
+					max.outlet("slider_clear", param);
+				}
 				continue;
 			}
 			var o = opts[w.to] || {};

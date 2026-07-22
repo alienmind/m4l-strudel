@@ -57,7 +57,9 @@ export default function App() {
 	/** THE Studio: the local strudel.cc, which owns the engine and the audio. */
 	const replWindow = useWindow(surface, "repl");
 
-	const [view, setView] = useState<ViewId>("visual");
+	// CODE is the default: the device view is where a small pattern gets written, and
+	// a device that opens on a meter looks like it is doing nothing.
+	const [view, setView] = useState<ViewId>("code");
 	/** Once the user picks a view by hand, stop moving it under them. */
 	const [viewPinned, setViewPinned] = useState(false);
 	const { faders, declared } = useReplKnobs();
@@ -67,6 +69,18 @@ export default function App() {
 	useEffect(() => {
 		if (declared && !viewPinned) setView("knobs");
 	}, [declared, viewPinned]);
+
+	/**
+	 * Opening the Studio hands the writing over to it, so the device view stops being
+	 * an editor and becomes the control surface for what the Studio is playing. It
+	 * switches BEFORE the window opens, so it is already right when the user comes
+	 * back to it.
+	 */
+	const openStudio = () => {
+		setView("knobs");
+		setViewPinned(true);
+		replWindow.open();
+	};
 	// Live's transport and the eight native dials reach the DEVICE, never a floating
 	// window - so the device view passes them on to the REPL's page.
 	useReplRemote();
@@ -82,7 +96,7 @@ export default function App() {
 		return (
 			<AboutPanel
 				amxdBuild={s.amxdBuild}
-				onOpenStudio={replWindow.open}
+				onOpenStudio={openStudio}
 				onShowControls={() => {
 					setShowTransport(true);
 					setShowAbout(false);
@@ -112,7 +126,7 @@ export default function App() {
 				    playing straight into the track. Temporary placement - once it has
 				    parity it REPLACES the hand-rolled Studio instead of sitting beside it. */}
 				<button
-					onClick={replWindow.open}
+					onClick={openStudio}
 					title="Open the local strudel.cc - the full REPL, playing into this track"
 					className="shrink-0 rounded px-1 text-[10px] leading-none text-muted-foreground transition-colors hover:text-primary cursor-pointer"
 				>
