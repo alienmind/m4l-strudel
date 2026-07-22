@@ -174,6 +174,11 @@
 	 */
 	var knobIsReal = [];
 
+	/** `s3` -> 2. The library answers by parameter id; the dials are a pool. */
+	function knobIndexOf(id) {
+		return Number(String(id).replace(/^s/, "")) - 1;
+	}
+
 	var knobDescriptions = [];
 	function describeKnob(index, o) {
 		if (index < 0 || index > 7) return;
@@ -191,11 +196,15 @@
 		if (knobDescriptions[index] === key) return;
 		knobDescriptions[index] = key;
 		if (!max) return;
-		max.outlet("knob_label", index, name);
-		if (unit) max.outlet("knob_unit", index, unit);
-		// Ask for the dial's travel to become the pattern's. The device answers
+		// The LIBRARY's vocabulary, keyed by the parameter's own id - the same
+		// messages any device's page uses to say what a control now is
+		// (describeParam in @m4l-jweb/bridge).
+		var param = "s" + (index + 1);
+		max.outlet("param_label", param, name);
+		if (unit) max.outlet("param_unit", param, unit);
+		// Ask for the dial's travel to become the pattern's. The wrapper answers
 		// whether Live took it, and the answer decides who does the scaling.
-		if (range && hi > lo) max.outlet("knob_range", index, lo, hi);
+		if (range && hi > lo) max.outlet("param_range", param, lo, hi);
 	}
 
 	function ready(fn) {
@@ -301,11 +310,11 @@
 
 		// Whether a dial now travels in the pattern's own units. Until this says so,
 		// the value is 0..1 and m4lKnob scales it - exactly one scaling either way.
-		max.bindInlet("knob_range_ok", function (i) {
-			knobIsReal[Number(i)] = true;
+		max.bindInlet("param_range_ok", function (id) {
+			knobIsReal[knobIndexOf(id)] = true;
 		});
-		max.bindInlet("knob_range_failed", function (i) {
-			knobIsReal[Number(i)] = false;
+		max.bindInlet("param_range_failed", function (id) {
+			knobIsReal[knobIndexOf(id)] = false;
 		});
 
 		// Say ONCE, in the REPL's own console, that the dials are arriving. Without it

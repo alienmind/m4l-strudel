@@ -6,6 +6,9 @@ import surface from "./surface";
 
 const KNOB_IDS = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"] as const;
 
+/** `s3` -> 2. The library talks in parameter ids; the dials are a numbered pool. */
+const knobIndexOf = (id: unknown) => KNOB_IDS.indexOf(String(id) as (typeof KNOB_IDS)[number]);
+
 /** What a pattern said about one dial: `m4lKnob(1, { name, unit, range })`. */
 interface KnobDesc {
 	label: string;
@@ -35,14 +38,16 @@ export function useReplKnobs(): { faders: SliderKnob[]; declared: boolean } {
 	/* eslint-enable react-hooks/rules-of-hooks */
 
 	useEffect(() => {
-		bindInlet("knob_desc", (index: unknown, ...rest: unknown[]) => {
-			const i = Number(index);
+		// The wrapper echoes what a page told Live about a parameter, keyed by the
+		// parameter's own id - `s3`, not an index into a pool.
+		bindInlet("param_desc", (id: unknown, ...rest: unknown[]) => {
+			const i = knobIndexOf(id);
 			const label = rest.join(" ");
 			if (!(i >= 0 && i < 8) || !label) return;
 			setDescs((prev) => ({ ...prev, [i]: { ...(prev[i] ?? { min: 0, max: 1, real: false }), label } }));
 		});
-		bindInlet("knob_desc_range", (index: unknown, lo: unknown, hi: unknown, took: unknown) => {
-			const i = Number(index);
+		bindInlet("param_desc_range", (id: unknown, lo: unknown, hi: unknown, took: unknown) => {
+			const i = knobIndexOf(id);
 			if (!(i >= 0 && i < 8)) return;
 			setDescs((prev) => ({
 				...prev,

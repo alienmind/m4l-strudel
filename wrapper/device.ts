@@ -319,159 +319,6 @@ function sendFollow(force: boolean): void {
 }
 
 /* ------------------------------------------------------------------ *
- * Knob renaming (superdough, H.7 "dynamic renaming") - SPIKE
- *
- * The superdough device's eight native dials are a GENERIC pool ("S1".."S8"); the
- * code's slider() occurrences bind to them by order. The app sends
- * `knob_label <index> <name>` after each compile so the dial can carry the semantic
- * name ("lpf", "trancegate") on the panel, in a Rack macro picker and on Push.
- *
- * UNVERIFIED Max claim, deliberately spike-shaped: whether a live.dial's shortname
- * can be changed at runtime in a frozen M4L device. We reach the box the same way
- * the packaged wrapper's native_hide does (this.patcher.getnamed("param-s<n>")) and
- * try the two write forms; the Max console logs which (if either) took. If neither
- * does, the dials stay "S1".."S8" - cosmetic only, nothing else rides on this.
- * ------------------------------------------------------------------ */
-
-// The parameters are declared for the type checker only - Max dispatches
-// positionally, and a label with a space in it arrives as several arguments,
-// which is what the join below puts back together.
-function knob_label(_index?: number, ..._label: unknown[]): void {
-	if (!IS_STRUDEL) return;
-	var index = Number(arguments[0]);
-	var label = Array.prototype.slice.call(arguments, 1).join(" ");
-	if (!(index >= 0 && index < 8) || !label) return;
-	var varname = "param-s" + (index + 1);
-	try {
-		var obj = this.patcher.getnamed(varname);
-		if (!obj) {
-			post("strudel: knob_label " + varname + " -> getnamed() null\n");
-			return;
-		}
-		var before = obj.getattr("_parameter_shortname");
-		if (String(before) === label) return; // already carries this name
-		if (typeof obj.setattr === "function") {
-			obj.setattr("_parameter_shortname", label);
-		} else {
-			obj.message("_parameter_shortname", label);
-		}
-		// The DEVICE VIEW wants this too: its fader bank shows the pattern's own
-		// names, and a fader appearing is what makes it the visible view. The dial
-		// itself is Live's; this is the same fact told to our own page.
-		outlet(0, "knob_desc", index, label);
-		var after = obj.getattr("_parameter_shortname");
-		post(
-			"strudel: knob_label " +
-				varname +
-				" '" +
-				before +
-				"' -> '" +
-				after +
-				"'" +
-				(String(after) === label ? "" : " (rename did NOT take)") +
-				"\n",
-		);
-	} catch (e) {
-		post("strudel: knob_label " + varname + " error: " + (e as Error).message + "\n");
-	}
-}
-
-/**
- * How Live PRINTS a dial's value - the same unit styles the build stamps into a
- * declared parameter, applied at runtime to a dial a pattern just described.
- *
- * It is not decoration and it is not the name: the name says WHICH parameter, the
- * unit style is what makes the readout say "600 Hz" rather than "600". They go to
- * different attributes, so they arrive as different messages.
- *
- * The order is Max's own list. 9 is Custom, which takes the string itself, so an
- * unknown unit still prints - "12 Bogons" - instead of being dropped.
- */
-var UNITSTYLE: { [name: string]: number } = { int: 0, float: 1, ms: 2, Hz: 3, dB: 4, "%": 5, pan: 6, st: 7, midi: 8 };
-var UNITSTYLE_CUSTOM = 9;
-
-/**
- * Give a dial the pattern's OWN travel, so it reads 600 Hz and not 0.44.
- *
- * ------------------------------------------------------------------------------
- * THIS WAS TRIED BEFORE AND REVERTED, and the difference this time is the reply.
- *
- * `_parameter_range` takes. What broke it was the consequence: the dial then
- * reports its value IN THE NEW DOMAIN, and the page was still normalizing 0..1 on
- * the way in and out, so the two scalings fought and the knob sat at its minimum.
- *
- * So the range is not applied blind. Whether it took is answered back to the page
- * that asked (`knob_range_ok` / `knob_range_failed`), and the shim stops scaling
- * that dial when it did - one scaling, wherever it ends up living.
- *
- * KNOWN, while the old mini-view engine is still here: `useSliderKnobs` in the
- * device page normalizes the same eight parameters and does NOT hear this reply,
- * so a dial given a real range reads oddly THERE until that engine is retired
- * (doc/TODO.md item 1, the mini rebuild). Nothing else rides on it.
- */
-function knob_range(_index?: number, _lo?: number, _hi?: number): void {
-	if (!IS_STRUDEL) return;
-	var index = Number(arguments[0]);
-	var lo = Number(arguments[1]);
-	var hi = Number(arguments[2]);
-	if (!(index >= 0 && index < 8) || !(hi > lo)) return;
-	var varname = "param-s" + (index + 1);
-	try {
-		var obj = this.patcher.getnamed(varname);
-		if (!obj) {
-			post("strudel: knob_range " + varname + " -> getnamed() null\n");
-			return;
-		}
-		if (typeof obj.setattr === "function") {
-			obj.setattr("_parameter_range", lo, hi);
-		} else {
-			obj.message("_parameter_range", lo, hi);
-		}
-		var after = obj.getattr("_parameter_range");
-		var took = !!after && Number(after[0]) === lo && Number(after[1]) === hi;
-		// The device view's faders need the same two numbers, and whether the dial
-		// itself now carries them - the same question the shim asked.
-		outlet(0, "knob_desc_range", index, lo, hi, took ? 1 : 0);
-		post("strudel: knob_range " + varname + " -> " + String(after) + (took ? "" : " (did NOT take)") + "\n");
-		// The page has to know which domain its values are now in. reply() goes back
-		// to whichever window asked, which is the Studio (see core.ts).
-		reply(took ? "knob_range_ok" : "knob_range_failed", index);
-	} catch (e) {
-		post("strudel: knob_range " + varname + " error: " + (e as Error).message + "\n");
-	}
-}
-
-function knob_unit(_index?: number, ..._unit: unknown[]): void {
-	if (!IS_STRUDEL) return;
-	var index = Number(arguments[0]);
-	var unit = Array.prototype.slice.call(arguments, 1).join(" ");
-	if (!(index >= 0 && index < 8) || !unit) return;
-	var varname = "param-s" + (index + 1);
-	try {
-		var obj = this.patcher.getnamed(varname);
-		if (!obj) {
-			post("strudel: knob_unit " + varname + " -> getnamed() null\n");
-			return;
-		}
-		var known = UNITSTYLE[unit];
-		var style = known === undefined ? UNITSTYLE_CUSTOM : known;
-		if (typeof obj.setattr === "function") {
-			obj.setattr("_parameter_unitstyle", style);
-			if (style === UNITSTYLE_CUSTOM) obj.setattr("_parameter_units", unit);
-		} else {
-			obj.message("_parameter_unitstyle", style);
-			if (style === UNITSTYLE_CUSTOM) obj.message("_parameter_units", unit);
-		}
-		var after = Number(obj.getattr("_parameter_unitstyle"));
-		post(
-			"strudel: knob_unit " + varname + " '" + unit + "' -> style " + after + (after === style ? "" : " (did NOT take)") + "\n",
-		);
-	} catch (e) {
-		post("strudel: knob_unit " + varname + " error: " + (e as Error).message + "\n");
-	}
-}
-
-/* ------------------------------------------------------------------ *
  * Hooks called by the packaged wrapper
  * ------------------------------------------------------------------ */
 
@@ -487,33 +334,16 @@ function onDeviceReady(): void {
  * A message from a WINDOW's page - which for this device means the local
  * strudel.cc in the Studio, running the shim.
  *
- * Without this hook the library logs every one as "unhandled", so two things live
- * here: the shim's `knob_label` (a pattern saying what a dial IS - see m4lKnob in
- * repl-shim/m4l-shim.js), and silence for the traffic [jweb] generates on its own.
+ * What a pattern says about a dial - `param_label` and friends - is handled by the
+ * LIBRARY now, for every device, so nothing about it is here any more. What is left
+ * is one line of ours and silence for the traffic [jweb] generates on its own:
  * `onloadstart`/`onloadend`/`url`/`title` are the browser object reporting page
- * loads; they are not ours and nothing acts on them, but a 17 MB site produces a
- * steady stream of them and it drowns the console.
+ * loads, nothing acts on them, and a 17 MB site produces enough of them to drown
+ * the console.
  */
 function onWindowMessage(): void {
 	var selector = String(arguments[1]);
-	var args = Array.prototype.slice.call(arguments, 2);
 
-	if (selector === "knob_label") {
-		// A PLAIN call, not .apply(this, ...). In Max's [js] the global object IS the
-		// jsthis, so a plainly-called function sees `this.patcher`; passing the `this`
-		// of a message handler instead hands it something that has no patcher, and
-		// the handler dies with "this.patcher is undefined".
-		knob_label(Number(args[0]), Array.prototype.slice.call(args, 1).join(" "));
-		return;
-	}
-	if (selector === "knob_unit") {
-		knob_unit(Number(args[0]), Array.prototype.slice.call(args, 1).join(" "));
-		return;
-	}
-	if (selector === "knob_range") {
-		knob_range(Number(args[0]), Number(args[1]), Number(args[2]));
-		return;
-	}
 	if (selector === "shim_ready") {
 		post("strudel: the Studio's shim is up\n");
 		return;

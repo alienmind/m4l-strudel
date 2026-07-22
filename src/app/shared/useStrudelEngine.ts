@@ -108,6 +108,15 @@ export interface EngineOptions {
 	/** The pattern the device opens with - its own idiom, not a shared one. */
 	initialText: string;
 	/**
+	 * Which state slot holds this engine's text. Defaults to `code`.
+	 *
+	 * The Strudel device has TWO texts now: the Studio's pattern, which is the music
+	 * and lives in `code`, and the device view's scratchpad, which is where a scope
+	 * or a control snippet goes. They must not share a slot - one would overwrite the
+	 * other on every keystroke - so the device view names its own.
+	 */
+	slot?: "code" | "miniCode";
+	/**
 	 * What this device adds to the NoteContext: `scale`, or `drumMap`. MUST be
 	 * memoized by the caller - it keys the recompile below, so a fresh object every
 	 * render would re-evaluate the pattern on every render.
@@ -241,7 +250,7 @@ export function useStrudelEngine(opts: EngineOptions): EngineState {
 	 * store in @m4l-jweb/surface. The `typeof` guard stays because a slot can still
 	 * legitimately have nothing in it: a fresh instance Live has never saved.
 	 */
-	const [savedText, setSavedText] = useStateSync(surface, "code");
+	const [savedText, setSavedText] = useStateSync(surface, opts.slot ?? "code");
 	/**
 	 * AN EMPTY BOX IS A VALUE, NOT A MISSING ONE - and this line used to disagree.
 	 *

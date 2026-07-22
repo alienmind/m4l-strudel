@@ -54,7 +54,10 @@ export default defineSurface({
 	layout: {
 		native: {
 			params: ["play", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"],
-			rows: 2,
+			// Play alone on the first row, then the eight dials in two rows of four.
+			// Column-major (`rows: 2`) put Play in the same column as S1 and marched
+			// the rest across in pairs, which is why the panel looked scattered.
+			rows: [1, 4, 4],
 			panel: true,
 			switch: "transport",
 		},
@@ -63,6 +66,13 @@ export default defineSurface({
 	/** The pattern, saved with the set and shared with the Studio window. */
 	state: {
 		code: codeSlot(INITIAL_TEXT),
+		/**
+		 * The device view's scratchpad - EMPTY by default, and empty is its normal
+		 * state. It is not where the music is written (that is `code`, in the Studio):
+		 * it is where a `scope()` or a control snippet goes, and it runs on the device
+		 * page's own engine so it can draw and sound in its own right.
+		 */
+		miniCode: codeSlot(""),
 		/** What the caret is on, so the floating help can follow the typing. */
 		helpQuery: helpQuerySlot(),
 	},

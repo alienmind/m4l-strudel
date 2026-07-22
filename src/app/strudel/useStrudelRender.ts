@@ -18,7 +18,7 @@ import { sampleCacheStatus } from "../../lib/sampleCache";
 import { SAMPLE_MAPS, loadSampleMaps } from "../../lib/sampleMaps";
 import { useStrudelEngine } from "../shared/useStrudelEngine";
 import { useSliderKnobs } from "../shared/useSliderKnobs";
-import surface, { INITIAL_TEXT } from "./surface";
+import surface from "./surface";
 
 /**
  * The native Web Audio sink for the Strudel device.
@@ -105,7 +105,12 @@ export function useStrudelRender() {
 
 	const engine = useStrudelEngine({
 		surface: surface as any,
-		initialText: INITIAL_TEXT,
+		// The device view's engine is the SCRATCHPAD's, not the music's: the pattern
+		// lives in the Studio and in the `code` slot, and this one starts EMPTY and
+		// stays empty unless somebody types a scope or a control snippet into it.
+		// Sharing the slot meant hearing both engines at once, which is what it did.
+		slot: "miniCode",
+		initialText: "",
 		ctx: EMPTY_CTX,
 		liveScale: "C4:major",
 		superdoughSink: (ev) => {
