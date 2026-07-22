@@ -109,20 +109,4 @@ export default [
 		chains: ["webaudio", "midiin"],
 		unmatchedTo: "js",
 	},
-	{
-		/**
-		 * SCRATCH DEVICE for doc/TODO.md item 1, spike 1 - delete once the finding is
-		 * recorded. It asks whether a page inside a WINDOW reaches the track and keeps
-		 * playing when that window is closed, which decides whether the local
-		 * strudel.cc can own the engine.
-		 *
-		 * No `webaudio` chain: the device view makes no sound. The only source is the
-		 * window declared `audio: true`, so anything audible IS the answer.
-		 */
-		name: "alienmind-spike-audiowin",
-		ui: "spike-audiowin",
-		type: "instrument",
-		chains: [],
-		unmatchedTo: "js",
-	},
 ];

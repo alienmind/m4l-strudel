@@ -54,9 +54,7 @@ export default function App() {
 
 	const helpWindow = useWindow(surface, "help");
 	const [, setHelpQuery] = useStateSync(surface, "helpQuery");
-	const studioWindow = useWindow(surface, "studio");
-	const strudelWindow = useWindow(surface, "strudel");
-	/** The local strudel.cc, which owns its own engine and its own audio (item 1). */
+	/** THE Studio: the local strudel.cc, which owns the engine and the audio. */
 	const replWindow = useWindow(surface, "repl");
 
 	const [view, setView] = useState<ViewId>("visual");
@@ -84,8 +82,7 @@ export default function App() {
 		return (
 			<AboutPanel
 				amxdBuild={s.amxdBuild}
-				onOpenStudio={studioWindow.open}
-				onOpenStrudel={strudelWindow.open}
+				onOpenStudio={replWindow.open}
 				onShowControls={() => {
 					setShowTransport(true);
 					setShowAbout(false);
