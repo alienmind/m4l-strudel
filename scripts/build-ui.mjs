@@ -30,7 +30,10 @@ for (const dir of uiDirs) {
 
 	const outDir = path.join(root, "dist", "ui", dir);
 	const surface = await loadSurface(root, dir);
-	const windows = surface?.windows ? Object.keys(surface.windows) : [];
+	// A `site:` window has no component of ours to bundle - its content is a
+	// prebuilt directory (scripts/build-repl.mjs), delivered as a sidecar folder
+	// rather than an embedded page. Vite has nothing to do for it.
+	const windows = (surface?.windows ? Object.keys(surface.windows) : []).filter((id) => !surface.windows[id].site);
 	if (!windows.length) continue;
 
 	renameSync(path.join(outDir, "index.html"), path.join(outDir, "../_device.html"));

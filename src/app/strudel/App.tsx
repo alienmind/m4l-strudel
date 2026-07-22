@@ -40,6 +40,8 @@ export default function App() {
 	const [, setHelpQuery] = useStateSync(surface, "helpQuery");
 	const studioWindow = useWindow(surface, "studio");
 	const strudelWindow = useWindow(surface, "strudel");
+	/** The local strudel.cc, which owns its own engine and its own audio (item 1). */
+	const replWindow = useWindow(surface, "repl");
 
 	if (showAbout) {
 		// RENDER HEALTH, debug-only
@@ -79,6 +81,16 @@ export default function App() {
 				{/* Allowed while playing: the bounce takes superdough's context over for its
 				    duration, so playback goes quiet and resumes (useStrudelRender). */}
 				<ExportButton onExport={s.exportAudio} busy={s.exporting} />
+				{/* SPIKE 2 (doc/TODO.md item 1): the local strudel.cc in its own window,
+				    playing straight into the track. Temporary placement - once it has
+				    parity it REPLACES the hand-rolled Studio instead of sitting beside it. */}
+				<button
+					onClick={replWindow.open}
+					title="Open the local strudel.cc - the full REPL, playing into this track"
+					className="shrink-0 rounded px-1 text-[10px] leading-none text-muted-foreground transition-colors hover:text-primary cursor-pointer"
+				>
+					REPL
+				</button>
 				<ControlsButton
 					onShow={() => setShowTransport(true)}
 					title="Controls: the native panel with the mappable Play/Stop and the eight slider knobs (S1..S8). Its Back switch returns."
