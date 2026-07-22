@@ -33,6 +33,8 @@ export interface SliderKnob {
 	label: string;
 	min: number;
 	max: number;
+	/** How Live prints it ("Hz", "dB"), when the pattern said. Drawn next to the value. */
+	unit?: string;
 	/** Position 0..1, which is what the native dial holds. */
 	norm: number;
 	/** The value the pattern actually sees. */

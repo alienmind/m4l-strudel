@@ -352,6 +352,10 @@ function onWindowMessage(): void {
 		outlet(0, "slider_seed", String(arguments[2]), Number(arguments[3]));
 		return;
 	}
+	if (selector === "slider_unit") {
+		outlet(0, "slider_unit", String(arguments[2]), String(arguments[3]));
+		return;
+	}
 	if (selector === "shim_ready") {
 		post("strudel: the Studio's shim is up\n");
 		return;

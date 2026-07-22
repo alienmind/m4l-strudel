@@ -312,6 +312,9 @@ describe("m4l-shim", () => {
 
 		expect(sent(page.outlets, "param_label").pop()).toEqual(["param_label", "s1", "cutoff"]);
 		expect(sent(page.outlets, "param_unit").pop()).toEqual(["param_unit", "s1", "Hz"]);
+		// The library's param_unit reaches LIVE and is echoed to no page, so the
+		// device view is told separately - it draws "600 Hz" under its own fader.
+		expect(sent(page.outlets, "slider_unit").pop()).toEqual(["slider_unit", "s1", "Hz"]);
 	});
 
 	it("asks the device to seed the dial from the value the code declares", () => {

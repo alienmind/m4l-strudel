@@ -48,8 +48,11 @@ export function FaderBank({ faders }: { faders: SliderKnob[] }) {
 						className="min-h-0 flex-1 accent-primary"
 						style={{ writingMode: "vertical-lr", direction: "rtl", width: "100%" }}
 					/>
+					{/* The value in the pattern's OWN units - "600 Hz", not "0.44". The unit
+					    is what the pattern declared; without one this is just the number. */}
 					<span className="w-full truncate text-center font-mono text-[9px] leading-none text-muted-foreground/70">
 						{f.raw.toFixed(Math.abs(f.max - f.min) > 10 ? 0 : 2)}
+						{f.unit ? ` ${f.unit}` : ""}
 					</span>
 				</label>
 			))}

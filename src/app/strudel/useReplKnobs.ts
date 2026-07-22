@@ -14,6 +14,8 @@ interface KnobDesc {
 	label: string;
 	min: number;
 	max: number;
+	/** What Live prints it in, when the pattern said - "Hz", "dB". */
+	unit?: string;
 	/** Whether Live took the range onto the dial itself - see wrapper/device.ts. */
 	real: boolean;
 }
@@ -49,6 +51,13 @@ export function useReplKnobs(): { faders: SliderKnob[]; declared: boolean } {
 			const label = rest.join(" ");
 			if (!(i >= 0 && i < 8) || !label) return;
 			setDescs((prev) => ({ ...prev, [i]: { ...(prev[i] ?? { min: 0, max: 1, real: false }), label } }));
+		});
+		// The library's `param_unit` reaches LIVE and is not echoed to any page, so the
+		// Studio sends this one for our own fader to draw.
+		bindInlet("slider_unit", (id: unknown, unit: unknown) => {
+			const i = knobIndexOf(id);
+			if (i < 0 || !String(unit)) return;
+			setDescs((prev) => ({ ...prev, [i]: { ...(prev[i] ?? { label: `S${i + 1}`, min: 0, max: 1, real: false }), unit: String(unit) } }));
 		});
 		bindInlet("param_desc_range", (id: unknown, lo: unknown, hi: unknown, took: unknown) => {
 			const i = knobIndexOf(id);
@@ -90,6 +99,7 @@ export function useReplKnobs(): { faders: SliderKnob[]; declared: boolean } {
 				label: desc.label,
 				min: desc.min,
 				max: desc.max,
+				unit: desc.unit,
 				norm,
 				raw,
 				set: (n: number) => setValue(desc.real ? desc.min + n * span : n),
