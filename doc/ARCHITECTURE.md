@@ -370,10 +370,63 @@ and heard through the track. An instrument on the `webaudio` chain alone.
   value. `engine.mjs` holds the capture (`beginSliderCapture`/`getSliderSpecs`) for the
   worker; `lib/render/scope.ts` carries the same for the main-thread export renderer. What
   the dials still do NOT carry is a NAME or a RANGE (TODO item 5.3). Two findings from the 0.9.x version worth keeping:
-  the wrapper's `knob_label` rename takes on the DEVICE PANEL but never reaches the Rack
-  macro / Live parameter registry (those stay `s1..s8`), and a spike to carry each slider's
-  real min..max via runtime `_parameter_range` was REVERTED - it shifts the value domain the
-  dial reports and breaks the normalized knob math.
+  the wrapper's rename takes on the DEVICE PANEL but never reaches the Rack macro / Live
+  parameter registry (those stay `s1..s8`), and a first attempt to carry each slider's real
+  min..max via runtime `_parameter_range` was reverted. **The range half is SOLVED as of
+  2026-07-22** - see 4k.
+
+### 4k. The Studio: the real strudel.cc owns the engine and the audio
+
+The device's sound is not made in the device view. It is made by a full local
+strudel.cc - the app itself, built offline from the `strudel/` submodule by
+`scripts/build-repl.mjs` - running in a floating window declared
+`window({ audio: true, site: "dist/repl-site" })`. The window's `[jweb~]` L/R are
+summed into the device's signal path, so evaluating a pattern there IS the track.
+
+Facts this shape rests on, all measured in Live (2026-07-22):
+
+- **A windowed `[jweb~]` page loads at DEVICE load and keeps running with the window
+  closed.** It has to be pulsed open-then-closed once by a `loadbang`, or a page in a
+  window nobody opened never loads at all and the device is silent. The library does
+  that pulse; see m4l-jweb's `applyWindows`.
+- **jweb's CEF loads ES modules from `file://`,** where plain Chrome refuses without
+  `--allow-file-access-from-files`. A multi-file site therefore works from a folder,
+  which is why the REPL ships as a SIDECAR next to the `.amxd` (17 MB, far too big for
+  the base64-in-`[js]` payload every other window uses) rather than inlined.
+- **`[jweb~]` has no signal INLET** - the Max 9 reference calls it "Web browser with
+  audio output". No page can be handed audio. That is why the device view's visualizer
+  is fed by a `[peakamp~]` tap on the window's own outlets, as messages, and why a
+  `scope()` typed in the device view can only ever show the device view's OWN sound.
+- **A window shown in PRESENTATION cannot be resized at runtime.** Writing a box's
+  rect is accepted and never redrawn. A resizable window therefore shows its PATCHING
+  canvas with the page at the origin and the plumbing parked above it, and the wrapper
+  polls the window size and fits the page to it.
+
+`src/app/strudel/repl-shim/m4l-shim.js` is the only line of ours inside that app: it
+arms the audio (the REPL waits for a `mousedown` that a hidden window never gets),
+pins the output device (`setSinkId` would steer the sound away from the `jweb~`
+outlets), persists the pattern to the `code` state slot so it saves with the LIVE SET,
+and maps Play/Stop and the eight dials onto the REPL. The submodule is never patched.
+
+**Telling a dial what it IS, at runtime.** A pattern can describe a control -
+`m4lKnob(1, { name: 'cutoff', unit: 'Hz', range: [200, 2200] })` - and all three take:
+the panel shows `cutoff`, the readout prints Hz, and the dial travels 200..2200.
+`_parameter_range` was never the obstacle; it always applied. What broke the earlier
+attempt is that the parameter then REPORTS IN THE NEW DOMAIN while the page went on
+normalizing 0..1 - two scalings fighting, knob pinned at its minimum. The wrapper now
+answers whether each range took (`param_range_ok` / `param_range_failed`) and the
+borrower scales exactly once. The mechanism is the library's, not this repo's:
+`describeParam()` / `onParamRange()` / `useControls()` in `@m4l-jweb`.
+
+**Still not renameable:** Live's parameter registry and the Rack macro picker keep
+`S1..S8`. A frozen device cannot rename a parameter there, so any UI of ours renders
+the name itself rather than relying on the dial to carry it.
+
+**A knob must be a SIGNAL, not a number.** A pattern is evaluated once and then plays,
+so `m4lKnob(1)` returning a plain number is read at evaluation time and frozen -
+the dial then does nothing until the pattern is evaluated again. It returns a strudel
+signal, queried per cycle, and the idiom is pattern arithmetic:
+`.lpf(m4lKnob(1).range(200, 2200))`.
 
 ### 4g. Synth device: one superdough voice, played by MIDI
 

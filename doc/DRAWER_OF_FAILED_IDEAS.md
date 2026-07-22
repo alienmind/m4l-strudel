@@ -509,3 +509,29 @@ mechanism is still untested in Live. TODO items 0 and 1.
 **The transferable lesson, and it is the same one twice:** in a frozen device page, prefer
 the mechanism that can report its own outcome. Where none can, do not invent a reassuring
 message - make the user's own action the confirmation.
+
+## Mirroring the Studio's canvas into the device view (2026-07-22)
+
+The device view should show what the Studio DRAWS - a `.scope()`, a `.pianoroll()`,
+a hydra sketch - not a visual of our own. Three routes were considered and all three
+are closed:
+
+- **Share the audio.** `[jweb~]` is "Web browser with audio output": one control
+  inlet, no signal inlet (Max 9 reference). No page can be handed audio, so the device
+  view cannot compute a scope of the Studio's sound.
+- **Share the pixels.** Two Chromium contexts share no memory, there is no server, and
+  jweb offers no frame grab.
+- **Re-run the code.** Mirroring the evaluated text and running hydra again in the
+  device view reproduces HYDRA and nothing else - not `.scope()`, not `.pianoroll()`,
+  which strudel draws from its own scheduler state.
+
+The one transport that would work is shipping JPEG frames of the Studio's canvas as
+Max messages (`toDataURL` -> a symbol -> an `<img>`). NOT BUILT, deliberately:
+`toDataURL` is a synchronous GPU read, and it would run inside the page that is making
+the sound, so a stall there is an audio dropout rather than a dropped frame. Not worth
+it for a picture.
+
+What shipped instead: a `[peakamp~]` tap on the window's outlets at 10 ms, drawn by the
+device view as its own trace. Honest at that rate, and it costs two floats per report.
+If the mirrored picture is ever wanted badly enough, measure the frame cost on the
+AUDIO page first - that is the number that decides it, not the message size.
