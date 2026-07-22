@@ -39,16 +39,30 @@ Signal-flow arrows (`->`) and glyphs standing for real UI buttons are fine.
 
 Comments should say what the code cannot: the constraint, the trap, the thing
 that was measured in Live and cost a day. Not what the next line does.
+But never use cliche formulas like "this is the trap that costed us a day".
+Just state the point without overextending it.
+
+Commit messages should be schematic, one line per feature, prepend with prefixes such as:
+doc -, chore -, feat -, fix -
 
 ## Recording what was learned
 
 `doc/TODO.md` is the live ledger: what passed, what it measured, and the exact
 next test. Finished work is DELETED from it rather than kept as a done-list - git
-history is the record of what shipped.
+history is the record of what shipped. We may move some of the contents to some of the
+following files.
 
 `doc/DRAWER_OF_FAILED_IDEAS.md` is for approaches that were tried and did not
 work, WITH the reason. A failure recorded there is worth as much as a feature -
 it is what stops the same spike being run twice.
+
+`doc/ARCHITECTURE.md` is for implementation details of everything that became a feature
+and its worth noting for the future. This is the "How" is implemented, with the juicy
+technical - code-based details.
+
+`doc/README.md` is TODO items that actually became a feature that is high-level worth
+mentioning for a final user because its perceivable. We don't log implementation details here,
+that's for the architecture document above.
 
 ## The two repos
 

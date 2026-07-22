@@ -381,6 +381,35 @@ function onDeviceReady(): void {
 	setupTransportFollow();
 }
 
+/**
+ * A message from a WINDOW's page - which for this device means the local
+ * strudel.cc in the Studio, running the shim.
+ *
+ * Without this hook the library logs every one as "unhandled", so two things live
+ * here: the shim's `knob_label` (a pattern saying what a dial IS - see m4lKnob in
+ * repl-shim/m4l-shim.js), and silence for the traffic [jweb] generates on its own.
+ * `onloadstart`/`onloadend`/`url`/`title` are the browser object reporting page
+ * loads; they are not ours and nothing acts on them, but a 17 MB site produces a
+ * steady stream of them and it drowns the console.
+ */
+function onWindowMessage(): void {
+	var selector = String(arguments[1]);
+	var args = Array.prototype.slice.call(arguments, 2);
+
+	if (selector === "knob_label") {
+		(knob_label as (...a: unknown[]) => void).apply(this, args);
+		return;
+	}
+	if (selector === "shim_ready") {
+		post("strudel: the Studio's shim is up\n");
+		return;
+	}
+	// [jweb]'s own page-load chatter. Known, uninteresting, and loud.
+	if (selector === "onloadstart" || selector === "onloadend" || selector === "url" || selector === "title") return;
+
+	post("strudel: window " + String(arguments[0]) + " sent unhandled '" + selector + "'\n");
+}
+
 /** The UI announced itself; the packaged core has already sent mode/build/tempo. */
 function onUiReady(): void {
 	outlet(0, "mode", STRUDEL_MODE); // the real mode, not the packaged default
