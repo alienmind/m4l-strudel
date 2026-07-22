@@ -304,7 +304,10 @@
 			var o = opts[w.to] || {};
 			sliderMap[n] = { id: w.id, min: Number(w.min), max: Number(w.max) };
 			max.outlet("param_label", param, o.name || "slider " + (n + 1));
-			if (o.unit) max.outlet("param_unit", param, o.unit);
+			if (o.unit) {
+				max.outlet("param_unit", param, o.unit);
+				max.outlet("slider_unit", param, o.unit);
+			}
 			if (w.max > w.min) max.outlet("param_range", param, Number(w.min), Number(w.max));
 			// The dial should start where the CODE says rather than wherever it was
 			// left by the last pattern. A window cannot write a Live parameter, so the
@@ -355,7 +358,13 @@
 		// (describeParam in @m4l-jweb/bridge).
 		var param = "s" + (index + 1);
 		max.outlet("param_label", param, name);
-		if (unit) max.outlet("param_unit", param, unit);
+		if (unit) {
+			max.outlet("param_unit", param, unit);
+			// ...and to the device page, which draws the unit under its own fader.
+			// The library's param_unit reaches LIVE (the readout on the dial) and is
+			// not echoed back to any page - see wrapper/device.ts.
+			max.outlet("slider_unit", param, unit);
+		}
 		// Ask for the dial's travel to become the pattern's. The wrapper answers
 		// whether Live took it, and the answer decides who does the scaling.
 		if (range && hi > lo) max.outlet("param_range", param, lo, hi);
