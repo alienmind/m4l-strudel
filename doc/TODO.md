@@ -10,81 +10,73 @@ git history is the record of what shipped.
 
 ---
 
-## Open Tasks - aiming for v1.1
+1.1.0 shipped the Studio and the device view around it - the real local strudel.cc as
+the track's instrument, the pattern saved with the set, Live's transport and dials
+reaching it, and the three-view panel (ARCHITECTURE.md 4k). None of that is here any
+more; what follows is what 1.2 has to answer.
 
-The Studio landed: the real local strudel.cc is the track's instrument, the pattern
-saves with the set, and Live's transport and dials reach it (ARCHITECTURE.md 4k).
-What is left of that work is the device view around it, and it heads this list.
+## Waiting on the library
 
-### 1. FEAT - finish the device view around the Studio
+Three things in this backlog are m4l-jweb's to solve, and the entries below say so
+rather than describing a device-side workaround twice. See
+[m4l-jweb's TODO](https://github.com/alienmind/m4l-jweb/blob/main/doc/TODO.md).
 
-The three views are BUILT and UNTESTED IN LIVE: a visualizer fed by the window's
-`[peakamp~]` level, a bank of vertical faders, and a code scratchpad on its own
-`miniCode` state slot. The strip down the left switches them, and a fader appearing
-in the code switches to the knobs by itself until the user picks a view by hand.
+| Upstream | What it gives this repo |
+|---|---|
+| `defineFiles()` (item 1) | The `download` chain, the device-folder plumbing and the `save_*` selectors as ONE declaration. Item 1 below is what happens when those three drift apart. |
+| The folder-path helper (item 2) | An honest "copied / user copied / not copied", library-side. Deletes `src/app/shared/clipboard.ts`. |
+| `useControls()` + `knobPool()` (shipped 1.1.0) | The knob borrowing this repo still hand-rolls in `src/app/shared/useSliderKnobs.ts`. Adopt it and delete the bookkeeping; the naming and range handshake is already the library's. |
 
-Remaining:
+## Open Tasks
 
-- **Test all of it in Live** - the table at the end of this file is the list.
-- **Export.** It still bounces the SCRATCHPAD's pattern, because that is the engine
-  the device page has. The music is in the Studio now, so Export either moves behind
-  the shim (the Studio renders and saves) or is cut until it can. Decide before 1.1.
-- **`useSliderKnobs` should become the library's `useControls`.** It already speaks
-  `describeParam`/`onParamRange`, but the borrowing bookkeeping is still duplicated
-  here; m4l-jweb item 2 owns that contract now.
-- **MIDI in the scratchpad.** The point of a second instance is control code, and
-  `midiin` is not on this device's chain list yet (item 6 covers the vocabulary).
+### 1. FIXME - Export renders, then places nothing
 
-### 2. FIXME - Export writes nothing: "could not place save: -1 bytes"
+**Seen in Live on 1.0.0.** Export renders and fails at the last step with
+`could not place save: -1 bytes at destination`. `-1` is what the wrapper reports when
+it cannot size the destination at all, so the `.part` was never placed over the target.
 
-**Seen in Live, 1.0.0, on the Strudel device.** Pressing Export renders and then fails at
-the last step with `could not place save: -1 bytes at destination`. `-1` is what the
-wrapper reports when it cannot size the destination file at all - so the `.part` was
-never placed over the target, not merely placed short.
+**Re-test on 1.1.0 before debugging anything here** - the save protocol is the library's
+(`save_begin` / `save_chunk` / `save_end`, then a `file://` place through `[maxurl]`),
+and a related fix landed upstream after this was seen.
 
-The save protocol is the library's (`@m4l-jweb/wrapper` core: `save_begin` /
-`save_chunk` / `save_end`, then a `file://` GET through [maxurl] to place the verified
-`.part`), so the fault may well be upstream rather than here. m4l-jweb 1.0.0 carries a
-related fix ("reuse one scratch file for saves so exports stop stranding empty `.part`
-files") that landed after this was seen; re-test against it FIRST, before debugging
-anything in this repo.
+If it still fails, in order:
 
-Where to look, in order:
-1. Does the `.part` exist next to the device with the right size after `save_end`? If it
-   does, the failure is purely the place step.
-2. Does the device folder resolve to a real, writable directory (an UNSAVED patcher has
-   no folder - `deviceFolder()` returns nothing and the whole path is relative to
-   nowhere)?
-3. Is the `download` chain present on the device? [maxurl] lives there, and the place is
-   a `file://` GET through it. The Strudel device declares it, but the wiring is worth
-   confirming rather than assuming.
+1. Does the `.part` exist next to the device, at the right size, after `save_end`? Then
+   only the place step is broken.
+2. Does the device folder resolve to a real writable directory? An UNSAVED patcher has
+   no folder at all, and every path is then relative to nowhere.
+3. Is the `download` chain on the device? It owns `[maxurl]`, and without it the place
+   request leaves on an aux outlet with nothing on the other end - no error, no reply,
+   the promise never settles. This is exactly the failure `defineFiles()` exists to make
+   impossible.
 
-Everything downstream of Export is blocked on this: the WAV cannot be dragged out, and
-the clipboard item below cannot be tested at all, because the button that reveals the
-path only appears once something has been written.
+**Also unresolved: WHOSE pattern Export bounces.** It renders the scratchpad's, because
+that is the engine the device page has, and the music now lives in the Studio. Either it
+moves behind the shim (the Studio renders and saves) or it is cut. Decide before it is
+fixed - there is no point fixing a bounce of the wrong thing.
 
-### 3. FIXME - the clipboard copy cannot be confirmed, and could not be tested
+### 2. FIXME - the path on the clipboard, still unconfirmed
 
-**Status: unverified, because Export never wrote a file** (item 0). The code is in place
-and its failure mode is understood, but nobody has yet seen it work in Live.
+Never verified end to end, because Export never wrote a file (item 1): the button that
+reveals the path only appears once something has been written.
 
-What is known, the hard way: `document.execCommand("copy")` **returns true in the device
-page and puts nothing on the system clipboard**, and the page cannot detect this -
-`navigator.clipboard.readText()` needs a secure context and a device page is `file://`,
-so a copy can be claimed but never read back. `src/app/shared/clipboard.ts` therefore
-trusts no claim inside jweb: it attempts the copy, then shows the path in a focused,
-pre-selected field and treats the browser's own `copy` event as the only confirmation.
+What is known: `document.execCommand("copy")` **returns true in a device page and copies
+nothing**, and the page cannot detect it - `navigator.clipboard.readText()` needs a
+secure context and a device page is `file://`. So a copy can be claimed but never read
+back. `src/app/shared/clipboard.ts` therefore trusts no claim: it attempts the copy, then
+shows the path in a focused, pre-selected field, and treats the browser's own `copy`
+event as the only confirmation.
 
-The full history of what does NOT work here - `; max launchbrowser` for a reveal, both
-clipboard APIs, the false-success trap - is in
-[DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILED_IDEAS.md).
+**The fix is upstream** (the folder-path helper), and this file's copy should be deleted
+when it lands. What remains here is the verification, once item 1 writes a file: if the
+manual field turns out not to receive Ctrl+C inside jweb either, then a device page
+cannot reach the system clipboard at all and the answer is a Max-side one, or none.
+History of what does not work: [DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILED_IDEAS.md).
 
-**Remaining:** fix item 0, then verify end to end. If the manual field turns out not to
-receive Ctrl+C inside jweb either, the honest conclusion is that a device page cannot
-reach the system clipboard at all, and the answer becomes a Max-side one (or none).
+### 3. FEAT - native MIDI input (`midiIn`/`kb()`) and MIDI output
 
-
-### 4. FEAT - native MIDI input (`midiIn`/`kb()`) and MIDI output
+Wanted in the device view's SCRATCHPAD as much as in the main pattern: the point of a
+second instance is control code, and `midiin` is not on this device's chain list yet.
 
 **Assessment.** Valid, and cheaper than when written: the `midiin` chain already
 exists (the Drums Sampler uses it - `onNote()` delivers the track's MIDI to the
@@ -107,7 +99,7 @@ devices. What is missing is (in) feeding live notes into the pattern scope and
 
   NOTE: For this one, I would need examples on how to use (concrete strudel patterns) for midi routing from within the device
 
-### 5. FEAT - orbit() support (multichannel out)
+### 4. FEAT - orbit() support (multichannel out)
 
 **Assessment.** Valid, UNVERIFIED at its foundation. superdough can already render
 orbits to separate channel pairs (`initAudio({ multiChannelOrbits: true })` exists),
@@ -125,7 +117,7 @@ build emits jweb~ with 2N channels and the `webaudio` chain fans pairs to
 `duck()` then works inside superdough with no Max help at all (it is orbit-level
 DSP in the page). If the spike fails: park in the drawer with the finding.
 
-### 6. FEAT - cross-device coordination in the Rack
+### 5. FEAT - cross-device coordination in the Rack
 
 **Assessment.** Valid, big, and last for a reason: it depends on nothing above but
 informs its value. Two separable halves that the original text mixed: (a) a
@@ -144,7 +136,7 @@ device consumes them exactly like its app's own `set_<id>` writes (the fan-in
 already exists in `fanParamInto`). A Rack the user builds maps its 16 macros
 across both devices' dials. Explicitly out of scope: any cross-TRACK routing.
 
-### 7. TEST - verify offline behavior in Live
+### 6. TEST - verify offline behavior in Live
 
 **Assessment.** Partly done. The persistent page-side cache shipped in 1.0.0 and was
 verified in Live: a sample played once online still plays after a restart with the
