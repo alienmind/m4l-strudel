@@ -303,7 +303,10 @@ A spike is only ticked once the observation is written down here.
   WebGL in CEF is still unverified. Gate: a moving visual in the mini window
   driven by the Studio's sound.
 
-- **[x] Spike 4 - the shim and the controls. BUILT AND INSTALLED, needs Live.**
+- **[x] Spike 4 - the shim and the controls. PASS (2026-07-22), in Live.**
+  All four: the audio arms with no click, the pattern saves with the set and comes
+  back on reopen, the device's native Play/Stop drives the REPL, and a native dial
+  moves the sound while the pattern plays.
   `src/app/strudel/repl-shim/m4l-shim.js` is the real thing now, and it is still
   the only line of ours inside the app:
   - **Arms the audio.** The REPL creates its AudioContext on the first `mousedown`
@@ -331,21 +334,19 @@ A spike is only ticked once the observation is written down here.
   was not listening yet.
   Nine tests run the shim against a faked page (`__tests__/repl-shim.test.ts`) -
   every one of its behaviours fails SILENTLY in Live, which is why they exist.
-  **Tested in Live 2026-07-22: audio-with-no-click, save-with-the-set and native
-  Play/Stop all PASS. The knobs did not**, and the bug was in the shim's API, not
-  the plumbing: `m4lKnob(n)` returned a plain NUMBER, so a pattern read it once at
-  evaluation and froze it - the dial then did nothing until the pattern was
-  evaluated again. It returns a strudel SIGNAL now, queried per cycle, so the
-  idiom is pattern arithmetic rather than JavaScript arithmetic:
+  The knobs took a second pass, and the bug is worth keeping: `m4lKnob(n)`
+  returned a plain NUMBER, so a pattern read it once at evaluation and froze it -
+  the dial did nothing until the pattern was evaluated again. A pattern is
+  evaluated once and then plays, so anything meant to be turned WHILE it plays has
+  to be a signal, queried per cycle. Hence pattern arithmetic, not JavaScript
+  arithmetic:
 
       note("c3 e3 g3").s("sawtooth").lpf(m4lKnob(1).range(200, 2200))
 
   `m4lKnobValue(n)` is still the raw number for a pattern that wants it frozen.
-  The first dial to arrive also logs a line into the REPL's own console, so "the
-  knob does nothing" can be told apart from "the value never reached the page"
-  without a debugger.
-  **TEST NEXT:** the knob check above, with the `.range()` form.
-  Still expected at this stop: the mini view's own engine is still there and still
+  The first dial to arrive logs one line into the REPL's own console, so "the knob
+  does nothing" can be told apart from "the value never reached the page".
+  Still true at this stop: the mini view's own engine is still there and still
   sounds separately. That goes with the mini rebuild.
 
 - **[ ] Then:** the mini window rebuild, and the deletions - the hand-rolled
