@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { bindInlet } from "@m4l-jweb/bridge";
 import { useParam } from "@m4l-jweb/surface/react";
 import type { SliderKnob } from "../shared/useSliderKnobs";
@@ -32,6 +32,10 @@ interface KnobDesc {
  */
 export function useReplKnobs(): { faders: SliderKnob[]; declared: boolean } {
 	const [descs, setDescs] = useState<Record<number, KnobDesc>>({});
+	/** Slider seeds waiting to be written, and what has already been written. */
+	const seeded = useRef<string[]>([]);
+	const pending = useRef<{ index: number; value: number }[]>([]);
+	const [seedTickValue, setSeedTick] = useState(0);
 
 	/* eslint-disable react-hooks/rules-of-hooks */
 	const params = KNOB_IDS.map((id) => useParam(surface, id));
@@ -53,6 +57,19 @@ export function useReplKnobs(): { faders: SliderKnob[]; declared: boolean } {
 				...prev,
 				[i]: { ...(prev[i] ?? { label: `S${i + 1}` }), min: Number(lo), max: Number(hi), real: Number(took) === 1 },
 			}));
+		});
+
+		// The pattern says where its slider STARTS; the dial should land there rather
+		// than keep whatever the last pattern left on it. Seeded once per slider, so
+		// re-evaluating does not yank a dial out from under a hand that moved it.
+		bindInlet("slider_seed", (id: unknown, value: unknown) => {
+			const i = knobIndexOf(id);
+			if (i < 0) return;
+			const key = `${String(id)}:${Number(value)}`;
+			if (seeded.current[i] === key) return;
+			seeded.current[i] = key;
+			pending.current.push({ index: i, value: Number(value) });
+			setSeedTick((n) => n + 1);
 		});
 	}, []);
 
@@ -84,6 +101,20 @@ export function useReplKnobs(): { faders: SliderKnob[]; declared: boolean } {
 		// cannot be a dependency without spinning; the values it carries are.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [descs, ...params.map(([v]) => v)]);
+
+	// Written in an effect, not in the inlet handler: the handler runs outside React
+	// and the parameter setters below are rebuilt every render.
+	useEffect(() => {
+		if (!pending.current.length) return;
+		const queue = pending.current.splice(0);
+		for (const { index, value } of queue) {
+			const desc = descs[index];
+			const span = desc ? desc.max - desc.min : 1;
+			const [, setValue] = params[index];
+			setValue(desc?.real ? value : span ? (value - (desc?.min ?? 0)) / span : value);
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [seedTickValue, descs]);
 
 	return { faders, declared: faders.length > 0 };
 }
