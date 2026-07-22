@@ -319,6 +319,39 @@ function sendFollow(force: boolean): void {
 }
 
 /* ------------------------------------------------------------------ *
+ * Opening a page in the user's REAL browser
+ *
+ * A device page is a webview a few hundred pixels tall with no tabs and no back
+ * button, so following a link inside it strands the user in a site they cannot
+ * leave except by reloading the device. Max's one door out is `launchbrowser`,
+ * which hands its argument to the OS default handler.
+ *
+ * IT REPORTS NOTHING. No reply, no error, no exception on a bad argument - which
+ * is how the folder-reveal attempt in doc/DRAWER_OF_FAILED_IDEAS.md managed to
+ * look correct and do nothing at all. That failure was measured on `file://`
+ * paths; an `https://` URL is what this call is documented for. Every call is
+ * logged, so a silent no-op is at least visible in the Max console.
+ * ------------------------------------------------------------------ */
+
+/** Max's application object. Not in the packaged wrapper's ambient types. */
+declare const max: { launchbrowser(url: string): void };
+
+function open_url(): void {
+	// A URL arrives whole, but Max splits on spaces - rejoin before using it.
+	var url = Array.prototype.slice.call(arguments, 0).join(" ");
+	if (!url || url.indexOf("http") !== 0) {
+		post("strudel: refusing to open " + url + " - only http(s) URLs\n");
+		return;
+	}
+	try {
+		max.launchbrowser(url);
+		post("strudel: launchbrowser " + url + "\n");
+	} catch (e) {
+		post("strudel: launchbrowser failed for " + url + ": " + (e as Error).message + "\n");
+	}
+}
+
+/* ------------------------------------------------------------------ *
  * Hooks called by the packaged wrapper
  * ------------------------------------------------------------------ */
 
