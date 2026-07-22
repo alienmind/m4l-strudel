@@ -19,57 +19,8 @@ several of them: some got easier, and one became impossible in its original form
 1.0.0 shipped with the transport follow, the offline sample cache and the Synth device
 all verified in Live; those items are gone from this file, as finished work always is.
 Two things did NOT come out clean, and they head this list.
-
-### 0. FIXME - Export writes nothing: "could not place save: -1 bytes"
-
-**Seen in Live, 1.0.0, on the Strudel device.** Pressing Export renders and then fails at
-the last step with `could not place save: -1 bytes at destination`. `-1` is what the
-wrapper reports when it cannot size the destination file at all - so the `.part` was
-never placed over the target, not merely placed short.
-
-The save protocol is the library's (`@m4l-jweb/wrapper` core: `save_begin` /
-`save_chunk` / `save_end`, then a `file://` GET through [maxurl] to place the verified
-`.part`), so the fault may well be upstream rather than here. m4l-jweb 1.0.0 carries a
-related fix ("reuse one scratch file for saves so exports stop stranding empty `.part`
-files") that landed after this was seen; re-test against it FIRST, before debugging
-anything in this repo.
-
-Where to look, in order:
-1. Does the `.part` exist next to the device with the right size after `save_end`? If it
-   does, the failure is purely the place step.
-2. Does the device folder resolve to a real, writable directory (an UNSAVED patcher has
-   no folder - `deviceFolder()` returns nothing and the whole path is relative to
-   nowhere)?
-3. Is the `download` chain present on the device? [maxurl] lives there, and the place is
-   a `file://` GET through it. The Strudel device declares it, but the wiring is worth
-   confirming rather than assuming.
-
-Everything downstream of Export is blocked on this: the WAV cannot be dragged out, and
-the clipboard item below cannot be tested at all, because the button that reveals the
-path only appears once something has been written.
-
-### 1. FIXME - the clipboard copy cannot be confirmed, and could not be tested
-
-**Status: unverified, because Export never wrote a file** (item 0). The code is in place
-and its failure mode is understood, but nobody has yet seen it work in Live.
-
-What is known, the hard way: `document.execCommand("copy")` **returns true in the device
-page and puts nothing on the system clipboard**, and the page cannot detect this -
-`navigator.clipboard.readText()` needs a secure context and a device page is `file://`,
-so a copy can be claimed but never read back. `src/app/shared/clipboard.ts` therefore
-trusts no claim inside jweb: it attempts the copy, then shows the path in a focused,
-pre-selected field and treats the browser's own `copy` event as the only confirmation.
-
-The full history of what does NOT work here - `; max launchbrowser` for a reveal, both
-clipboard APIs, the false-success trap - is in
-[DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILED_IDEAS.md).
-
-**Remaining:** fix item 0, then verify end to end. If the manual field turns out not to
-receive Ctrl+C inside jweb either, the honest conclusion is that a device page cannot
-reach the system clipboard at all, and the answer becomes a Max-side one (or none).
-
    
-### 4. FEAT - The local strudel.cc REPL and hydra visuals in the "strudel" device
+### 1. FEAT - The local strudel.cc REPL and hydra visuals in the "strudel" device
 
 **The Idea.** The rename this item opened with is DONE (1.0.0): the device is
 `alienmind-strudel`. What is left here are the two major improvements it was bundled
@@ -225,32 +176,141 @@ is the fallback and not the plan.
   signal inlets (finding 5); otherwise a `[snapshot~]`-to-messages analysis tap
   as a small chain.
 
-#### Spikes (in order; each can kill or reshape the item)
+#### Spikes - status ledger
 
-- **Spike 0 (REPL bundle).** `astro build` the submodule, open from `file://`
-  with the network OFF - plain browser first, then a scratch jweb window. Expect
-  root-absolute asset paths to need a `base` config or rewrite pass; a service
-  worker or wasm under `file://` are the likely hard failures. Measure size.
-  Gate: boots offline; size acceptable as a sidecar folder.
-- **Spike 1 (windowed jweb~ lifecycle - THE decisive one).** Scratch device: a
-  `[p]` window holding `[jweb~]` + `[outlet~]` wired to the track, page playing a
-  test tone. Does audio reach the track? Does it survive `wclose`? Does it start
-  without the window ever being opened? CPU while hidden? Gate: sound flows and
-  survives the window closing - else fall back to the editor-only shape.
-- **Spike 2 (REPL in the audio window).** The spike 0 bundle inside the spike 1
-  window: evaluate a pattern in the real REPL, hear it on the track. Watch CPU
-  and scheduling under a hidden window. Gate: performance comparable to the
-  device-view engine today.
-- **Spike 3 (audio into the mini window).** Establish the scope feed: check the
-  `jweb~` reference for signal inlets; if absent, prototype the
-  `[snapshot~]`/`[peakamp~]` message tap. Also first hydra render in a jweb page
-  (WebGL in CEF still unverified). Gate: a moving visual in the mini window
+Work happens on branch `feat/full-strudel` in BOTH repos (m4l-strudel and
+m4l-jweb, linked with `link:../m4l-jweb/packages/*`). Each spike can kill or
+reshape the item, so each one stops at a gate somebody has to actually observe.
+A spike is only ticked once the observation is written down here.
+
+- **[x] Spike 0 - the offline REPL bundle. PASS (2026-07-22), with one new
+  unknown attached.**
+  `scripts/build-repl.mjs` builds the submodule from its ROOT (`pnpm build` there
+  runs the jsdoc pass the site imports - building `website/` directly fails on the
+  missing `doc.json`) and overlays the output for `file://`: drops the docs
+  directories, rewrites root-absolute URLs in HTML and CSS - **including Astro's
+  `component-url` / `renderer-url` island attributes, which is what actually loads
+  the REPL** - drops the PWA service worker, rewrites hydra's unpkg default to a
+  vendored `hydra-synth`, and injects `src/app/strudel/repl-shim/m4l-shim.js` (a
+  stub that only announces itself until spike 4).
+  **Measured:** `dist/repl-site` is **16.8 MB** (from 21.1 MB), fine as a sidecar.
+  Every URL in `index.html` resolves to a file that exists. Loaded headless from
+  `file://` the REPL hydrates, CodeMirror renders, the console is silent except
+  `[m4l-shim] REPL found` - so `window.strudelMirror`, the seam spike 4 drives,
+  is there.
+  **THE NEW UNKNOWN, and it is load-bearing for spike 2:** Chromium blocks ES
+  MODULE loading over `file://` unless it is told not to. Without
+  `--allow-file-access-from-files` the page renders its shell and the island never
+  hydrates - blank REPL, no error. With the flag it works. Every window this repo
+  ships today is a single inlined HTML file, so nothing has ever exercised this,
+  and whether `jweb`'s CEF allows it is UNVERIFIED. If it does not, the answers in
+  order are: a jweb attribute for local file access, then inlining the REPL's
+  chunk graph, then serving from localhost.
+  Repro, both ways:
+  `chrome --headless=new --dump-dom file:///.../dist/repl-site/index.html`
+  (island stays `ssr`, nothing mounts) versus the same with
+  `--allow-file-access-from-files` (CodeMirror mounts).
+  Still worth doing by hand: open it in a real browser with the network OFF and
+  evaluate `note("c3 e3 g3").s("sawtooth")` to hear it, which headless cannot.
+
+- **[x] Spike 1 - windowed `jweb~` lifecycle. PASS (2026-07-22), in Live. THE
+  DECISIVE ONE, AND IT WENT THE RIGHT WAY: the Studio can own the engine.**
+  The page loads at device load without the window ever being opened, its
+  AudioContext runs, the tone reaches the track, and it keeps running with the
+  window shut - `tone_state` keeps arriving from a closed window, which is the
+  whole finding. So the plan of record stands and the editor-only fallback below
+  is dead.
+  Two notes the log left behind, neither fatal:
+  - The window's URL is sent TWICE (once on `loadbang`, once on device-ready), so
+    the page loads twice. Harmless for a test tone; for a 17 MB REPL it is worth
+    fixing before spike 2 is judged on performance.
+  - `jweb` reports its own status to the wrapper (`onloadstart`, `url`, `title`,
+    `onloadend`) and the wrapper logs each as "unhandled". Noise, not error.
+  Original instructions, kept for re-running:
+  Upstream now has the second window primitive: `window({ audio: true })` emits
+  `[jweb~]` in the window's subpatcher, its L/R leave on a pair of `[outlet]`s and
+  are summed into the device's audio path at the same `[+~]` stage the `webaudio`
+  chain uses, and a `loadbang` pulses the window open-then-closed once at load so
+  the page exists whether or not anyone opens it. The plain `[jweb]` window is
+  untouched - verified by regenerating every other device in this repo and
+  diffing: identical, byte for byte.
+  Scratch device `alienmind-spike-audiowin` (delete after this spike) is the
+  smallest question: no chains, no parameters, one audio window whose page holds a
+  220 Hz oscillator and a per-second heartbeat.
+  **TEST NEXT, in Live, in this order:**
+  1. Drop `dist/m4l-strudel/alienmind-spike-audiowin.amxd` on a track WITHOUT
+     opening its window. A window flashes open and shuts again (that is the
+     keepalive). Within a few seconds the tone must be on the track meter.
+  2. Open the window with its button, then close it. The tone must CONTINUE, and
+     the Max console must keep printing `tone_state running`.
+  3. Note Live's CPU meter with the window hidden and with it open.
+  4. Save the set, reopen it: the tone comes back untouched.
+  Gate: 1 and 2 both pass. If 2 fails while 1 passes, retry with the keepalive's
+  auto-close removed (leave the window open) - if a user-driven close also kills
+  the sound, the whole shape is dead and the FALLBACK above is what gets built.
+  Record CPU and the verdict here.
+
+- **[x] Spike 2 - the REPL inside the audio window. PASS (2026-07-22), in Live.**
+  The local strudel.cc loads from the sidecar folder, the REPL runs, and the
+  shim's `shim_ready` comes back - **so jweb's CEF does NOT enforce the `file://`
+  ES-module block that plain Chrome does.** That was the open risk out of spike 0
+  and it is now closed: no local-file switch, no inlining, no localhost server.
+  Fixed straight after the run, from the log: `listWindowIds()` includes the site
+  windows (the state fan-out needs them), so the payload loop was ALSO pointing
+  `repl` at a `<device>_repl.html` that does not exist - a wasted load of a
+  missing file before the real page. Site windows are skipped there now.
+  Unrelated noise seen in the same log, not from this work, worth a look sometime:
+  `get: no valid object set` and `SendMessage returned with error 2` around
+  device load.
+  What the ledger said to test, kept for re-running:
+  `window({ site: "<dir>" })` compiles now. A site window is NOT embedded as
+  base64 - 17 MB would become 23 MB of text inside wrapper.js - so the folder
+  ships next to the `.amxd` and the wrapper points the window at
+  `file:///<device folder>/<device>-site/<id>/index.html`, saying so in the Max
+  console if the folder is not there. Both installers and the release zip carry
+  the folder; `pnpm install:device` has already put it in the User Library.
+  Also fixed on the way past, because a 17 MB page made it matter: the wrapper
+  used to send every window URL TWICE (loadbang and live.thisdevice both call
+  `loadWebview`), so every page was fetched twice. It now skips a URL identical to
+  the one that window was last given; `reload` still forces a re-fetch.
+  The strudel device declares the new window as `repl` and the mini view has a
+  temporary **REPL** button in its header row, next to Export. The hand-rolled
+  `studio` and the online `strudel` windows are untouched - they are only deleted
+  once this one has parity.
+  **TEST NEXT, in Live:** delete any existing `alienmind-strudel` instance and
+  re-drag it from the browser (Live embeds a copy per set - an instance already on
+  a track will NOT pick this up). Then:
+  1. Max console: `window repl -> file:///.../alienmind-strudel-site/repl/index.html`
+     and NO "missing its sidecar folder" line.
+  2. Press REPL. **The decisive observation is whether the editor appears at all**
+     - a shell with no CodeMirror in it is the `file://` ES-module block from
+     spike 0, and means CEF needs the local-file switch (or the site needs
+     inlining, or a localhost server).
+  3. Click once in the page (the first-click gate is manual until spike 4),
+     evaluate `note("<c3 eb3 g3 bb3>*4").s("sawtooth")`. Expect it ON THE TRACK.
+  4. Close the window: the sound must continue (spike 1's finding, now under real
+     load).
+  5. Compare Live's CPU with today's device-view engine playing the same pattern.
+  Known-not-working at this stop, by design: the pattern does not save with the
+  set, the native knobs do not reach it, the mini Run/Stop still drives the OLD
+  in-page engine, and both engines exist at once - so expect to hear the mini
+  device and the REPL separately.
+
+- **[ ] Spike 3 - audio into the mini window.** Check the `jweb~` reference for
+  signal INLETS first (expected: none). If absent, the feed is a `[peakamp~]`
+  message tap off the window's own outlets at ~20 Hz, delivered as
+  `window_level <id> <l> <r>`. Also the first hydra render inside a jweb page -
+  WebGL in CEF is still unverified. Gate: a moving visual in the mini window
   driven by the Studio's sound.
-- **Spike 4 (shim and controls).** The injected script: `code` slot persistence
-  on eval, code mirroring to the mini page, Play/Stop and `s1..s8` reaching the
-  REPL. Gate: pattern saves with the set; knobs still move the sound.
-- **Then:** the rename, the mini window rebuild, delete the hand-rolled editor
-  and the redirect window.
+
+- **[ ] Spike 4 - the shim and the controls.** Fill in `m4l-shim.js`: arm the
+  audio without a click, persist the evaluated code to the `code` slot, mirror it
+  to the mini page, and map Play/Stop and `s1..s8` onto the REPL. Gate: the
+  pattern saves with the set and the knobs still move the sound.
+
+- **[ ] Then:** the mini window rebuild, and the deletions - the hand-rolled
+  editor, the online-redirect window, the engine in the device page, and the
+  scratch spike device.
 
 #### Acceptance
 
@@ -262,6 +322,56 @@ shows a live visual of the Studio's audio, and runs hydra when the pattern asks
 for it. The pattern still saves with the set. The `.amxd` stays small; the sidecar
 folder is documented as part of the install. m4l-jweb's existing `[jweb]` window
 behaviour is unchanged.
+
+
+### 2. FIXME - Export writes nothing: "could not place save: -1 bytes"
+
+**Seen in Live, 1.0.0, on the Strudel device.** Pressing Export renders and then fails at
+the last step with `could not place save: -1 bytes at destination`. `-1` is what the
+wrapper reports when it cannot size the destination file at all - so the `.part` was
+never placed over the target, not merely placed short.
+
+The save protocol is the library's (`@m4l-jweb/wrapper` core: `save_begin` /
+`save_chunk` / `save_end`, then a `file://` GET through [maxurl] to place the verified
+`.part`), so the fault may well be upstream rather than here. m4l-jweb 1.0.0 carries a
+related fix ("reuse one scratch file for saves so exports stop stranding empty `.part`
+files") that landed after this was seen; re-test against it FIRST, before debugging
+anything in this repo.
+
+Where to look, in order:
+1. Does the `.part` exist next to the device with the right size after `save_end`? If it
+   does, the failure is purely the place step.
+2. Does the device folder resolve to a real, writable directory (an UNSAVED patcher has
+   no folder - `deviceFolder()` returns nothing and the whole path is relative to
+   nowhere)?
+3. Is the `download` chain present on the device? [maxurl] lives there, and the place is
+   a `file://` GET through it. The Strudel device declares it, but the wiring is worth
+   confirming rather than assuming.
+
+Everything downstream of Export is blocked on this: the WAV cannot be dragged out, and
+the clipboard item below cannot be tested at all, because the button that reveals the
+path only appears once something has been written.
+
+### 3. FIXME - the clipboard copy cannot be confirmed, and could not be tested
+
+**Status: unverified, because Export never wrote a file** (item 0). The code is in place
+and its failure mode is understood, but nobody has yet seen it work in Live.
+
+What is known, the hard way: `document.execCommand("copy")` **returns true in the device
+page and puts nothing on the system clipboard**, and the page cannot detect this -
+`navigator.clipboard.readText()` needs a secure context and a device page is `file://`,
+so a copy can be claimed but never read back. `src/app/shared/clipboard.ts` therefore
+trusts no claim inside jweb: it attempts the copy, then shows the path in a focused,
+pre-selected field and treats the browser's own `copy` event as the only confirmation.
+
+The full history of what does NOT work here - `; max launchbrowser` for a reveal, both
+clipboard APIs, the false-success trap - is in
+[DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILED_IDEAS.md).
+
+**Remaining:** fix item 0, then verify end to end. If the manual field turns out not to
+receive Ctrl+C inside jweb either, the honest conclusion is that a device page cannot
+reach the system clipboard at all, and the answer becomes a Max-side one (or none).
+
 
 ### 5. FEAT - rework native knobs
 

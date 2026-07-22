@@ -74,5 +74,17 @@ export default defineSurface({
 		studio: window({ title: "Strudel Studio", width: 720, height: 560, entry: "StudioWindow", alwaysOnTop: true }),
 		/** strudel.cc itself, in a floating window (About > Advanced). */
 		strudel: window({ title: "strudel.cc", width: 1100, height: 760, entry: "StrudelSite" }),
+		/**
+		 * The REAL local strudel.cc, and the device's SOUND (doc/TODO.md item 1).
+		 *
+		 * `site:` is the whole app built offline by scripts/build-repl.mjs - its own
+		 * editor, its own scheduler, its own superdough, its own visualisers - and
+		 * `audio: true` makes the page a `[jweb~]` whose output IS the track. It runs
+		 * whether or not the window is open (spike 1, verified in Live).
+		 *
+		 * It stands NEXT TO the hand-rolled `studio` for now, deliberately: the old
+		 * editor and the online redirect are only deleted once this one has parity.
+		 */
+		repl: window({ title: "Strudel Studio", width: 1100, height: 760, audio: true, site: "dist/repl-site" }),
 	},
 });
