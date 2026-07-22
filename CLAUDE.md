@@ -41,6 +41,38 @@ A spike that answered its question is DELETED once the answer is written down (i
 what has value; the scaffolding that produced it is noise in a tree everyone else has
 to read.
 
+## Commit messages
+
+ONE LINE. `type: what changed`, stated plainly.
+
+    feat: open external links in default browser
+    fix: release a dial when its slider is deleted
+    docs: clarify launchbrowser URL behavior
+    chore: remove orphaned Studio windows and update TODO
+
+No body. Not a short one, not "just this once" - the subject IS the message. A body is
+justified only when the change is genuinely unreadable without one, and then it is two
+or three lines of fact, never paragraphs.
+
+No scope suffix by default: `feat:`, not `feat(strudel):`.
+
+The subject STATES, it does not argue. "remove orphaned Studio windows", not "drop the
+orphaned Studio windows, because nothing could open them any more". Anything that
+explains, justifies or narrates belongs somewhere with a longer life:
+
+| What you want to write | Where it goes |
+|---|---|
+| Why the code is shaped this way, the constraint it obeys | a comment at that line |
+| What Max/Live/Strudel was measured to do | `doc/MAX-FACTS.md` (upstream), `doc/ARCHITECTURE.md` |
+| What was tried and failed, and why | `doc/DRAWER_OF_FAILED_IDEAS.md` |
+| What is still wrong or still to do | `doc/TODO.md` |
+| What a reviewer needs to judge the change | the PR summary |
+
+None of it goes in a commit body. A commit says what changed; the repo says why.
+
+This is the same rule as the PR summaries below, one size smaller: write to record,
+not to justify.
+
 ## Pull request summaries
 
 Title: `<version> - <the areas that changed>`, plainly. "1.1.0 - better external windows
