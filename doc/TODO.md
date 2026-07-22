@@ -138,16 +138,36 @@ is the fallback and not the plan.
   `jweb~` + `site:` window pointing at the built REPL. The hand-rolled
   `shared/StudioWindow.tsx` editor and the online-redirect `strudel` window are
   deleted once parity is confirmed.
-- **Mini window rebuild.** `PatternEditor` goes; in its place a canvas: level/
-  scope view fed per finding 5, swapped for the local hydra instance when the
-  mirrored code contains hydra calls. Header keeps the icon buttons; Studio
-  button promoted from About > Advanced to the main row; Run/Stop become remote
-  controls that message the Studio (via the shim) rather than a local engine.
-- **Engine retirement in the device page.** `useSuperdoughRender`, the worker
-  round-trip, the superdough boot and the sample maps LEAVE the mini page (the
-  Studio owns all of it). Decide what happens to Export (WAV bounce) - it needs
-  an engine, so it either moves behind the shim into the Studio page or is cut
-  from the mini window.
+- **Mini view rebuild - THREE VIEWS, switched by a strip of buttons down the left.**
+  The device view stops being a small editor and becomes the device's own panel.
+  It is 169 px tall and does not scroll, so the strip is icons, not labels.
+
+  1. **Knobs (default).** The eight controls as REACT faders - the ones the fx
+     device has, at a bigger scale, VERTICAL rather than horizontal, using the
+     whole width. Not the native dials: those stay where they are, one click away
+     behind the Controls button, exactly as now.
+     They are FED BY THE PATTERN, wherever it lives: a `slider()` in the mini
+     view's own code, or an `m4lKnob(n, {...})` in the Studio's. A fader shows the
+     name when the pattern gave one and stays draggable either way; units are
+     Live's business on the native dial and need not be repeated here.
+     This is the view that makes the device usable with the Studio window shut.
+
+  2. **Visualizer.** The Studio's picture (see the spike below).
+
+  3. **Code.** The small editor comes back, EMPTY by default and empty is the
+     normal state - it is not where the music is written. It is a scratchpad for
+     seeing and controlling: a `scope()`, a hydra sketch, later some MIDI control
+     code.
+     It is a SEPARATE strudel instance with its own state slot, not a second view
+     of the Studio's pattern. The device page already runs an engine and its
+     `[jweb~]` already sums into the track, so this view can make sound as well as
+     draw - it is audio-OUT capable like any strudel page.
+
+  **The limit that shapes view 3, measured against the Max 9 reference:** `jweb~`
+  is "Web browser with audio OUTPUT". One inlet, control only - there is NO signal
+  inlet, so a page cannot be given audio. The mini view therefore cannot receive
+  the Studio's sound as a signal, and `scope()` there cannot show the Studio's
+  waveform sample-accurately. What can cross is described in the spike below.
 - **Knobs and transport.** `s1..s8` dials and the native Play/Stop must now reach
   the Studio's engine: wrapper already fans params to every view; the shim maps
   them onto the REPL (sliders -> pattern `slider()` bindings, play/stop ->
@@ -298,36 +318,46 @@ A spike is only ticked once the observation is written down here.
 
 - **[ ] Spike 3 - the mini view shows what the Studio is DRAWING.**
 
-  **The requirement changed, and it is bigger than a level meter.** The mini view
-  should show whatever the Studio window is rendering behind its editor - a
-  `.scope()` in the pattern, a `.pianoroll()`, hydra, anything. Not a visual of
-  our own that happens to move with the sound: the Studio's actual picture.
+  The requirement: whatever the Studio window renders behind its editor - a
+  `.scope()`, a `.pianoroll()`, hydra - should be visible in the device view. Not
+  a visual of our own that moves with the sound: the Studio's actual picture.
 
-  That rules out the original plan (a `[peakamp~]` tap driving a canvas of ours),
-  and it rules out re-running hydra in the mini page from mirrored code, because
-  neither reproduces `.scope()` or anything else strudel draws.
+  **What is already settled, so the spike does not re-open it:**
+  - `jweb~` has NO signal inlet (Max 9 reference: "Web browser with audio
+    output", one control inlet). A page cannot be handed audio, so there is no
+    route by which the mini view's own `scope()` sees the Studio's waveform.
+  - Pixels cannot cross between two Chromium contexts directly - no shared
+    memory, no server, and jweb has no frame-grab.
+  - Re-running hydra in the mini page from mirrored code reproduces HYDRA and
+    nothing else - not `.scope()`, not `.pianoroll()`.
 
-  Pixels are the only thing that satisfies it, and pixels cannot cross between two
-  Chromium contexts directly - no shared memory, no server, and jweb has no
-  documented frame-grab. So the spike is a TRANSPORT question:
+  **So there are two feeds, and they answer different halves:**
 
-  1. In the Studio page the shim reads the REPL's canvas (`getDrawContext()` gives
-     it, and hydra draws to its own) with `toDataURL("image/jpeg", ~0.5)` at a
-     small size - 320x180 or less.
-  2. That string crosses as an ordinary Max message
-     (`window_send` in reverse - page to wrapper to the device view's page).
-  3. The mini page paints it into an `<img>`.
+  a) **The picture: a JPEG through Max.** The shim reads the Studio's canvas
+     (`getDrawContext()`, and hydra's own) with `toDataURL("image/jpeg", ~0.5)`
+     at 320x180 or smaller, sends the string as an ordinary message, and the mini
+     page paints it into an `<img>`. This is the only thing that shows `.scope()`,
+     because strudel drew it.
+     **Measure, because any of these can kill it:** the size of a frame (a Max
+     symbol carrying ~10 kB, several times a second), the rate that survives the
+     round trip, and above all the CPU cost of `toDataURL` - it is a synchronous
+     GPU read running in the page that is MAKING THE SOUND, so a stall there is a
+     dropout, not a dropped frame.
+     Fallbacks in order if it costs the audio: 2-4 fps (a slideshow of the scope
+     is still the Studio's picture), then drop it.
 
-  **What the spike has to measure, because any of them can kill it:** the size of
-  a frame at that quality (a Max symbol carrying ~10 kB, several times a second),
-  the frame rate that survives the round trip, and the CPU cost of
-  `toDataURL` on the Studio's render loop - it is a synchronous read of the GPU
-  and it runs in the page that is making the SOUND, so a stall there is a dropout,
-  not a dropped frame. Gate: a recognisable moving picture in the mini view at 10
-  fps or better, with no audible cost.
-  If the cost lands on the audio, the fallbacks in order: drop the rate to 2-4
-  fps (a slideshow of the scope is still the Studio's picture), or accept a
-  level meter of our own and record that the real thing was not affordable.
+  b) **The level: a `[peakamp~]` tap.** Cheap, message-rate, and enough to drive
+     the mini view's OWN visuals - a meter, and audio-reactivity for a hydra
+     sketch typed in view 3. Worth having whatever happens to (a), and it is the
+     only feed that survives if (a) is unaffordable.
+
+  Also still unverified and needed by view 3 either way: **hydra rendering inside
+  a jweb page at all** (WebGL in CEF). Probe it early - if WebGL is missing, view
+  3's hydra half dies and the scratchpad is left with `scope()` of its own sound.
+
+  Gate: the Studio's picture visible in the device view at 10 fps or better with
+  no audible cost, or a recorded reason why not plus the level meter shipping
+  instead.
 
 - **[x] Spike 4 - the shim and the controls. PASS (2026-07-22), in Live.**
   All four: the audio arms with no click, the pattern saves with the set and comes
