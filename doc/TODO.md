@@ -303,10 +303,43 @@ A spike is only ticked once the observation is written down here.
   WebGL in CEF is still unverified. Gate: a moving visual in the mini window
   driven by the Studio's sound.
 
-- **[ ] Spike 4 - the shim and the controls.** Fill in `m4l-shim.js`: arm the
-  audio without a click, persist the evaluated code to the `code` slot, mirror it
-  to the mini page, and map Play/Stop and `s1..s8` onto the REPL. Gate: the
-  pattern saves with the set and the knobs still move the sound.
+- **[x] Spike 4 - the shim and the controls. BUILT AND INSTALLED, needs Live.**
+  `src/app/strudel/repl-shim/m4l-shim.js` is the real thing now, and it is still
+  the only line of ours inside the app:
+  - **Arms the audio.** The REPL creates its AudioContext on the first `mousedown`
+    on the document (`initAudioOnFirstClick`, superdough.mjs). A window that loads
+    hidden never gets one, so the shim dispatches a synthetic one.
+  - **Pins the output device** to `System Standard`, because `initAudio` calls
+    `setSinkId` for anything else - which would send the sound to a sound card and
+    away from the `[jweb~]` outlets that ARE the track. A setting left over from a
+    browser session would have taken the device off the track silently.
+  - **Persists the pattern** to the `code` state slot, so it saves with the LIVE
+    SET rather than in the page's localStorage. It restores on load, but only once
+    the REPL's own `initCode()` has settled (the buffer stops reading
+    `// LOADING`) - restoring earlier just gets overwritten.
+    The write is a one-second poll of the buffer, not a hook on evaluate: typing
+    that has not been evaluated yet is still work a musician expects to survive a
+    save, and the REPL changes the buffer by several paths.
+  - **Takes Play/Stop and the eight dials** as `set_play` / `set_s1..s8`, which
+    become `evaluate()` / `stop()` and `m4lKnob(1..8)` for a pattern to read.
+  Getting the controls there needed one new library message, because a knob turn
+  is delivered to the DEVICE VIEW's page and to no other: `window_send <winId>
+  <selector> <value>` in the wrapper, `sendToWindow()` in the bridge. NOT a state
+  slot - a slot saves with the set, and a knob being swept would write the Live
+  set on every frame. `src/app/strudel/useReplRemote.ts` is the device view's end
+  of it, with one re-send a few seconds in for the case where the window's page
+  was not listening yet.
+  Nine tests run the shim against a faked page (`__tests__/repl-shim.test.ts`) -
+  every one of its behaviours fails SILENTLY in Live, which is why they exist.
+  **TEST NEXT, in Live** (delete and re-drag the device first):
+  1. Open REPL, type a pattern, evaluate. Sound on the track, no click needed
+     anywhere first.
+  2. Save the set, close it, reopen: the REPL comes back with that pattern.
+  3. The device's native Play/Stop starts and stops the REPL.
+  4. Put `m4lKnob(1)` in a pattern - e.g.
+     `note("c3 e3 g3").s("sawtooth").lpf(200 + m4lKnob(1) * 2000)` - and turn S1.
+  Still expected at this stop: the mini view's own engine is still there and still
+  sounds separately. That goes with the mini rebuild.
 
 - **[ ] Then:** the mini window rebuild, and the deletions - the hand-rolled
   editor, the online-redirect window, the engine in the device page, and the

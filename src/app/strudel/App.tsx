@@ -8,6 +8,7 @@ import { ControlsButton, ExportButton, RunButton } from "../shared/DeviceButtons
 import { HelpButton } from "../shared/HelpButton";
 import { SliderRow } from "../shared/SliderRow";
 import { tokenAtCaret } from "@/lib/reference";
+import { useReplRemote } from "./useReplRemote";
 import { useStrudelRender } from "./useStrudelRender";
 import surface from "./surface";
 
@@ -42,6 +43,9 @@ export default function App() {
 	const strudelWindow = useWindow(surface, "strudel");
 	/** The local strudel.cc, which owns its own engine and its own audio (item 1). */
 	const replWindow = useWindow(surface, "repl");
+	// Live's transport and the eight native dials reach the DEVICE, never a floating
+	// window - so the device view passes them on to the REPL's page.
+	useReplRemote();
 
 	if (showAbout) {
 		// RENDER HEALTH, debug-only
