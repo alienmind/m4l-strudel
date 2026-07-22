@@ -206,6 +206,18 @@ describe("m4l-shim", () => {
 		expect(sent(page.outlets, "knob_label").pop()).toEqual(["knob_label", 0, "room"]);
 	});
 
+	it("names a dial even when the REPL turned the name into a pattern", () => {
+		// Seen in Live as `knob_label param-s1 'S1' -> '[object Object]'`: in the REPL
+		// a double-quoted string is mini notation, so `{ name: "cutoff" }` reaches the
+		// shim as a Pattern, not a string.
+		mount();
+		const pattern = { queryArc: () => [{ value: "cutoff" }] };
+		const m4lKnob = page.win.m4lKnob as (n: number, o?: unknown) => unknown;
+
+		m4lKnob(1, { name: pattern, unit: { queryArc: () => [{ value: "Hz" }] } });
+		expect(sent(page.outlets, "knob_label")).toEqual([["knob_label", 0, "cutoff (Hz)"]]);
+	});
+
 	it("reads an untouched or out-of-range dial as 0, never undefined", () => {
 		// A pattern doing arithmetic on it must not get NaN.
 		mount();
