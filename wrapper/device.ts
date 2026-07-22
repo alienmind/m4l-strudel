@@ -372,6 +372,50 @@ function knob_label(_index?: number, ..._label: unknown[]): void {
 	}
 }
 
+/**
+ * How Live PRINTS a dial's value - the same unit styles the build stamps into a
+ * declared parameter, applied at runtime to a dial a pattern just described.
+ *
+ * It is not decoration and it is not the name: the name says WHICH parameter, the
+ * unit style is what makes the readout say "600 Hz" rather than "600". They go to
+ * different attributes, so they arrive as different messages.
+ *
+ * The order is Max's own list. 9 is Custom, which takes the string itself, so an
+ * unknown unit still prints - "12 Bogons" - instead of being dropped.
+ */
+var UNITSTYLE: { [name: string]: number } = { int: 0, float: 1, ms: 2, Hz: 3, dB: 4, "%": 5, pan: 6, st: 7, midi: 8 };
+var UNITSTYLE_CUSTOM = 9;
+
+function knob_unit(_index?: number, ..._unit: unknown[]): void {
+	if (!IS_STRUDEL) return;
+	var index = Number(arguments[0]);
+	var unit = Array.prototype.slice.call(arguments, 1).join(" ");
+	if (!(index >= 0 && index < 8) || !unit) return;
+	var varname = "param-s" + (index + 1);
+	try {
+		var obj = this.patcher.getnamed(varname);
+		if (!obj) {
+			post("strudel: knob_unit " + varname + " -> getnamed() null\n");
+			return;
+		}
+		var known = UNITSTYLE[unit];
+		var style = known === undefined ? UNITSTYLE_CUSTOM : known;
+		if (typeof obj.setattr === "function") {
+			obj.setattr("_parameter_unitstyle", style);
+			if (style === UNITSTYLE_CUSTOM) obj.setattr("_parameter_units", unit);
+		} else {
+			obj.message("_parameter_unitstyle", style);
+			if (style === UNITSTYLE_CUSTOM) obj.message("_parameter_units", unit);
+		}
+		var after = Number(obj.getattr("_parameter_unitstyle"));
+		post(
+			"strudel: knob_unit " + varname + " '" + unit + "' -> style " + after + (after === style ? "" : " (did NOT take)") + "\n",
+		);
+	} catch (e) {
+		post("strudel: knob_unit " + varname + " error: " + (e as Error).message + "\n");
+	}
+}
+
 /* ------------------------------------------------------------------ *
  * Hooks called by the packaged wrapper
  * ------------------------------------------------------------------ */
@@ -405,6 +449,10 @@ function onWindowMessage(): void {
 		// of a message handler instead hands it something that has no patcher, and
 		// the handler dies with "this.patcher is undefined".
 		knob_label(Number(args[0]), Array.prototype.slice.call(args, 1).join(" "));
+		return;
+	}
+	if (selector === "knob_unit") {
+		knob_unit(Number(args[0]), Array.prototype.slice.call(args, 1).join(" "));
 		return;
 	}
 	if (selector === "shim_ready") {
