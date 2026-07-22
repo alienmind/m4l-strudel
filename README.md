@@ -41,7 +41,7 @@ We also deliver **additional utility instruments** that showcase different capab
 
 | Device | Type | What it does for you |
 |---|---|---|
-| **Strudel** (`alienmind-strudel.amxd`) | Instrument | **ALL of Strudel as the track's audio.** The main instrument described above. The real superdough engine runs live in the device and jweb~ carries its output into the track, so an edit or a knob turn is audible immediately and a random pattern is simply random. Export bounces the pattern to a WAV next to the device. |
+| **Strudel** (`alienmind-strudel.amxd`) | Instrument | **ALL of Strudel as the track's audio.** Its Studio window is the REAL local strudel.cc - the whole app, offline, with its own editor, scheduler and visualisers - and what you evaluate there IS the track. The pattern saves with your Live set, Live's transport drives it, and a `slider()` or `m4lKnob()` in the pattern lands on a native dial carrying its own name, unit and range. The device view is a panel: a visualizer, a bank of faders, and a small scratchpad. |
 | **Strudel MIDI** (`alienmind-strudel-midi.amxd`) | MIDI effect | Allows you to sequence notes and pass it to any instrument. It also allows you to translate Strudel patterns to the piano roll and vice versa. It streams live MIDI tempo-locked to Live, following tempo changes, multi-channel via `.midichan()`. Scale-aware (follows Live 12's key). |
 | **Strudel Drums MIDI** (`alienmind-strudel-drums-midi.amxd`) | MIDI effect | Allows you to map drum patterns that would normally sound as sounds into MIDI notes that can be sequenced to a drum rack. A dedicated mapping UI routes drum words (`bd`, `sd`, `hh`) to specific Drum Rack pads, and the map travels with your set. |
 | **Strudel Synth** (`alienmind-strudel-synth.amxd`) | Instrument | **One superdough sound, played by your MIDI.** Type a sound rather than a pattern - `s("sawtooth").lpf(800).room(.3)` - and every note the track sends plays it. No transport and no Play button: your clip, your keyboard or another Strudel device in front is the trigger. Any `slider()` in the sound lands on a native knob (S1..S8), so the timbre automates and reaches Push. |
@@ -89,7 +89,12 @@ You can download the pre-built `.amxd` devices ready for Ableton Live from:
 
 Once downloaded, simply extract the ZIP file and copy the `.amxd` devices into your Ableton **User Library** (e.g. `User Library/Max For Live/m4l-strudel/`).
 
-Each `.amxd` is fully **self-contained** - its own React UI bundle, with the Strudel engine inside every device that reads Strudel code (everything except the sample browser) - and unpacks itself on first load. Drag from Live's browser onto a MIDI track - the instruments (Strudel, Strudel Synth, Drums Sampler, Strudel Samples) fill its instrument slot and the MIDI effects (Strudel MIDI, Drums MIDI) go in front of one - or drop Strudel Audio FX, the only audio effect here, on any track carrying sound. Nothing ships loose beside the devices, and nothing runs a Node process.
+**One exception to self-contained:** the Strudel device ships with a folder,
+`alienmind-strudel-site/`, holding the offline strudel.cc its Studio window runs. Copy
+it next to the `.amxd` - the two travel together, and the device says so in the Max
+console if the folder is missing. Everything else is embedded as before.
+
+Each `.amxd` is otherwise fully **self-contained** - its own React UI bundle, with the Strudel engine inside every device that reads Strudel code (everything except the sample browser) - and unpacks itself on first load. Drag from Live's browser onto a MIDI track - the instruments (Strudel, Strudel Synth, Drums Sampler, Strudel Samples) fill its instrument slot and the MIDI effects (Strudel MIDI, Drums MIDI) go in front of one - or drop Strudel Audio FX, the only audio effect here, on any track carrying sound. Nothing ships loose beside the devices, and nothing runs a Node process.
 
 *(For developers building from source, you can use `pnpm install:device` to automatically copy the compiled devices to your local Ableton User Library).*
 

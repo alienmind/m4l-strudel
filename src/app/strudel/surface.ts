@@ -54,10 +54,10 @@ export default defineSurface({
 	layout: {
 		native: {
 			params: ["play", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"],
-			// Play alone on the first row, then the eight dials in two rows of four.
-			// Column-major (`rows: 2`) put Play in the same column as S1 and marched
-			// the rest across in pairs, which is why the panel looked scattered.
-			rows: [1, 4, 4],
+			// Play alone on the first row, then all eight dials in ONE row - the same
+			// left-to-right order as the faders in the device view, so a hand moving
+			// between the two surfaces does not have to re-learn the layout.
+			rows: [1, 8],
 			panel: true,
 			switch: "transport",
 		},
