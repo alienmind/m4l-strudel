@@ -47,7 +47,9 @@ export default defineSurface({
 	layout: {
 		native: {
 			params: ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"],
-			rows: 2,
+			// Two rows of four, left to right. The synth has no Play - its notes are
+			// the trigger - so there is no lead row here.
+			rows: [4, 4],
 			panel: true,
 			switch: "transport",
 		},

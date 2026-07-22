@@ -47,6 +47,10 @@ export function Visualizer({ windowId = "repl" }: { windowId?: string }) {
 
 			const [l, r] = level.current;
 			const peak = Math.max(l, r);
+			// One column per frame at the display's rate, so the trace advances at a
+			// steady speed and a few seconds of sound fill the view - the reading a
+			// scope gives you. The feed arrives faster than this (10 ms), so no
+			// transient is missed between columns; it is peak-held, not sampled.
 			history.current.push(peak);
 			if (history.current.length > w) history.current.splice(0, history.current.length - w);
 
@@ -63,16 +67,35 @@ export function Visualizer({ windowId = "repl" }: { windowId?: string }) {
 			ctx.strokeStyle = style.getPropertyValue("color") || "#7dd3fc";
 			ctx.lineWidth = 1;
 
-			// Peak trail, mirrored around the middle: the shape of the sound over the
-			// last few seconds, which is what a level can honestly show.
+			// The trace, mirrored around the middle so it reads like a scope: filled
+			// body for the amplitude, a bright edge on top of it.
 			const mid = h / 2;
+			const trace = history.current;
+			ctx.globalAlpha = 0.35;
 			ctx.beginPath();
-			for (let x = 0; x < history.current.length; x++) {
-				const v = Math.min(1, history.current[x]) * (h / 2 - 1);
+			for (let x = 0; x < trace.length; x++) {
+				const v = Math.min(1, trace[x]) * (h / 2 - 1);
 				ctx.moveTo(x + 0.5, mid - v);
 				ctx.lineTo(x + 0.5, mid + v);
 			}
 			ctx.stroke();
+
+			ctx.globalAlpha = 1;
+			ctx.beginPath();
+			for (let x = 0; x < trace.length; x++) {
+				const v = Math.min(1, trace[x]) * (h / 2 - 1);
+				if (x === 0) ctx.moveTo(x + 0.5, mid - v);
+				else ctx.lineTo(x + 0.5, mid - v);
+			}
+			ctx.stroke();
+
+			// The zero line, so silence is a line and not an absence.
+			ctx.globalAlpha = 0.25;
+			ctx.beginPath();
+			ctx.moveTo(0, mid + 0.5);
+			ctx.lineTo(w, mid + 0.5);
+			ctx.stroke();
+			ctx.globalAlpha = 1;
 
 			// The instantaneous pair, as two bars on the right: L over R.
 			const barW = 3;

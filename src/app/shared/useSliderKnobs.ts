@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { outlet } from "@m4l-jweb/bridge";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { describeParam, onParamRange } from "@m4l-jweb/bridge";
 import { useParam } from "@m4l-jweb/surface/react";
 import type { SliderSpec } from "./useStrudelEngine";
 
@@ -77,6 +77,29 @@ export function useSliderKnobs(
 	const labels = useMemo(() => sliderLabels(code, specs.length), [code, specs.length]);
 
 	/**
+	 * Which dials Live agreed to widen to their slider's real range.
+	 *
+	 * THIS IS THE BUG THAT REVERTED THE FIRST ATTEMPT AT THIS. `_parameter_range`
+	 * takes, and the dial then reports its value IN THE NEW DOMAIN - so a page that
+	 * goes on normalizing 0..1 scales an already-scaled value, and the knob sticks at
+	 * its minimum. The library answers whether each one took; everything below reads
+	 * this flag and scales exactly once.
+	 */
+	const [real, setReal] = useState<boolean[]>([]);
+	useEffect(() => {
+		onParamRange((id, took) => {
+			const i = KNOB_IDS.indexOf(id);
+			if (i < 0) return;
+			setReal((prev) => {
+				if (prev[i] === took) return prev;
+				const next = prev.slice();
+				next[i] = took;
+				return next;
+			});
+		});
+	}, []);
+
+	/**
 	 * Carry the semantic name onto the native dial: `.lpf(slider(...))` should leave a
 	 * knob called "lpf", not "S1". The wrapper's `knob_label <index> <name>` writes
 	 * `_parameter_shortname`; dials past the end of the pattern's sliders are reset to
@@ -90,12 +113,18 @@ export function useSliderKnobs(
 	const sentLabels = useRef<string[]>([]);
 	useEffect(() => {
 		for (let i = 0; i < KNOB_POOL; i++) {
+			const spec = specs[i];
 			const wanted = i < specs.length ? labels[i] : `S${i + 1}`;
-			if (sentLabels.current[i] === wanted) continue;
-			sentLabels.current[i] = wanted;
-			outlet("knob_label", i, wanted);
+			// The RANGE goes with the name: a dial called "lpf" that still travels 0..1
+			// is only half the answer, and describeParam carries both (the library
+			// applies each and says what took). A dial past the end of the pattern's
+			// sliders goes back to its pool name and its declared 0..1.
+			const key = spec ? `${wanted} ${spec.min} ${spec.max}` : wanted;
+			if (sentLabels.current[i] === key) continue;
+			sentLabels.current[i] = key;
+			describeParam(`s${i + 1}`, spec ? { name: wanted, range: [spec.min, spec.max] } : { name: wanted, range: [0, 1] });
 		}
-	}, [labels, specs.length]);
+	}, [labels, specs]);
 
 	// Seed a knob from the code's own default the first time a slider appears at that
 	// position, so an untouched knob reads what the text says rather than 0.
@@ -105,7 +134,7 @@ export function useSliderKnobs(
 			if (i >= KNOB_POOL) return;
 			if (seeded.current[i] === spec.id) return;
 			seeded.current[i] = spec.id;
-			params[i][1](toNorm(spec.value, spec.min, spec.max));
+			params[i][1](real[i] ? spec.value : toNorm(spec.value, spec.min, spec.max));
 		});
 		seeded.current.length = specs.length;
 		// params identity changes every render; the seed is guarded by `seeded` instead.
@@ -115,7 +144,11 @@ export function useSliderKnobs(
 	// Push the current knob positions back into the pattern. Runs whenever a dial moves -
 	// from the web slider, an automation lane, a Push encoder or a macro, since all four
 	// write the same parameter.
-	const norms = specs.slice(0, KNOB_POOL).map((_, i) => Number(params[i][0] ?? 0));
+	const norms = specs
+		.slice(0, KNOB_POOL)
+		.map((spec, i) =>
+			real[i] ? toNorm(Number(params[i][0] ?? spec.min), spec.min, spec.max) : Number(params[i][0] ?? 0),
+		);
 	const signature = norms.join(",");
 	useEffect(() => {
 		if (!specs.length) return;
@@ -124,9 +157,13 @@ export function useSliderKnobs(
 	}, [signature, specs.length]);
 
 	const setAt = useCallback(
-		(i: number, norm: number) => params[i][1](clamp01(norm)),
+		(i: number, norm: number) => {
+			const spec = specs[i];
+			const n = clamp01(norm);
+			params[i][1](real[i] && spec ? toRaw(n, spec.min, spec.max) : n);
+		},
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[signature],
+		[signature, real, specs],
 	);
 
 	return specs.slice(0, KNOB_POOL).map((spec, i) => ({
