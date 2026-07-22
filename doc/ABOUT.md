@@ -12,15 +12,12 @@ Bring generative sequencing, euclidean rhythms, and algorithmic composition dire
 
 ---
 
-## New in 1.0.0
+## New in 1.1.0
 
-- **Live's transport drives the devices.** Launch a clip on a device's track, or just press Play, and the pattern starts; it stops when the transport does. No second button to remember.
-- **The main instrument is simply called Strudel** (`alienmind-strudel`), and it plays LIVE - the real superdough engine runs inside the device, so an edit or a knob turn is audible immediately. It used to render offline and fade in at the next loop boundary; that whole pipeline is gone.
-- **Strudel Synth**, a new device: type a SOUND rather than a pattern (`s("sawtooth").lpf(800).room(.3)`) and every MIDI note the track sends plays it.
-- **Your sounds survive going offline.** Samples and sample maps are cached inside the device, so a set reopened with no network still plays what it played before.
-- **One set of controls everywhere.** Every device's top bar now draws the same icon buttons, and the native knob panel is reachable from the device view rather than buried in About.
-
-Known issues in this release: **Export** on the Strudel device fails to write its WAV (`could not place save`), and the **Copy folder path** button is therefore still untested. Both are first in line for 1.1.
+- **The Studio is the instrument.** The Strudel device's sound is no longer made in the device view: it is made by a full local strudel.cc app running in a floating window. Its editor, its scheduler, its superdough, its visualisers. Evaluating a pattern there is what the track plays, and closing the window does not stop it.
+- **A pattern can describe a dial.** `note("c3 e3").s("sawtooth").lpf(m4lKnob(1, { name: 'cutoff', unit: 'Hz', range: [200, 2200] }))` binds directly to native dials, scaling values correctly.
+- **Three faces on the device view.** The device view now has a visualizer (fed by the window's level), a bank of vertical faders carrying whatever the pattern named, and a code scratchpad on its own state slot.
+- **Native panel.** Play alone on the top row, then two rows of four dials.
 
 ---
 
@@ -30,7 +27,7 @@ Known issues in this release: **Export** on the Strudel device fails to write it
 
 ### The Main Instrument: Strudel
 
-![The Strudel device - a full Strudel expression playing as the track's audio](screenshot-strudel.png)
+![The Strudel device alongside the Studio window](screenshot-strudel-and-studio.png)
 
 The primary deliverable is **Strudel** (`alienmind-strudel`, called `alienmind-strudel-superdough` before 1.0.0). This instrument understands the full Strudel language and uses the real `@strudel/superdough` engine to natively produce sounds (synths, oscillators, samples) and effects, perfectly in sync with Ableton's transport clock.
 
