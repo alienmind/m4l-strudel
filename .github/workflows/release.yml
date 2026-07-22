@@ -34,6 +34,18 @@ jobs:
           fi
           echo "releasing $ROOT"
 
+      # The Strudel device's Studio window is the real strudel.cc, built from the
+      # submodule into dist/repl-site and shipped as a folder beside the .amxd. It is
+      # NOT in git, so CI has to build it - without this the packaging step stops with
+      # "declares site dist/repl-site, but there is no index.html there", which is the
+      # guard doing its job: a device released without that folder opens an empty
+      # Studio.
+      - name: install the strudel submodule's dependencies
+        run: pnpm --dir strudel install --ignore-scripts
+
+      - name: build the offline strudel.cc bundle
+        run: pnpm build:repl
+
       - run: pnpm build
       - run: pnpm test
 
