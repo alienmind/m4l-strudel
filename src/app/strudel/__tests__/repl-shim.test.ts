@@ -31,7 +31,9 @@ function makePage() {
 	const store: Record<string, string> = {};
 	const dispatched: string[] = [];
 
+	const posted: unknown[] = [];
 	const editor = {
+		widgets: [] as Record<string, unknown>[],
 		code: LOADING,
 		setCode: vi.fn((c: string) => {
 			editor.code = c;
@@ -49,7 +51,10 @@ function makePage() {
 
 	const g = globalThis as Record<string, unknown>;
 	g.window = { max: undefined, strudelMirror: undefined };
-	g.document = { dispatchEvent: (e: { type: string }) => dispatched.push(e.type) };
+	g.document = {
+		dispatchEvent: (e: { type: string }) => dispatched.push(e.type),
+		getElementById: () => null,
+	};
 	g.localStorage = {
 		getItem: (k: string) => store[k] ?? null,
 		setItem: (k: string, v: string) => {
@@ -63,7 +68,8 @@ function makePage() {
 		}
 	};
 
-	return { outlets, inlets, store, dispatched, editor, max, win: g.window as Record<string, unknown> };
+	(g.window as Record<string, unknown>).postMessage = (m: unknown) => posted.push(m);
+	return { outlets, inlets, store, dispatched, posted, editor, max, win: g.window as Record<string, unknown> };
 }
 
 /** Everything the shim sent, by selector. */
@@ -84,6 +90,17 @@ describe("m4l-shim", () => {
 		vi.useRealTimers();
 		for (const k of ["window", "document", "localStorage", "MouseEvent"]) delete (globalThis as Record<string, unknown>)[k];
 	});
+
+	/** Set the buffer, and mark the restore as settled so the poll gets past it. */
+	const editor = {
+		get code() {
+			return page.editor.code;
+		},
+		codeIs(text: string) {
+			page.editor.code = text;
+			page.inlets.state_code(JSON.stringify(text));
+		},
+	};
 
 	/** Hand the shim the two globals it waits for, and let its poll notice. */
 	function mount() {
@@ -250,6 +267,93 @@ describe("m4l-shim", () => {
 		const raw = page.win.m4lKnobValue as (n: number) => number;
 		expect(raw(8)).toBe(0);
 		expect(raw(99)).toBe(0);
+	});
+
+
+	/* ------------------------------------------------------------------ *
+	 * The pattern's own slider() calls
+	 * ------------------------------------------------------------------ */
+
+	/** A slider as the transpiler leaves it: id is the range of the first argument. */
+	const widget = (from: number, to: number, value: number, min: number, max: number) => ({
+		type: "slider",
+		id: `${from}:${to}`,
+		from,
+		to,
+		value,
+		min,
+		max,
+	});
+
+	it("puts the pattern's sliders on the dials, in source order", () => {
+		mount();
+		// `slider(500, 100, 1000)` then `slider(0.3, 0, 1)`.
+		editor.codeIs('s("saw").lpf(slider(500, 100, 1000)).gain(slider(0.3, 0, 1))');
+		page.editor.widgets = [widget(48, 51, 0.3, 0, 1), widget(17, 20, 500, 100, 1000)];
+		vi.advanceTimersByTime(1000);
+
+		expect(sent(page.outlets, "param_range")).toEqual([
+			["param_range", "s1", 100, 1000],
+			["param_range", "s2", 0, 1],
+		]);
+		// No name given, so the dial says which slider it is rather than nothing.
+		expect(sent(page.outlets, "param_label").map((o) => o[2])).toEqual(["slider 1", "slider 2"]);
+	});
+
+	it("reads a name and a unit out of the code, since the transpiler drops them", () => {
+		mount();
+		editor.codeIs("s(\"saw\").lpf(slider(500, 100, 1000, 1, { name: 'cutoff', unit: 'Hz' }))");
+		// The id's `to` is the end offset of the FIRST argument - that is what ties
+		// the parsed options back to the widget.
+		const code = editor.code as string;
+		const from = code.indexOf("500");
+		page.editor.widgets = [widget(from, from + 3, 500, 100, 1000)];
+		vi.advanceTimersByTime(1000);
+
+		expect(sent(page.outlets, "param_label").pop()).toEqual(["param_label", "s1", "cutoff"]);
+		expect(sent(page.outlets, "param_unit").pop()).toEqual(["param_unit", "s1", "Hz"]);
+	});
+
+	it("asks the device to seed the dial from the value the code declares", () => {
+		// Otherwise a dial keeps whatever the last pattern left on it, and the first
+		// touch jumps the sound.
+		mount();
+		editor.codeIs("s(\"saw\").lpf(slider(500, 100, 1000))");
+		const from = (editor.code as string).indexOf("500");
+		page.editor.widgets = [widget(from, from + 3, 500, 100, 1000)];
+		vi.advanceTimersByTime(1000);
+		expect(sent(page.outlets, "slider_seed").pop()).toEqual(["slider_seed", "s1", 500]);
+	});
+
+	it("a dial moves the slider through the channel the inline widget uses", () => {
+		mount();
+		editor.codeIs("s(\"saw\").lpf(slider(500, 100, 1000))");
+		const from = (editor.code as string).indexOf("500");
+		page.editor.widgets = [widget(from, from + 3, 500, 100, 1000)];
+		vi.advanceTimersByTime(1000);
+
+		page.inlets.set_s1(750);
+		// `cm-slider` sets sliderValues[id], which the pattern's ref() reads on its
+		// next query - so the sound changes without re-evaluating.
+		expect(page.posted.pop()).toEqual({ type: "cm-slider", id: `${from}:${from + 3}`, value: 750 });
+	});
+
+	it("does not re-describe the dials while the pattern's controls are unchanged", () => {
+		// describeParam writes Live parameter attributes; a pattern is re-evaluated
+		// constantly while it is being worked on.
+		mount();
+		editor.codeIs("s(\"saw\").lpf(slider(500, 100, 1000))");
+		const from = (editor.code as string).indexOf("500");
+		page.editor.widgets = [widget(from, from + 3, 500, 100, 1000)];
+		vi.advanceTimersByTime(3000);
+		expect(sent(page.outlets, "param_range")).toHaveLength(1);
+	});
+
+	it("ignores a half-typed slider call rather than throwing", () => {
+		mount();
+		editor.codeIs('s("saw").lpf(slider(500, 100');
+		page.editor.widgets = [];
+		expect(() => vi.advanceTimersByTime(1000)).not.toThrow();
 	});
 
 	it("says it is ready, so the wrapper's log shows the page came up", () => {

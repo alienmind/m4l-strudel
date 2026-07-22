@@ -173,6 +173,159 @@
 	 * device tries to widen it to the declared range and answers whether that took;
 	 * until the answer arrives, the value is 0..1 and the shim scales it.
 	 */
+	/* -------------------------------------------------------------- *
+	 * 5. THE PATTERN'S OWN slider() CALLS, on the device's dials.
+	 *
+	 * `m4lKnob()` is ours, and asking a Strudel coder to learn it just to reach a
+	 * Live knob is a tax on the wrong person. `slider()` is what they already write,
+	 * and everything needed to adopt it is public already:
+	 *
+	 *   READ  - after each evaluation `strudelMirror.widgets` holds every slider as
+	 *           { id, from, to, value, min, max, step }, `id` being the character
+	 *           range of the first argument and ascending `from` being source order.
+	 *   WRITE - `window.postMessage({ type: 'cm-slider', id, value })` sets
+	 *           `sliderValues[id]`, which the pattern's `ref()` reads on its next
+	 *           query. The inline widget posts exactly this when dragged.
+	 *
+	 * WHAT A DIAL DELIBERATELY DOES NOT DO: dragging the inline slider also REWRITES
+	 * THE CODE TEXT (`view.dispatch({ changes })`). A Live dial does not, because
+	 * automation moves it dozens of times a second and rewriting the document at that
+	 * rate would fight the typing and keep the set permanently dirty. So the sound
+	 * follows the dial while the number in the code stays as written - it is the
+	 * DECLARED value. The widget's thumb is nudged directly in the DOM, which costs
+	 * nothing and stops the page looking frozen.
+	 *
+	 * NAMES AND UNITS. `slider(500, 100, 1000, 1, { name: 'cutoff', unit: 'Hz' })`
+	 * already runs in stock strudel - the transpiler reads the first four arguments
+	 * and `sliderWithID` ignores the rest - but the options are DROPPED, so they
+	 * cannot be read back from the widget. Until upstream carries them through
+	 * (doc/FEAT-SLIDERS.md), they are parsed out of the code here. The parse fails
+	 * soft: no name is a fine outcome, and the slider still lands on a dial with its
+	 * real range.
+	 * -------------------------------------------------------------- */
+
+	/** How long the first argument is, so its end offset can be computed. */
+	function firstArgLength(args) {
+		var depth = 0;
+		for (var i = 0; i < args.length; i++) {
+			var c = args[i];
+			if (c === "(" || c === "[" || c === "{") depth++;
+			else if (c === ")" || c === "]" || c === "}") depth--;
+			else if (c === "," && depth === 0) return i;
+		}
+		return args.length;
+	}
+
+	/**
+	 * The options object of each `slider()` call, filed under the END OFFSET of its
+	 * first argument - which is what the transpiler builds the widget's id from, and
+	 * therefore the only thing that ties the two together.
+	 */
+	function parseSliderOptions(code) {
+		var found = {};
+		if (typeof code !== "string") return found;
+		var re = /\bslider\s*\(/g;
+		var m;
+		while ((m = re.exec(code)) !== null) {
+			var open = m.index + m[0].length - 1;
+			var depth = 0;
+			var end = -1;
+			for (var i = open; i < code.length; i++) {
+				if (code[i] === "(") depth++;
+				else if (code[i] === ")" && --depth === 0) {
+					end = i;
+					break;
+				}
+			}
+			if (end < 0) continue; // half-typed code: leave it alone
+			var args = code.slice(open + 1, end);
+			var brace = args.indexOf("{");
+			if (brace < 0) continue;
+			var obj = args.slice(brace);
+			var opts = {};
+			var name = /name\s*:\s*['"]([^'"]*)['"]/.exec(obj);
+			var unit = /unit\s*:\s*['"]([^'"]*)['"]/.exec(obj);
+			var order = /order\s*:\s*(-?\d+)/.exec(obj);
+			if (name) opts.name = name[1];
+			if (unit) opts.unit = unit[1];
+			if (order) opts.order = Number(order[1]);
+			if (opts.name || opts.unit || opts.order !== undefined) {
+				found[open + 1 + firstArgLength(args)] = opts;
+			}
+		}
+		return found;
+	}
+
+	/** Slot index -> the slider it is carrying. */
+	var sliderMap = [];
+	var lastSliderKey = "";
+
+	function syncSliders() {
+		if (!editor || !max) return;
+		var widgets = editor.widgets || [];
+		var sliders = [];
+		for (var i = 0; i < widgets.length; i++) {
+			if (widgets[i] && widgets[i].type === "slider") sliders.push(widgets[i]);
+		}
+		sliders.sort(function (a, b) {
+			return a.from - b.from;
+		});
+
+		var opts = parseSliderOptions(editor.code);
+		// `order` only ever OVERRIDES source order, which the sort above already is.
+		var ordered = sliders.slice().sort(function (a, b) {
+			var ao = (opts[a.to] || {}).order;
+			var bo = (opts[b.to] || {}).order;
+			if (ao === undefined && bo === undefined) return sliders.indexOf(a) - sliders.indexOf(b);
+			if (ao === undefined) return 1;
+			if (bo === undefined) return -1;
+			return ao - bo;
+		});
+
+		// Describing a dial writes Live parameter attributes, so only do it when the
+		// pattern's controls actually changed - not on every evaluation.
+		var key = ordered
+			.map(function (w) {
+				var o = opts[w.to] || {};
+				return w.id + ":" + w.min + ":" + w.max + ":" + (o.name || "") + ":" + (o.unit || "");
+			})
+			.join("|");
+		if (key === lastSliderKey) return;
+		lastSliderKey = key;
+
+		sliderMap = [];
+		for (var n = 0; n < 8; n++) {
+			var w = ordered[n];
+			var param = "s" + (n + 1);
+			if (!w) {
+				sliderMap[n] = null;
+				continue;
+			}
+			var o = opts[w.to] || {};
+			sliderMap[n] = { id: w.id, min: Number(w.min), max: Number(w.max) };
+			max.outlet("param_label", param, o.name || "slider " + (n + 1));
+			if (o.unit) max.outlet("param_unit", param, o.unit);
+			if (w.max > w.min) max.outlet("param_range", param, Number(w.min), Number(w.max));
+			// The dial should start where the CODE says rather than wherever it was
+			// left by the last pattern. A window cannot write a Live parameter, so the
+			// device page does it (forwarded by wrapper/device.ts).
+			max.outlet("slider_seed", param, Number(w.value));
+		}
+	}
+
+	/** Move a slider from a dial, and nudge its widget so the page keeps up. */
+	function setSlider(index, value) {
+		var slot = sliderMap[index];
+		if (!slot) return;
+		window.postMessage({ type: "cm-slider", id: slot.id, value: value });
+		try {
+			var el = document.getElementById(slot.id);
+			if (el) el.value = value;
+		} catch (e) {
+			/* cosmetic only - the sound has already changed */
+		}
+	}
+
 	var knobIsReal = [];
 
 	/** `s3` -> 2. The library answers by parameter id; the dials are a pool. */
@@ -286,6 +439,14 @@
 		 */
 		setInterval(function () {
 			applyRestore(); // in case the REPL was still booting when the slot arrived
+			// The widget list is rebuilt on every evaluation, and there is no event to
+			// hang this off, so it rides the same poll as the code slot. syncSliders()
+			// returns immediately unless the pattern's controls actually changed.
+			try {
+				syncSliders();
+			} catch (e) {
+				console.warn(TAG, "slider sync failed:", e && e.message);
+			}
 			if (!restored) return;
 			var code = editor.code;
 			if (typeof code !== "string" || code === lastSentCode) return;
@@ -327,6 +488,10 @@
 			(function (n) {
 				max.bindInlet("set_s" + n, function (v) {
 					knobs[n - 1] = Number(v) || 0;
+					// A dial carrying one of the pattern's own slider() calls moves it.
+					// m4lKnob() reads the same value from `knobs`, so both idioms work
+					// off one dial without either knowing about the other.
+					setSlider(n - 1, Number(v) || 0);
 					if (announced) return;
 					announced = true;
 					var log = globalThis.logger;

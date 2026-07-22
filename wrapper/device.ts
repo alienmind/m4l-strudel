@@ -344,6 +344,14 @@ function onDeviceReady(): void {
 function onWindowMessage(): void {
 	var selector = String(arguments[1]);
 
+	// A window cannot write a Live parameter - `set_<id>` is routed from the DEVICE
+	// page's [jweb] and from nowhere else - so the Studio asks, and the device page
+	// (useReplKnobs) does the write.
+	if (selector === "slider_seed") {
+		// arguments: 0 is the window id, 1 the selector, then the payload.
+		outlet(0, "slider_seed", String(arguments[2]), Number(arguments[3]));
+		return;
+	}
 	if (selector === "shim_ready") {
 		post("strudel: the Studio's shim is up\n");
 		return;
