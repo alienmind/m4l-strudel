@@ -177,6 +177,28 @@ describe("m4l-shim", () => {
 		expect(m4lKnob(1)).toBe(0.75);
 	});
 
+	it("stops scaling once the dial itself carries the pattern's range", () => {
+		// The failure the previous attempt at this was reverted for: _parameter_range
+		// takes, the dial then reports IN THE NEW DOMAIN, and a page still normalizing
+		// 0..1 scales it a second time. Exactly one scaling, wherever it lives.
+		const queried: number[] = [];
+		(globalThis as Record<string, unknown>).signal = (fn: () => number) => ({ query: () => queried.push(fn()) });
+		mount();
+
+		const knob = (page.win.m4lKnob as (n: number, o: unknown) => { query: () => void })(1, { name: "cutoff", range: [200, 2200] });
+		expect(sent(page.outlets, "knob_range")).toEqual([["knob_range", 0, 200, 2200]]);
+
+		page.inlets.set_s1(0.5); // still 0..1: the device has not answered yet
+		knob.query();
+
+		page.inlets.knob_range_ok(0); // Live took it - values now arrive in real units
+		page.inlets.set_s1(600);
+		knob.query();
+
+		expect(queried).toEqual([1200, 600]);
+		delete (globalThis as Record<string, unknown>).signal;
+	});
+
 	it("scales the signal itself when the pattern declares a range", () => {
 		const queried: number[] = [];
 		(globalThis as Record<string, unknown>).signal = (fn: () => number) => ({ query: () => queried.push(fn()) });
