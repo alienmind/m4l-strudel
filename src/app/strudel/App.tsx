@@ -96,11 +96,9 @@ export default function App() {
 		return (
 			<AboutPanel
 				amxdBuild={s.amxdBuild}
-				onOpenStudio={openStudio}
-				onShowControls={() => {
-					setShowTransport(true);
-					setShowAbout(false);
-				}}
+				// This device's Studio IS strudel.cc - the real app, local and offline -
+				// so the button that would send you to the website opens that instead.
+				onOpenStrudel={openStudio}
 				onClose={() => setShowAbout(false)}
 				debug={debug}
 			/>
