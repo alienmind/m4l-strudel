@@ -3,6 +3,49 @@
 High-level history of m4l-strudel, grouped by milestone release. Up to 1.0.0 each
 minor version was a milestone of its own. Newest first.
 
+## 1.1.0 - 2026-07-22
+
+**The Studio is the instrument.** The Strudel device's sound is no longer made in the
+device view: it is made by a full local strudel.cc - the app itself, built offline from
+the `strudel/` submodule - running in a floating window whose `[jweb~]` output IS the
+track. Its editor, its scheduler, its superdough, its visualisers, all of it. Evaluating
+a pattern there is what the track plays, and closing the window does not stop it.
+
+`scripts/build-repl.mjs` builds that bundle and overlays it for `file://`: it prunes to
+the REPL page, rewrites root-absolute URLs (including Astro's island attributes, without
+which the page renders a shell and hydrates nothing), drops the service worker, vendors
+hydra-synth, and injects one script of ours. The submodule is never patched. The result
+is 17 MB and ships as a folder beside the `.amxd`.
+
+**The shim** (`src/app/strudel/repl-shim/m4l-shim.js`) is that one script: it arms the
+audio (the REPL waits for a `mousedown` a hidden window never gets), pins the output
+device so `setSinkId` cannot steer the sound off the `jweb~` outlets, persists the
+pattern to the `code` state slot so it saves with the LIVE SET, and maps Play/Stop and
+the eight dials onto the REPL.
+
+**A pattern can describe a dial:**
+
+    note("c3 e3").s("sawtooth").lpf(m4lKnob(1, { name: 'cutoff', unit: 'Hz', range: [200, 2200] }))
+
+The panel reads `cutoff`, the value reads in Hz, and the dial travels 200..2200. It
+returns a SIGNAL, not a number - a pattern is evaluated once and then plays, so a plain
+number would be frozen at evaluation and the knob would do nothing until you evaluated
+again.
+
+**The device view has three faces**, on a strip down the left: a visualizer fed by the
+window's level (the default - it answers "is this playing" when the Studio is shut), a
+bank of vertical faders carrying whatever the pattern named, and a code scratchpad on
+its own state slot. It switches itself to the faders when a control first appears.
+
+**Gone:** the hand-rolled Studio editor window and the online redirect to strudel.cc,
+both replaced by the real thing. The device view's engine now runs the scratchpad only,
+which is why the device no longer plays two patterns at once.
+
+**Native panel:** Play alone on the top row, then two rows of four dials.
+
+The findings are in [ARCHITECTURE.md](doc/ARCHITECTURE.md) 4k and the closed routes in
+[DRAWER_OF_FAILED_IDEAS.md](doc/DRAWER_OF_FAILED_IDEAS.md).
+
 ## 1.0.0 - 2026-07-21
 
 The v1.0.0 backlog, cleared: the transport drives the devices, samples survive going
