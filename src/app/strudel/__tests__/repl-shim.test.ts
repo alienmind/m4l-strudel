@@ -150,15 +150,39 @@ describe("m4l-shim", () => {
 		expect(page.editor.stop).toHaveBeenCalled();
 	});
 
-	it("exposes the native dials to the pattern as m4lKnob(n)", () => {
+	it("exposes the native dials as a SIGNAL, so a moving knob moves the sound", () => {
+		// The failure this pins, seen in Live: m4lKnob() returned a plain number, the
+		// pattern read it once at evaluation and froze it, and the dial did nothing
+		// until you evaluated again. A signal is queried per cycle instead.
+		const queried: unknown[] = [];
+		(globalThis as Record<string, unknown>).signal = (fn: () => number) => ({ query: () => queried.push(fn()) });
+		mount();
+		page.inlets.set_s1(0.25);
+
+		const knob = (page.win.m4lKnob as (n: number) => { query: () => void })(1);
+		knob.query();
+		page.inlets.set_s1(0.9); // the hand moves AFTER the pattern was evaluated
+		knob.query();
+		expect(queried).toEqual([0.25, 0.9]);
+
+		delete (globalThis as Record<string, unknown>).signal;
+	});
+
+	it("falls back to a plain number before the REPL has loaded its modules", () => {
+		// `signal` only reaches globalThis when the REPL calls evalScope, which is
+		// after this file runs. A number is the honest answer until then.
 		mount();
 		page.inlets.set_s1(0.75);
 		const m4lKnob = page.win.m4lKnob as (n: number) => number;
 		expect(m4lKnob(1)).toBe(0.75);
-		// A knob nobody has touched reads 0 rather than undefined: a pattern doing
-		// arithmetic on it must not get NaN.
-		expect(m4lKnob(8)).toBe(0);
-		expect(m4lKnob(99)).toBe(0);
+	});
+
+	it("reads an untouched or out-of-range dial as 0, never undefined", () => {
+		// A pattern doing arithmetic on it must not get NaN.
+		mount();
+		const raw = page.win.m4lKnobValue as (n: number) => number;
+		expect(raw(8)).toBe(0);
+		expect(raw(99)).toBe(0);
 	});
 
 	it("says it is ready, so the wrapper's log shows the page came up", () => {

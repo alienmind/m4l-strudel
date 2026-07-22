@@ -1,0 +1,62 @@
+# CLAUDE.md - working rules for agents in this repo
+
+This repo builds the Strudel family of Ableton Live devices on top of the
+`m4l-jweb` library (its own repo, sibling checkout). Start with `README.md`, then
+`doc/ARCHITECTURE.md` for how the layers fit, and `doc/TODO.md` for what is in
+flight. This file is only the house rules - the things that are not derivable
+from the code.
+
+## Asking for a test in Live
+
+Nothing here can be proven without Live, so a change lands as a build to be
+tested by hand. Make that request SCHEMATIC:
+
+1. Name the EXACT device - `alienmind-strudel`, not "the device".
+2. A table, and little else: check number, what to do, what should happen.
+3. One line on what is expected to still be broken at this stop.
+4. Ask for the result by check NUMBER, plus the Max console output.
+
+Do NOT re-explain how Live works. In particular, never repeat that Live embeds a
+copy of a device per set, or that an existing instance has to be deleted and
+re-dragged to pick up a build. That is known.
+
+Example of the whole thing:
+
+> Test **`alienmind-strudel`**.
+>
+> | # | Do this | Should happen |
+> |---|---------|---------------|
+> | 1 | Press REPL, evaluate `note("c3 e3 g3").s("sawtooth")` | Sound on the track |
+> | 2 | Save the set, reopen it | The pattern comes back |
+>
+> Expected still broken: the mini view's own engine still sounds separately.
+
+## Writing
+
+Plain ASCII punctuation in documentation, commit messages and code comments. No
+em dashes, en dashes, middle dots or typographic ellipses - use `-`, `...`, `,`.
+Signal-flow arrows (`->`) and glyphs standing for real UI buttons are fine.
+
+Comments should say what the code cannot: the constraint, the trap, the thing
+that was measured in Live and cost a day. Not what the next line does.
+
+## Recording what was learned
+
+`doc/TODO.md` is the live ledger: what passed, what it measured, and the exact
+next test. Finished work is DELETED from it rather than kept as a done-list - git
+history is the record of what shipped.
+
+`doc/DRAWER_OF_FAILED_IDEAS.md` is for approaches that were tried and did not
+work, WITH the reason. A failure recorded there is worth as much as a feature -
+it is what stops the same spike being run twice.
+
+## The two repos
+
+`m4l-jweb` is the library and this is its consumer. While both move together they
+are linked (`link:../m4l-jweb/packages/*` in `package.json`), so an edit there is
+live here with no publish.
+
+Anything general - patcher codegen, the Surface, window primitives, the wrapper
+protocol - belongs UPSTREAM in `m4l-jweb`, not here. Anything about these
+particular devices belongs here. When in doubt, ask whether another device repo
+would want it.
