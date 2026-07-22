@@ -355,6 +355,10 @@ function knob_label(_index?: number, ..._label: unknown[]): void {
 		} else {
 			obj.message("_parameter_shortname", label);
 		}
+		// The DEVICE VIEW wants this too: its fader bank shows the pattern's own
+		// names, and a fader appearing is what makes it the visible view. The dial
+		// itself is Live's; this is the same fact told to our own page.
+		outlet(0, "knob_desc", index, label);
 		var after = obj.getattr("_parameter_shortname");
 		post(
 			"strudel: knob_label " +
@@ -425,6 +429,9 @@ function knob_range(_index?: number, _lo?: number, _hi?: number): void {
 		}
 		var after = obj.getattr("_parameter_range");
 		var took = !!after && Number(after[0]) === lo && Number(after[1]) === hi;
+		// The device view's faders need the same two numbers, and whether the dial
+		// itself now carries them - the same question the shim asked.
+		outlet(0, "knob_desc_range", index, lo, hi, took ? 1 : 0);
 		post("strudel: knob_range " + varname + " -> " + String(after) + (took ? "" : " (did NOT take)") + "\n");
 		// The page has to know which domain its values are now in. reply() goes back
 		// to whichever window asked, which is the Studio (see core.ts).

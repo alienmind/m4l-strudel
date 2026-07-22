@@ -6,11 +6,26 @@ import { AboutPanel } from "../shared/AboutPanel";
 import { Button } from "../shared/Button";
 import { ControlsButton, ExportButton, RunButton } from "../shared/DeviceButtons";
 import { HelpButton } from "../shared/HelpButton";
-import { SliderRow } from "../shared/SliderRow";
 import { tokenAtCaret } from "@/lib/reference";
+import { FaderBank } from "./FaderBank";
+import { Visualizer } from "./Visualizer";
+import { useReplKnobs } from "./useReplKnobs";
 import { useReplRemote } from "./useReplRemote";
 import { useStrudelRender } from "./useStrudelRender";
 import surface from "./surface";
+
+/**
+ * The device view's three faces. The VISUALIZER is the default because it answers
+ * the question a device whose Studio window is shut cannot otherwise answer - is
+ * this playing, and what is it doing.
+ */
+const VIEWS = [
+	{ id: "visual", short: "~", title: "Visualizer: what the Studio is playing" },
+	{ id: "knobs", short: "|||", title: "Controls: the pattern's faders, full size" },
+	{ id: "code", short: "{}", title: "Code: a scratchpad for seeing and controlling" },
+] as const;
+
+type ViewId = (typeof VIEWS)[number]["id"];
 
 /**
  * Strudel - THE device of this repo, and an instrument. Write ANY Strudel - multi-line `$:`, samples,
@@ -43,6 +58,17 @@ export default function App() {
 	const strudelWindow = useWindow(surface, "strudel");
 	/** The local strudel.cc, which owns its own engine and its own audio (item 1). */
 	const replWindow = useWindow(surface, "repl");
+
+	const [view, setView] = useState<ViewId>("visual");
+	/** Once the user picks a view by hand, stop moving it under them. */
+	const [viewPinned, setViewPinned] = useState(false);
+	const { faders, declared } = useReplKnobs();
+
+	// A fader appearing in the code means there is now something to GRAB, and
+	// hunting for the view to grab it in is the friction this removes.
+	useEffect(() => {
+		if (declared && !viewPinned) setView("knobs");
+	}, [declared, viewPinned]);
 	// Live's transport and the eight native dials reach the DEVICE, never a floating
 	// window - so the device view passes them on to the REPL's page.
 	useReplRemote();
@@ -102,19 +128,45 @@ export default function App() {
 				<HelpButton onOpen={helpWindow.open} />
 			</div>
 
-			<PatternEditor
-				value={s.text}
-				onChange={s.setText}
-				onCaret={(caret) => setHelpQuery(tokenAtCaret(s.text, caret))}
-				onRun={s.run}
-				spans={[]}
-				invalid={Boolean(error)}
-			/>
+			{/* THREE VIEWS, and a strip to pick one. The device view is 169 px tall and
+			    does not scroll, so only one of them can be up at a time and the strip is
+			    icons rather than tabs. */}
+			<div className="flex min-h-0 flex-1 gap-1">
+				<div className="flex shrink-0 flex-col gap-0.5">
+					{VIEWS.map((v) => (
+						<button
+							key={v.id}
+							onClick={() => {
+								setView(v.id);
+								setViewPinned(true);
+							}}
+							title={v.title}
+							className={`rounded px-1 py-0.5 text-[9px] leading-none transition-colors cursor-pointer ${
+								view === v.id ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-primary"
+							}`}
+						>
+							{v.short}
+						</button>
+					))}
+				</div>
+
+				<div className="min-w-0 flex-1">
+					{view === "visual" && <Visualizer />}
+					{view === "knobs" && <FaderBank faders={faders.length ? faders : s.sliders} />}
+					{view === "code" && (
+						<PatternEditor
+							value={s.text}
+							onChange={s.setText}
+							onCaret={(caret) => setHelpQuery(tokenAtCaret(s.text, caret))}
+							onRun={s.run}
+							spans={[]}
+							invalid={Boolean(error)}
+						/>
+					)}
+				</div>
+			</div>
 
 			{error && <span className="truncate text-[10px] leading-none text-destructive">{error}</span>}
-
-			{/* Every slider() in the pattern, live, on a native knob (S1..S8). */}
-			<SliderRow sliders={s.sliders} />
 
 			{s.exportNote && (
 				<div className="flex items-center gap-2">
