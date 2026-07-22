@@ -186,12 +186,12 @@ describe("m4l-shim", () => {
 		mount();
 
 		const knob = (page.win.m4lKnob as (n: number, o: unknown) => { query: () => void })(1, { name: "cutoff", range: [200, 2200] });
-		expect(sent(page.outlets, "knob_range")).toEqual([["knob_range", 0, 200, 2200]]);
+		expect(sent(page.outlets, "param_range")).toEqual([["param_range", "s1", 200, 2200]]);
 
 		page.inlets.set_s1(0.5); // still 0..1: the device has not answered yet
 		knob.query();
 
-		page.inlets.knob_range_ok(0); // Live took it - values now arrive in real units
+		page.inlets.param_range_ok("s1"); // Live took it - values now arrive in real units
 		page.inlets.set_s1(600);
 		knob.query();
 
@@ -220,15 +220,15 @@ describe("m4l-shim", () => {
 		m4lKnob(1, { name: "cutoff", unit: "Hz" }); // a re-evaluation, same name
 		// The unit is NOT in the name - a dial is a few characters wide, and Live has
 		// its own attribute for what makes a readout say "600 Hz".
-		expect(sent(page.outlets, "knob_label")).toEqual([["knob_label", 0, "cutoff"]]);
-		expect(sent(page.outlets, "knob_unit")).toEqual([["knob_unit", 0, "Hz"]]);
+		expect(sent(page.outlets, "param_label")).toEqual([["param_label", "s1", "cutoff"]]);
+		expect(sent(page.outlets, "param_unit")).toEqual([["param_unit", "s1", "Hz"]]);
 
 		// A dial with no description says nothing rather than clearing the name.
 		m4lKnob(2);
-		expect(sent(page.outlets, "knob_label")).toHaveLength(1);
+		expect(sent(page.outlets, "param_label")).toHaveLength(1);
 
 		m4lKnob(1, { name: "room" });
-		expect(sent(page.outlets, "knob_label").pop()).toEqual(["knob_label", 0, "room"]);
+		expect(sent(page.outlets, "param_label").pop()).toEqual(["param_label", "s1", "room"]);
 	});
 
 	it("names a dial even when the REPL turned the name into a pattern", () => {
@@ -240,8 +240,8 @@ describe("m4l-shim", () => {
 		const m4lKnob = page.win.m4lKnob as (n: number, o?: unknown) => unknown;
 
 		m4lKnob(1, { name: pattern, unit: { queryArc: () => [{ value: "Hz" }] } });
-		expect(sent(page.outlets, "knob_label")).toEqual([["knob_label", 0, "cutoff"]]);
-		expect(sent(page.outlets, "knob_unit")).toEqual([["knob_unit", 0, "Hz"]]);
+		expect(sent(page.outlets, "param_label")).toEqual([["param_label", "s1", "cutoff"]]);
+		expect(sent(page.outlets, "param_unit")).toEqual([["param_unit", "s1", "Hz"]]);
 	});
 
 	it("reads an untouched or out-of-range dial as 0, never undefined", () => {
