@@ -50,6 +50,28 @@ We also deliver **additional utility instruments** that showcase different capab
 | **Strudel Samples** (`alienmind-strudel-sample-browser.amxd`) | Instrument | Allows you to explore the collections of community samples, and play them in sync with your beat. Auditioning downloads the file next to the device; drag it out into a Simpler, a Drum Rack or a track. |
 
 
+## Controls: your sliders on Ableton's knobs
+
+A `slider()` in your pattern becomes one of the device's eight native dials, in source
+order - automatable, MIDI-mappable, on Push:
+
+```js
+s("sawtooth").lpf(slider(500, 100, 1000))
+```
+
+The dial travels the slider's own range (100..1000 here, not 0..1) and starts where the
+code says. Turning it changes the sound immediately.
+
+Name it, and give it a unit, and the dial says so too:
+
+```js
+s("sawtooth").lpf(slider(500, 100, 1000, 1, { name: 'cutoff', unit: 'Hz' }))
+```
+
+That is still ordinary Strudel - the same line runs on strudel.cc, which ignores the
+extra options rather than choking on them. See
+[STRUDEL-SUPPORT.md](doc/STRUDEL-SUPPORT.md) for what carries and what does not.
+
 ## Quick Examples
 
 If you are eager to jump in, here are a few valid patterns you can drop straight into the respective devices to get started immediately:

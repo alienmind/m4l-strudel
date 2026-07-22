@@ -418,6 +418,28 @@ answers whether each range took (`param_range_ok` / `param_range_failed`) and th
 borrower scales exactly once. The mechanism is the library's, not this repo's:
 `describeParam()` / `onParamRange()` / `useControls()` in `@m4l-jweb`.
 
+**The pattern's own `slider()` calls reach the dials too, and that is the preferred
+idiom** - a Strudel coder should not have to learn one of ours to reach a knob. It needs
+no change to strudel: after each evaluation `strudelMirror.widgets` carries every slider
+(`{ id, from, to, value, min, max }`, `id` being the character range of the first
+argument, ascending `from` being source order), and
+`window.postMessage({ type: 'cm-slider', id, value })` sets the value the pattern's
+`ref()` reads on its next query. The first eight take `s1..s8`.
+
+A dial deliberately does NOT rewrite the code text, which is the other half of what
+dragging the inline widget does (`view.dispatch({ changes })`): automation moves a dial
+dozens of times a second, and rewriting the document at that rate would fight the typing
+and keep the set dirty. The number in the code is the DECLARED value; the widget's thumb
+is nudged in the DOM so the page does not look frozen.
+
+Names and units come from an optional options object -
+`slider(500, 100, 1000, 1, { name: 'cutoff', unit: 'Hz' })` - which already RUNS in stock
+strudel (the transpiler reads four arguments, `sliderWithID` ignores the rest) but is
+dropped before anything can read it back. Until that lands upstream
+(doc/FEAT-SLIDERS.md) the shim parses it out of the code, failing soft. A slot is
+released when its slider stops existing, and only if a slider held it - a dial named by
+`m4lKnob()` is not the slider layer's to reset.
+
 **Still not renameable:** Live's parameter registry and the Rack macro picker keep
 `S1..S8`. A frozen device cannot rename a parameter there, so any UI of ours renders
 the name itself rather than relying on the dial to carry it.
