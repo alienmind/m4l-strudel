@@ -30,14 +30,54 @@ Because it uses the real `@strudel/superdough` engine under the hood, **everythi
 - **Audio Effects:** `.room()`, `.lpf()`, `.crush()`, `.delay()` - all pattern-attached audio effects work exactly as they do on the web.
 - **Multi-line:** `$:`, `stack()`, orbits, etc.
 
+### Controls: `slider()`, and what m4l adds to it
+
+A `slider()` in your pattern lands on one of the device's eight native dials
+(`S1..S8`), in source order, so it automates, MIDI-maps and reaches Push:
+
+```js
+s("sawtooth").lpf(slider(500, 100, 1000))
+```
+
+The dial takes the slider's REAL range - it travels 100..1000, not 0..1 - and starts at
+the value the code declares. Turning it changes the sound immediately, with no
+re-evaluation, exactly as dragging the inline slider does.
+
+A slider can also say what it IS, with an optional options object:
+
+```js
+s("sawtooth").lpf(slider(500, 100, 1000, 1, { name: 'cutoff', unit: 'Hz' }))
+```
+
+| Option | What it does |
+|---|---|
+| `name` | Names the dial on the device panel and the fader in the device view |
+| `unit` | How Live prints the value - `Hz`, `dB`, `ms`, `%`, `st`, or any string |
+| `order` | Overrides source order when assigning dials |
+
+**This is not a fork of Strudel.** That call runs unchanged on strudel.cc: the
+transpiler reads the first four arguments and ignores the rest, so the options are
+simply dropped there. It is proposed upstream (doc/FEAT-SLIDERS.md); until it lands,
+this device parses them out of your code itself.
+
+Two honest limits:
+
+- **The code text does not change when you turn a dial.** Dragging the inline slider
+  rewrites the number in your source; a Live dial does not, because automation moves it
+  dozens of times a second and rewriting the document at that rate would fight your
+  typing. The number in the code stays the DECLARED value; the sound follows the dial.
+- **Live's parameter registry keeps `S1..S8`.** The name reaches the device panel but
+  not the Rack macro picker - a frozen Max device cannot rename a parameter there.
+
+`m4lKnob(n, { name, unit, range })` still exists and does the same job for patterns that
+want a dial without declaring a slider.
+
 ### Limitations & Exceptions
 
-Because Live does not allow the embedded browser's real-time `AudioContext` to output audio into the track (see *Why not just run Strudel's audio engine in real-time?* below), this device renders the audio **offline** and loops it. This introduces specific constraints:
-
-- **1-Pattern Lag:** When you change the code, it renders the new pattern in the background and crossfades to it at the *next loop boundary*. Your changes are not instant.
-- **No Real-Time Knob Tweaking:** Knobs and sliders (`s1`..`s8`) also suffer from the same 1-loop delay. Turning a knob triggers a re-render for the next cycle; it does not smoothly sweep a filter in real time.
-- **Not Yet MIDI Aware:** The superdough engine in this device does not currently process inbound MIDI notes from Ableton.
-- **Randomness is Locked per Loop:** If you use `irand` or `choose`, the offline renderer generates one realization of that randomness per loop. The exact same random values will repeat every cycle until you edit the code.
+- **Not Yet MIDI Aware:** this device does not currently process inbound MIDI notes from
+  Ableton (see doc/TODO.md).
+- **Export bounces the device view's scratchpad**, not the Studio's pattern - the two run
+  separate engines. Being resolved; see doc/TODO.md.
 
 ---
 
