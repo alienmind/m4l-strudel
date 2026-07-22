@@ -196,7 +196,10 @@ describe("m4l-shim", () => {
 
 		m4lKnob(1, { name: "cutoff", unit: "Hz" });
 		m4lKnob(1, { name: "cutoff", unit: "Hz" }); // a re-evaluation, same name
-		expect(sent(page.outlets, "knob_label")).toEqual([["knob_label", 0, "cutoff (Hz)"]]);
+		// The unit is NOT in the name - a dial is a few characters wide, and Live has
+		// its own attribute for what makes a readout say "600 Hz".
+		expect(sent(page.outlets, "knob_label")).toEqual([["knob_label", 0, "cutoff"]]);
+		expect(sent(page.outlets, "knob_unit")).toEqual([["knob_unit", 0, "Hz"]]);
 
 		// A dial with no description says nothing rather than clearing the name.
 		m4lKnob(2);
@@ -215,7 +218,8 @@ describe("m4l-shim", () => {
 		const m4lKnob = page.win.m4lKnob as (n: number, o?: unknown) => unknown;
 
 		m4lKnob(1, { name: pattern, unit: { queryArc: () => [{ value: "Hz" }] } });
-		expect(sent(page.outlets, "knob_label")).toEqual([["knob_label", 0, "cutoff (Hz)"]]);
+		expect(sent(page.outlets, "knob_label")).toEqual([["knob_label", 0, "cutoff"]]);
+		expect(sent(page.outlets, "knob_unit")).toEqual([["knob_unit", 0, "Hz"]]);
 	});
 
 	it("reads an untouched or out-of-range dial as 0, never undefined", () => {
