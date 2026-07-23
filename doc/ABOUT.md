@@ -12,7 +12,7 @@ Bring generative sequencing, euclidean rhythms, and algorithmic composition dire
 
 ---
 
-## New in 1.1.0
+## New in 1.2.0
 
 - **The Studio is the instrument.** The Strudel device's sound is no longer made in the device view: it is made by a full local strudel.cc app running in a floating window. Its editor, its scheduler, its superdough, its visualisers. Evaluating a pattern there is what the track plays, and closing the window does not stop it.
 - **A pattern can describe a dial.** `note("c3 e3").s("sawtooth").lpf(m4lKnob(1, { name: 'cutoff', unit: 'Hz', range: [200, 2200] }))` binds directly to native dials, scaling values correctly.
