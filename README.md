@@ -1,5 +1,7 @@
 # m4l-strudel - A Hybrid Live Coding Experiment
 
+> **[UNOFFICIAL NOTE]** - This is neither an official project nor a component of Strudel, but rather an independent, AGPL-licensed derivative product (see [LICENSE](https://github.com/alienmind/m4l-strudel/blob/main/LICENSE)). For the original Strudel source code, please visit [https://codeberg.org/uzu/strudel](https://codeberg.org/uzu/strudel).
+
 ![Devices overview - Strudel MIDI, Drums MIDI, Drums Sampler, Audio FX and the sample browser](doc/screenshot-all-devices.png)
 
 This started as a fun experiment: *How cool is Strudel! Can I connect it to Ableton and control it from the Push to create the ultimate hybrid workflow?*
