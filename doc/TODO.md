@@ -29,100 +29,7 @@ rather than describing a device-side workaround twice. See
 
 ## Open Tasks
 
-### 1. FIXME - HIGH PRIORITY - the Studio's audio is choppy and jittery
-
-**Reported from Live, 2026-07-22.** Sound from the Studio window is unreliable: audible
-jitter, dropouts, and lag. Everything below is ASSESSMENT, not a fix - nothing here has
-been tried yet.
-
-#### The prime suspect, and it is one attribute
-
-`[jweb~]` has a documented `latency` attribute, and **we never set it**, on either the
-window's object or the device-view template. From the Max 9 reference:
-
-> Sets the output latency in milliseconds. Setting the latency to 0 will set the minimum
-> possible latency (around 23ms at 44.1kHz sampling rate; around 21ms at 48kHz). **The
-> minimum latency may result in occasional drop-outs or distortion.** The maximum latency
-> is three times the minimum.
-
-So the object ships with a ring buffer between Chromium's audio thread and MSP, its size
-is settable, and the smallest setting is documented to do exactly what is being heard.
-If the default is the minimum, this is the whole bug and the fix is an attribute in
-`applyWindows` (upstream m4l-jweb, on the `audio: true` primitive).
-
-**First test, before anything else:** open the generated patcher, set `latency` on the
-window's `[jweb~]` to its maximum (3x minimum, so ~65-70 ms), and listen. If it cleans
-up, the only remaining question is what value to ship and whether to expose it as a
-`window({ audio: true, latency: ... })` option. The cost is delay, which matters little
-for an instrument whose transport Live already schedules.
-
-#### Second suspect: our own message traffic
-
-The level tap for the visualizer runs `[peakamp~ 10]` on both channels - **100 messages
-per second per channel** into `[js]`, which then outlets them to the device page. `[js]`
-is single-threaded and shares that thread with the wrapper's other work. This was
-introduced in the same release the choppiness appeared in, and it did not exist when the
-Studio was first tested and sounded clean.
-
-**Test:** raise the interval to 40-50 ms (or comment the tap out of the codegen) and
-listen. Cheap to try, and it costs only visualizer smoothness if it turns out to be the
-cause.
-
-#### Third suspect: two engines and two AudioContexts
-
-The device page still boots superdough, loads sample maps and runs its own engine for
-the scratchpad, while the Studio page runs the real one. Two Chromium audio graphs in
-one device, and the device page's is doing work even when its scratchpad is empty.
-
-**Test:** empty scratchpad, then check whether the device page's engine can be left
-un-booted until something is typed into it.
-
-#### Fourth: the Studio page's own main thread
-
-The window renders a full CodeMirror UI, strudel's visualisers and any hydra canvas at
-frame rate, in the same process as its audio. A busy main thread starves the audio
-callback. Related: the window's `[jweb~]` carries `rendermode: 1` - **check which of
-`onscreen`/`offscreen` that is**, because the reference says offscreen "is slower", and
-we chose the value without measuring it.
-
-**Test:** close every panel in the Studio, stop any visualiser, and compare.
-
-#### What is NOT a suspect
-
-Clock drift and re-anchoring, which was the failure mode of the retired device-page
-engine (ARCHITECTURE 4f). The Studio owns its own scheduler and its own AudioContext and
-does not map between two clocks - there is nothing to drift against.
-
-### 2. FEAT - shadcn for the shared UI components
-
-The device chrome - `Button`, `AboutPanel`, `PatternEditor`, `SliderRow`, `FaderBank` -
-is hand-rolled Tailwind. Moving it onto shadcn primitives would make it conventional and
-maintainable, and would give the code view a real editor rather than a textarea.
-
-**What makes it non-trivial:** the palette. This repo deliberately went monochrome (see
-`Button` - "the devices were each inventing their own primary/accent/destructive
-buttons, which read as five different apps"), and shadcn ships opinionated colour
-tokens. Adopt the primitives and keep the palette; do not inherit the theme wholesale.
-
-And the budget: 169 px tall, five devices. Every component has to be re-checked at that
-size, not just compiled.
-
-### 3. FEAT - JavaScript syntax highlighting in the code view
-
-The device view's scratchpad is a plain textarea with a highlight layer behind it (that
-layer already exists - it draws the sounding-step marks). Strudel code in it is
-unreadable at a glance.
-
-Two routes:
-- **A small tokenizer** feeding the existing layer. Cheap, no new dependency, good
-  enough for strings/numbers/comments/method names.
-- **CodeMirror**, which is what the Studio runs and is already in the repo through the
-  submodule. Correct highlighting and bracket matching for free, at the cost of a much
-  bigger bundle in a 169 px view.
-
-Prefer the tokenizer unless the editor grows features that need a real editor.
-
-### 4. FIXME - Export renders, then places nothing
+### 1. FIXME - Export renders, then places nothing
 
 **Seen in Live on 1.0.0.** Export renders and fails at the last step with
 `could not place save: -1 bytes at destination`. `-1` is what the wrapper reports when
@@ -148,7 +55,7 @@ that is the engine the device page has, and the music now lives in the Studio. E
 moves behind the shim (the Studio renders and saves) or it is cut. Decide before it is
 fixed - there is no point fixing a bounce of the wrong thing.
 
-### 5. FIXME - the path on the clipboard, still unconfirmed
+### 2. FIXME - the path on the clipboard, still unconfirmed
 
 Never verified end to end, because Export never wrote a file (item 1): the button that
 reveals the path only appears once something has been written.
@@ -166,7 +73,7 @@ manual field turns out not to receive Ctrl+C inside jweb either, then a device p
 cannot reach the system clipboard at all and the answer is a Max-side one, or none.
 History of what does not work: [DRAWER_OF_FAILED_IDEAS.md](DRAWER_OF_FAILED_IDEAS.md).
 
-### 6. FEAT - native MIDI input (`midiIn`/`kb()`) and MIDI output
+### 3. FEAT - native MIDI input (`midiIn`/`kb()`) and MIDI output
 
 Wanted in the device view's SCRATCHPAD as much as in the main pattern: the point of a
 second instance is control code, and `midiin` is not on this device's chain list yet.
@@ -192,7 +99,7 @@ devices. What is missing is (in) feeding live notes into the pattern scope and
 
   NOTE: For this one, I would need examples on how to use (concrete strudel patterns) for midi routing from within the device
 
-### 7. FEAT - orbit() support (multichannel out)
+### 4. FEAT - orbit() support (multichannel out)
 
 **Assessment.** Valid, UNVERIFIED at its foundation. superdough can already render
 orbits to separate channel pairs (`initAudio({ multiChannelOrbits: true })` exists),
@@ -210,7 +117,7 @@ build emits jweb~ with 2N channels and the `webaudio` chain fans pairs to
 `duck()` then works inside superdough with no Max help at all (it is orbit-level
 DSP in the page). If the spike fails: park in the drawer with the finding.
 
-### 8. FEAT - cross-device coordination in the Rack
+### 5. FEAT - cross-device coordination in the Rack
 
 **Assessment.** Valid, big, and last for a reason: it depends on nothing above but
 informs its value. Two separable halves that the original text mixed: (a) a
@@ -229,7 +136,7 @@ device consumes them exactly like its app's own `set_<id>` writes (the fan-in
 already exists in `fanParamInto`). A Rack the user builds maps its 16 macros
 across both devices' dials. Explicitly out of scope: any cross-TRACK routing.
 
-### 9. TEST - verify offline behavior in Live
+### 6. TEST - verify offline behavior in Live
 
 **Assessment.** Partly done. The persistent page-side cache shipped in 1.0.0 and was
 verified in Live: a sample played once online still plays after a restart with the

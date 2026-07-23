@@ -310,8 +310,9 @@ Auditioning is still acquiring - there is no separate Download button, because p
 
 Every device draws from one set of parts, so the six faces read as one product rather than six apps:
 
-- **`shared/Button.tsx`** - one black-and-white (grey) button. `active` is the only lift (a faint primary wash, e.g. Run while playing); there are no accent/primary/destructive colours any more. Primary actions sit in the top bar, the `?` (`HelpButton`) rightmost.
+- **`shared/Button.tsx`** - one black-and-white (grey) button, built on shadcn's shape without shadcn's palette: a `class-variance-authority` (`cva`) recipe of `variant` (`solid`/`ghost`/`link`) and `size`, with `cn` merging the caller's classes, but every colour token resolves through this repo's monochrome theme (index.css, each falling back to a `--live-*` variable) so a device reads as part of Live. `active` is the only lift (a faint primary wash, e.g. Run while playing), applied as a `cva` compound variant; there are no accent/primary/destructive colours. Primary actions sit in the top bar, the `?` (`HelpButton`) rightmost. Adopting the `cva` shape here is the shadcn migration the backlog once tracked - the primitive's structure is conventional, the palette stays ours; the other chrome parts follow the same pattern as they are touched, not in a big-bang rewrite.
 - **`shared/AboutPanel.tsx`** - the title opens it. It carries an **Advanced** section with the device's set-once, native affordances so they do not clutter the top bar: **Full Studio** (the pattern devices' big editor window, `onOpenStudio`) and **Controls** (`onShowControls`, revealing the native panel - the MIDI device's mappable Play/Stop). The FX device is the exception: its native **Knobs** panel is the primary interaction, so it keeps that button in the top bar.
+- **`shared/PatternEditor.tsx` + `lib/highlight.ts`** - the device view's scratchpad is a `<textarea>` with a painted layer behind it, and `lib/highlight.ts` is a single-pass regex tokenizer (strings, numbers, comments, called methods, keywords, punctuation) that colours it. NOT a parser and deliberately not CodeMirror: the view is 169 px tall and what it needs is legibility, not a grammar. A double-quoted string earns the strongest colour because in Strudel it is mini notation - the pattern itself. The tokenizer never throws and never drops a character (the concatenation of all runs equals the input, pinned by `highlight.test.ts`); a lost character would silently corrupt what the user sees they typed. Bracket matching or scope-aware completion would be the reason to move this view to CodeMirror rather than to grow the tokenizer.
 
 ### 4f. The Strudel device: all of Strudel, live
 
@@ -401,6 +402,15 @@ Facts this shape rests on, all measured in Live (2026-07-22):
   rect is accepted and never redrawn. A resizable window therefore shows its PATCHING
   canvas with the page at the origin and the plumbing parked above it, and the wrapper
   polls the window size and fits the page to it.
+- **`[jweb~]` needs its `latency` attribute set, or it underruns.** The object carries a
+  ring buffer between Chromium's audio thread and MSP, and its default (the ~21 ms
+  minimum at 48 kHz) drops out within ~30 s on a sustained tone. The Studio window ships
+  `latency: 66` - the documented maximum, 3x the minimum, which jweb clamps to - and the
+  buffer then absorbs Chromium's scheduling hiccups. The cost is ~66 ms of output delay,
+  which Live's look-ahead hides for an instrument. `rendermode` stays at its default `1`
+  (offscreen): `0` (onscreen) halts the graph outright, as does withholding the
+  device-page engine (doc/DRAWER_OF_FAILED_IDEAS.md). The option lives on the library's
+  `window({ audio: true, latency })` primitive.
 
 `src/app/strudel/repl-shim/m4l-shim.js` is the only line of ours inside that app: it
 arms the audio (the REPL waits for a `mousedown` that a hidden window never gets),

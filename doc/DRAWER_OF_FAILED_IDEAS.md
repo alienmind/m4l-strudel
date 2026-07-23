@@ -542,3 +542,26 @@ What shipped instead: a `[peakamp~]` tap on the window's outlets at 10 ms, drawn
 device view as its own trace. Honest at that rate, and it costs two floats per report.
 If the mirrored picture is ever wanted badly enough, measure the frame cost on the
 AUDIO page first - that is the number that decides it, not the message size.
+
+## Three non-fixes for the choppy Studio (2026-07-23)
+
+The Studio's dropouts had one cause - the unset `[jweb~]` `latency` (now shipped at 66,
+see ARCHITECTURE 4k). A spike matrix on branch feat/strudel-performance tested three
+other suspects against a sustained tone; each is recorded here so none is re-run:
+
+- **Slower level tap.** Raising `[peakamp~]` from 10 ms to 50 ms (5x less message
+  traffic into `[js]`) changed nothing audible - the tap was never the load. The tap
+  stays at 10 ms.
+- **`rendermode: 0` (onscreen).** The Max reference calls offscreen "slower", so onscreen
+  looked like a free win. It HALTS the audio graph within seconds. The default `1`
+  (offscreen) is not a mistake to fix; it is required.
+- **Withholding the device-page engine.** The device view boots its own superdough for
+  the scratchpad, a second AudioContext alongside the Studio's; leaving it un-booted until
+  the scratchpad is played was expected to free the audio thread. It HALTS the Studio's
+  sound outright within 3-4 s. The two graphs are not independent the way the model
+  assumed, and the device-page engine boots at load as before.
+
+Method note: none of these could be told apart from inside the page. `outputLatency`
+sits upstream of the `[jweb~]` ring buffer, so the console's `drift` numbers looked
+identical across all four while only `latency` mattered. A sustained tone and the ear
+were the instrument that resolved it; a dense pattern hid the dropouts entirely.
