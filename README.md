@@ -101,6 +101,23 @@ s("sawtooth").lpf(800).room(.3)
 .lpf(800).gain(1.2)
 ```
 
+## Tight sync: correct the Studio's output delay
+
+The main **Strudel** device buffers its audio by ~66 ms so it never drops out (the sound
+engine runs in a browser inside Live, and a buffer that small stutters). That delay is
+constant and predictable, so it is trivial to cancel for a perfectly tight mix: set the
+track's **Track Delay to -66 ms**.
+
+- The field is in the track header (right-click the track > **Show/Hide Track Delay**, or
+  it is under the track name in the mixer). It takes milliseconds, negative to pull the
+  track EARLIER.
+- `-66` matches what the device adds. If you hear it slightly ahead or behind against
+  other tracks, nudge a few ms either way - your interface adds a little of its own.
+- It only matters when Strudel plays ALONGSIDE other tracks. Solo, or as the only
+  instrument, the offset is inaudible and you can leave it at 0.
+- Track Delay is not automatable and not saved to a clip - it is a per-track setting, so
+  set it once per track that hosts the device.
+
 ## Download
 
 You can download the pre-built `.amxd` devices ready for Ableton Live from:
