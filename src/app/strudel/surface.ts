@@ -96,6 +96,18 @@ export default defineSurface({
 			width: 1100,
 			height: 760,
 			audio: true,
+			// The [jweb~] ring buffer between Chromium's audio thread and MSP. At the
+			// object's default (the ~21 ms minimum at 48 kHz) the Studio underran within
+			// ~30 s - audible dropouts on a sustained tone. 66 ms asks for the documented
+			// maximum (3x the minimum, jweb clamps); the buffer then rides out Chromium's
+			// scheduling hiccups and the sound is clean. The cost is ~66 ms of output
+			// delay, which Live's look-ahead absorbs for an instrument.
+			//
+			// Measured on branch feat/strudel-performance against a spike matrix: raising
+			// the level-tap interval did nothing, and BOTH `rendermode: 0` (onscreen) and
+			// not booting the device-page engine HALTED the audio graph outright. See
+			// doc/DRAWER_OF_FAILED_IDEAS.md.
+			latency: 66,
 			site: "dist/repl-site",
 			// This is a window you WORK in while the set plays, so the default -
 			// falling behind Live the moment Live is clicked - is wrong for it.
