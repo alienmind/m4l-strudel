@@ -8,7 +8,7 @@ title: "m4l-strudel"
 
 Bring generative sequencing, euclidean rhythms, and algorithmic composition directly into your Ableton Session.
 
-[Download Latest Release](https://github.com/alienmind/m4l-strudel/releases/latest) | [Get it on Gumroad](https://alienmindzzz.gumroad.com/l/m4l-strudel) (might be outdated)
+[Download Latest Release](https://github.com/alienmind/m4l-strudel/releases/latest) | [Get it on Gumroad](https://alienmindzzz.gumroad.com/l/m4l-strudel-devices)
 
 ---
 
