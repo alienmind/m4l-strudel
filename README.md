@@ -2,11 +2,11 @@
 
 > **[UNOFFICIAL NOTE]** - This is neither an official project nor a component of Strudel, but rather an independent, AGPL-licensed derivative product (see [LICENSE](https://github.com/alienmind/m4l-strudel/blob/main/LICENSE)). For the original Strudel source code, please visit [https://codeberg.org/uzu/strudel](https://codeberg.org/uzu/strudel).
 
-![Devices overview - Strudel MIDI, Drums MIDI, Drums Sampler, Audio FX and the sample browser](doc/screenshot-all-devices.png)
-
 This started as a fun experiment: *How cool is Strudel! Can I connect it to Ableton and control it from the Push to create the ultimate hybrid workflow?*
 
 The result is a set of **Max for Live devices** that bring [Strudel](https://strudel.cc) - the JavaScript port of TidalCycles' pattern language - natively into Ableton Live. No browser tab, no virtual MIDI cables, no sync hacks: the real `@strudel/core` engine runs headlessly inside each device, locked to Live's transport, and fully mappable to Ableton Push for hands-on control!
+
+![Devices overview - Strudel MIDI, Drums MIDI, Drums Sampler, Audio FX and the sample browser](doc/screenshot-all-devices.png)
 
 > **New here? Start with the [user guide](doc/ABOUT.md)** - every control of every device explained.
 
