@@ -7,10 +7,18 @@ This started as a fun experiment: *How cool is Strudel! Can I connect it to Able
 The result is a set of **Max for Live devices** that bring [Strudel](https://strudel.cc) - the JavaScript port of TidalCycles' pattern language - natively into Ableton Live. No browser tab, no virtual MIDI cables, no sync hacks: the real `@strudel/core` engine runs headlessly inside each device, locked to Live's transport, and fully mappable to Ableton Push for hands-on control!
 
 > **New here? Start with the [user guide](doc/ABOUT.md)** - every control of every device explained.
-> 
-> **Note:** The pattern language is fully supported, but Strudel's *sound engine* is not. For a full list of what is supported and how it differs from the web version, see [doc/STRUDEL-SUPPORT.md](doc/STRUDEL-SUPPORT.md).
 
-> ⚠️ **Highly Experimental Limitation:** This is not ready for real music production, just a fun experiment. Sound can be choppy and timing is unreliable. The main instrument (**Strudel**) plays the real superdough engine live in the device, so edits and knob turns are audible immediately - but performance is not ideal and can be easily go out of sync with the track.
+## Download
+
+You can download the pre-built `.amxd` devices ready for Ableton Live from:
+- **[Download Latest Release](https://github.com/alienmind/m4l-strudel/releases/latest)**
+- **[Gumroad](https://alienmindzzz.gumroad.com/l/m4l-strudel)** (might be outdated)
+
+## Install
+
+Once downloaded, simply extract the ZIP file and copy the `.amxd` devices into your Ableton **User Library** (e.g. `User Library/Max For Live/m4l-strudel/`).
+
+> ⚠️ **Highly Experimental Limitation:** This is not ready for real music production, just a fun experiment. Sound can be choppy and timing is unreliable. The main instrument (**Strudel**) plays the real superdough engine live in the device, so edits and knob turns are audible immediately - but performance is still not ideal and can go out of sync with the track.
 
 ## What this project does
 
@@ -23,8 +31,6 @@ The result is a set of **Max for Live devices** that bring [Strudel](https://str
 ![Strudel Drums MIDI Kit Mapping](doc/screenshot-midi-drums-mapping.png)
 
 - **A code-driven drum sampler.** The **Strudel Drums Sampler** plays samples itself: write `s("bd sd, hh*8")`, pick a drum-machine **bank**, and it fetches and plays that machine's sounds - sixteen voices, driven by code (or by MIDI notes in front of it).
-
-
 
 - **It's really Live-native.** Launch a clip on the device's track and the pattern starts; stop it and the pattern stops. On a track with no clips, Live's own Play does the same. Patterns start on the bar, follow tempo automation, and notes land on the track the device sits on. Everything renders inside the device UI.
 - **From sketch to clip.** The MIDI device can freeze any pattern into a regular MIDI clip (and read clips back into mini-notation), so generative sketches become ordinary arrangeable material. It also doubles as a two-way translator for *understanding* Strudel: freeze a pattern you cannot quite read into a clip and **see** it in the piano roll, or drop a clip you already know and read its mini-notation - each side explains the other.
@@ -101,7 +107,7 @@ s("sawtooth").lpf(800).room(.3)
 .lpf(800).gain(1.2)
 ```
 
-## Tight sync: correct the Studio's output delay
+## Notes for producers: How to get a tight sync: correct the Studio's output delay!
 
 The main **Strudel** device buffers its audio by ~66 ms so it never drops out (the sound
 engine runs in a browser inside Live, and a buffer that small stutters). That delay is
@@ -118,24 +124,6 @@ track's **Track Delay to -66 ms**.
 - Track Delay is not automatable and not saved to a clip - it is a per-track setting, so
   set it once per track that hosts the device.
 
-## Download
-
-You can download the pre-built `.amxd` devices ready for Ableton Live from:
-- **[Download Latest Release](https://github.com/alienmind/m4l-strudel/releases/latest)**
-- **[Gumroad](https://alienmindzzz.gumroad.com/l/m4l-strudel)** (might be outdated)
-
-## Install
-
-Once downloaded, simply extract the ZIP file and copy the `.amxd` devices into your Ableton **User Library** (e.g. `User Library/Max For Live/m4l-strudel/`).
-
-**One exception to self-contained:** the Strudel device ships with a folder,
-`alienmind-strudel-site/`, holding the offline strudel.cc its Studio window runs. Copy
-it next to the `.amxd` - the two travel together, and the device says so in the Max
-console if the folder is missing. Everything else is embedded as before.
-
-Each `.amxd` is otherwise fully **self-contained** - its own React UI bundle, with the Strudel engine inside every device that reads Strudel code (everything except the sample browser) - and unpacks itself on first load. Drag from Live's browser onto a MIDI track - the instruments (Strudel, Strudel Synth, Drums Sampler, Strudel Samples) fill its instrument slot and the MIDI effects (Strudel MIDI, Drums MIDI) go in front of one - or drop Strudel Audio FX, the only audio effect here, on any track carrying sound. Nothing ships loose beside the devices, and nothing runs a Node process.
-
-*(For developers building from source, you can use `pnpm install:device` to automatically copy the compiled devices to your local Ableton User Library).*
 
 ## Build & test
 
@@ -151,6 +139,7 @@ pnpm dev:sample-browser # browser dev for the sample browser
 pnpm dev:fx         # browser dev for the Audio FX device
 pnpm dev:strudel    # browser dev for the main Strudel device
 pnpm dev:synth      # browser dev for the Synth device
+pnpm install:device # automatically copy the compiled devices to your local Ableton User Library)
 ```
 
 For full details on building these devices with the underlying framework from scratch, read [doc/M4L-JWEB-GUIDE.md](doc/M4L-JWEB-GUIDE.md). Detailed architecture diagrams and concepts are found in [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md).
